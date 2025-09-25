@@ -5,11 +5,15 @@ import org.eclipse.lsp4j.jsonrpc.ResponseErrorException;
 import org.eclipse.lsp4j.jsonrpc.messages.ResponseError;
 import org.eclipse.lsp4j.jsonrpc.messages.ResponseErrorCode;
 import org.eclipse.lsp4j.services.WorkspaceService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 public class InterlisWorkspaceService implements WorkspaceService {
+    private static final Logger LOG = LoggerFactory.getLogger(InterlisWorkspaceService.class);
+    
     private final InterlisLanguageServer server;
     private final CommandHandlers handlers;
 
@@ -32,6 +36,10 @@ public class InterlisWorkspaceService implements WorkspaceService {
     public CompletableFuture<Object> executeCommand(ExecuteCommandParams params) {
         if (InterlisLanguageServer.CMD_VALIDATE.equals(params.getCommand())) {
             List<Object> args = params.getArguments();
+            LOG.info(args.toString());
+            LOG.info(args.get(0).toString());
+            LOG.info(args.get(0).getClass().toString());
+            
             if (args == null || args.isEmpty() || !(args.get(0) instanceof String)) {
                 ResponseError err = new ResponseError(ResponseErrorCode.InvalidParams,
                         "Expected the .ili file URI as the first argument", null);

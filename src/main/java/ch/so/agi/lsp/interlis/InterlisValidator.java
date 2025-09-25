@@ -46,7 +46,8 @@ public class InterlisValidator {
         StringBuilder log = new StringBuilder();
         List<Message> messages = new ArrayList<>();
         
-        System.out.println("Hallo Welt.");
+        // Kills everything
+//        System.out.println("Hallo Welt.");
 
         // --- BEGIN PLACEHOLDER: Replace with real ili2c calls ---
         log.append("ERROR: ").append(fileUriOrPath).append(":5:10 Unexpected token 'MODEL'").append('\n');

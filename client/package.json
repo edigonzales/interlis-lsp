@@ -1,0 +1,61 @@
+{
+  "name": "interlis-lsp-client",
+  "displayName": "INTERLIS LSP Client",
+  "publisher": "edigonzales",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "activationEvents": [
+    "onLanguage:interlis"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "interlis",
+        "aliases": [
+          "INTERLIS",
+          "interlis"
+        ],
+        "extensions": [
+          ".ili"
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "command": "interlis.validate.run",
+        "title": "INTERLIS: Validate current file"
+      }
+    ],
+    "configuration": {
+      "title": "INTERLIS LSP",
+      "properties": {
+        "interlisLsp.server.jarPath": {
+          "type": "string",
+          "default": "/Users/stefan/sources/interlis-lsp/build/libs/interlis-lsp-0.0.LOCALBUILD-all.jar",
+          "description": "Path to the INTERLIS LSP fat JAR"
+        },
+        "interlisLsp.javaPath": {
+          "type": "string",
+          "default": "java",
+          "description": "Java executable to run the server"
+        }
+      }
+    }
+  },
+  "main": "./dist/extension.js",
+  "scripts": {
+    "build": "esbuild src/extension.ts --bundle --platform=node --external:vscode --external:vscode-languageclient --external:vscode-languageclient/node --outfile=dist/extension.js",
+    "watch": "esbuild src/extension.ts --bundle --platform=node --external:vscode --external:vscode-languageclient --external:vscode-languageclient/node --outfile=dist/extension.js --watch"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "@types/vscode": "^1.104.0",
+    "esbuild": "^0.25.10",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  }
+}
