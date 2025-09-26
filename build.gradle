@@ -27,6 +27,8 @@ dependencies {
 
     implementation 'ch.interlis:ili2c-tool:5.6.6'
     implementation 'ch.interlis:ili2c-core:5.6.6'
+    implementation 'ch.ehi:ehibasics:1.4.1'    
+    implementation 'ch.interlis:iox-ili:1.24.1'  
 
     implementation 'org.slf4j:slf4j-api:2.0.13'
     runtimeOnly 'org.slf4j:slf4j-simple:2.0.13'

@@ -21,3 +21,10 @@ The server uses stdio transport. Your editor/extension should spawn it and conne
 - `InterlisValidator` calls ili2c (placeholder) and returns both text log and structured messages.
 - `DiagnosticsMapper` converts messages to LSP `Diagnostic`s.
 - Tests: simple unit tests for the validator and a smoke test for the command handler.
+
+## TODO
+
+- rename validate -> compile
+- messaging, logging finalisieren. inkl client popup (?) + Parser für ili2c log
+- compile on save (und nicht onChange).
+ 

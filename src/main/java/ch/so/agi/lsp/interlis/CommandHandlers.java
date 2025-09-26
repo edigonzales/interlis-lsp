@@ -22,7 +22,9 @@ public class CommandHandlers {
                 MessageType.Log, "validate called for " + fileUriOrPath));
         }
         
-        InterlisValidator validator = new InterlisValidator();
+        ClientSettings cfg = server.getClientSettings();
+        
+        InterlisValidator validator = new InterlisValidator(cfg);
         InterlisValidator.ValidationOutcome outcome = validator.validate(fileUriOrPath);
         List<Diagnostic> diagnostics = DiagnosticsMapper.toDiagnostics(outcome.getMessages());
         server.publishDiagnostics(fileUriOrPath, diagnostics);

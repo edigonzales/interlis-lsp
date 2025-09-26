@@ -13,14 +13,27 @@ export async function activate(context: vscode.ExtensionContext) {
   const serverExec: Executable = {
     command: javaPath,
     // oder =System.err
-    args: ["-Dorg.slf4j.simpleLogger.logFile=/Users/stefan/tmp/interlis-lsp.log", "-jar", jarPath],
+    args: [
+      "-Dorg.slf4j.simpleLogger.logFile=/Users/stefan/tmp/interlis-lsp.log", 
+      "-Dorg.slf4j.simpleLogger.showDateTime=true",
+      "-Dorg.slf4j.simpleLogger.dateTimeFormat=\"yyyy-MM-dd HH:mm:ss.SSS\"",
+      "-jar",
+      jarPath
+    ],
     options: { env: process.env }
   };
   const serverOptions: ServerOptions = serverExec;
 
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ language: "interlis", scheme: "file" }],
-    synchronize: { fileEvents: vscode.workspace.createFileSystemWatcher("**/*.ili") },
+    // send current settings once at startup
+    initializationOptions: {
+      modelRepositories: cfg.get<string>("interlisLsp.modelRepositories") ?? ""
+    },
+    synchronize: { 
+      fileEvents: vscode.workspace.createFileSystemWatcher("**/*.ili"),
+      configurationSection: "interlisLsp" 
+    },
     outputChannel: output,
     traceOutputChannel: output
   };

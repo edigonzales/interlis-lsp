@@ -40,6 +40,11 @@
           "type": "string",
           "default": "java",
           "description": "Java executable to run the server"
+        },
+        "interlisLsp.modelRepositories": {
+          "type": "string",
+          "default": "%ILI_DIR;https://models.interlis.ch;%JAR_DIR",
+          "markdownDescription": "Preferred INTERLIS model repositories as a comma-separated string."
         }
       }
     }

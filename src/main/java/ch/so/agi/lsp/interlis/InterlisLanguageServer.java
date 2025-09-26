@@ -5,6 +5,7 @@ import org.eclipse.lsp4j.services.*;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Main LSP entrypoint. Wires TextDocument/Workspace services and exposes capabilities.
@@ -13,6 +14,8 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
     private LanguageClient client;
     private final InterlisTextDocumentService textDocumentService;
     private final InterlisWorkspaceService workspaceService;
+    
+    private final AtomicReference<ClientSettings> clientSettings = new AtomicReference<>(new ClientSettings());
 
     public static final String CMD_VALIDATE = "interlis.validate"; // workspace/executeCommand
 
@@ -25,6 +28,8 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
 
     @Override
     public CompletableFuture<InitializeResult> initialize(InitializeParams params) {
+        setClientSettings(ClientSettings.from(params.getInitializationOptions()));
+        
         ServerCapabilities caps = new ServerCapabilities();
 
         TextDocumentSyncOptions sync = new TextDocumentSyncOptions();
@@ -32,6 +37,10 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
         sync.setOpenClose(true);
         caps.setTextDocumentSync(Either.forRight(sync));
 
+        // request didSave text
+        SaveOptions save = new SaveOptions(); save.setIncludeText(false); 
+        sync.setSave(save);
+        
         ExecuteCommandOptions exec = new ExecuteCommandOptions(Collections.singletonList(CMD_VALIDATE));
         caps.setExecuteCommandProvider(exec);
 
@@ -79,5 +88,13 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
         if (client != null) {
             client.publishDiagnostics(new PublishDiagnosticsParams(uri, diagnostics));
         }
+    }
+    
+    public ClientSettings getClientSettings() {
+        return clientSettings.get();
+    }
+
+    public void setClientSettings(ClientSettings s) {
+        clientSettings.set(s != null ? s : new ClientSettings());
     }
 }
