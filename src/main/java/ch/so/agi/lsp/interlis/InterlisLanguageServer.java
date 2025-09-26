@@ -44,6 +44,8 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
         
         ExecuteCommandOptions exec = new ExecuteCommandOptions(Collections.singletonList(CMD_COMPILE));
         caps.setExecuteCommandProvider(exec);
+        
+        caps.setPositionEncoding(org.eclipse.lsp4j.PositionEncodingKind.UTF16);
 
         InitializeResult result = new InitializeResult(caps);
         return CompletableFuture.completedFuture(result);

@@ -1,0 +1,23 @@
+[
+  {
+    "interfaces":["ch.so.agi.lsp.interlis.InterlisLanguageClient","org.eclipse.lsp4j.jsonrpc.Endpoint"]
+  },
+  {
+    "interfaces":["org.eclipse.lsp4j.services.LanguageClient","org.eclipse.lsp4j.jsonrpc.Endpoint"]
+  },
+  {
+    "interfaces":["org.eclipse.lsp4j.services.LanguageServer","org.eclipse.lsp4j.jsonrpc.Endpoint"]
+  },
+  {
+    "interfaces":["org.gradle.api.internal.tasks.testing.TestClassProcessor"]
+  },
+  {
+    "interfaces":["org.gradle.api.internal.tasks.testing.TestResultProcessor","org.gradle.internal.concurrent.ThreadSafe"]
+  },
+  {
+    "interfaces":["org.gradle.internal.logging.events.OutputEventListener"]
+  },
+  {
+    "interfaces":["org.gradle.process.internal.worker.child.WorkerLoggingProtocol","org.gradle.internal.concurrent.ThreadSafe"]
+  }
+]

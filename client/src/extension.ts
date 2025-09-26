@@ -10,16 +10,24 @@ export async function activate(context: vscode.ExtensionContext) {
   const javaPath = vscode.workspace.getConfiguration().get<string>("interlisLsp.javaPath") || "java";
 
   // Single channel
-  const output = vscode.window.createOutputChannel("INTERLIS LSP");
-
+  const OUTPUT_NAME = "INTERLIS LSP";
+  const output = vscode.window.createOutputChannel(OUTPUT_NAME); // no { log: true }
   const exec: Executable = {
-    command: javaPath,
+    // command: javaPath,
+    // args: [
+    //   "-Dorg.slf4j.simpleLogger.logFile=/Users/stefan/tmp/interlis-lsp.log",
+    //   "-Dorg.slf4j.simpleLogger.showDateTime=true",
+    //   '-Dorg.slf4j.simpleLogger.dateTimeFormat=yyyy-MM-dd HH:mm:ss.SSS', // no quotes inside
+    //   //"-agentlib:native-image-agent=config-output-dir=/Users/stefan/sources/interlis-lsp/src/main/resources/META-INF/native-image,config-write-period-secs=5",
+    //   "-agentlib:native-image-agent=config-merge-dir=/Users/stefan/sources/interlis-lsp/src/main/resources/META-INF/native-image,config-write-initial-delay-secs=5,config-write-period-secs=5",
+    //   "-jar",
+    //   jarPath
+    // ],
+    command: "/Users/stefan/sources/interlis-lsp/build/native/nativeCompile/interlis-lsp",
     args: [
       "-Dorg.slf4j.simpleLogger.logFile=/Users/stefan/tmp/interlis-lsp.log",
       "-Dorg.slf4j.simpleLogger.showDateTime=true",
       '-Dorg.slf4j.simpleLogger.dateTimeFormat=yyyy-MM-dd HH:mm:ss.SSS', // no quotes inside
-      "-jar",
-      jarPath
     ],
     options: { env: process.env }
   };

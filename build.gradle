@@ -2,6 +2,7 @@ plugins {
     id 'java'
     id 'application'
     id "com.github.johnrengelman.shadow" version "8.1.1"
+    id 'org.graalvm.buildtools.native' version '0.10.6'
 }
 
 apply from: "$rootDir/gradle/versioning.gradle"
@@ -11,6 +12,7 @@ group = 'ch.so.agi.lsp.interlis'
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)
+        vendor = JvmVendorSpec.GRAAL_VM
     }
     sourceCompatibility = '21'
     targetCompatibility = '21'
@@ -33,13 +35,45 @@ dependencies {
     implementation 'org.slf4j:slf4j-api:2.0.13'
     runtimeOnly 'org.slf4j:slf4j-simple:2.0.13'
 
+    //compileOnly 'org.graalvm.nativeimage:svm:21.3.15'
+    
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
 }
 
 test {
     useJUnitPlatform()
+    jvmArgs('-agentlib:native-image-agent=config-merge-dir=src/main/resources/META-INF/native-image')
+    
 }
 
 application {
     mainClass = 'ch.so.agi.lsp.interlis.LspServerLauncher'
+}
+
+graalvmNative {
+    binaries {
+        main {
+            imageName = 'interlis-lsp'
+            mainClass = 'ch.so.agi.lsp.interlis.LspServerLauncher'
+            debug = false
+            verbose = true
+            fallback = false
+            sharedLibrary = false
+            richOutput = true
+
+            buildArgs.add('--enable-url-protocols=http,https')
+            buildArgs.add("-H:+AllowDeprecatedBuilderClassesOnImageClasspath")
+            // https://www.graalvm.org/latest/reference-manual/native-image/optimizations-and-performance/
+            //buildArgs.add('-Os') 
+            buildArgs.add('-Ob') 
+            buildArgs.add('-march=compatibility')
+        }
+        /*
+        test {
+            verbose = true
+            fallback = false
+            buildArgs.add('--enable-url-protocols=http,https')
+        }
+        */
+    }    
 }

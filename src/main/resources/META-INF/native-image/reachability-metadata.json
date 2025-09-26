@@ -1,0 +1,2485 @@
+{
+  "reflection": [
+    {
+      "type": "[B"
+    },
+    {
+      "type": "[Ljava.lang.Object;"
+    },
+    {
+      "type": "[Ljava.lang.String;"
+    },
+    {
+      "type": "[Lsun.security.pkcs.SignerInfo;"
+    },
+    {
+      "type": "antlr.CommonHiddenStreamToken",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "antlr.CommonToken",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "apple.security.AppleProvider",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "ch.so.agi.lsp.interlis.InterlisLanguageClient"
+    },
+    {
+      "type": "ch.so.agi.lsp.interlis.InterlisLanguageClient$LogParams",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "ch.so.agi.lsp.interlis.InterlisLanguageServer"
+    },
+    {
+      "type": "ch.so.agi.lsp.interlis.InterlisTextDocumentService"
+    },
+    {
+      "type": "ch.so.agi.lsp.interlis.InterlisValidatorTest",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        },
+        {
+          "name": "clientSettingsParsesCommaSeparatedRepos",
+          "parameterTypes": []
+        },
+        {
+          "name": "returnsLogAndMessages",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "ch.so.agi.lsp.interlis.InterlisWorkspaceService"
+    },
+    {
+      "type": "ch.so.agi.lsp.interlis.LanguageServerSmokeTest",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        },
+        {
+          "name": "validateCommandReturnsLog",
+          "parameterTypes": []
+        },
+        {
+          "name": "validateUsesServerClientSettings",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.AESCipher$General",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.ARCFOURCipher",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.ChaCha20Cipher$ChaCha20Poly1305",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.DESCipher",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.DESedeCipher",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.DHParameters",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.GaloisCounterMode$AESGCM",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.HmacCore$HmacSHA384",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.crypto.provider.TlsMasterSecretGenerator",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "com.sun.xml.internal.stream.XMLInputFactoryImpl",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "java.lang.Class",
+      "methods": [
+        {
+          "name": "isRecord",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "java.lang.Enum"
+    },
+    {
+      "type": "java.lang.Object"
+    },
+    {
+      "type": "java.lang.String"
+    },
+    {
+      "type": "java.lang.Thread",
+      "fields": [
+        {
+          "name": "threadLocalRandomProbe"
+        }
+      ]
+    },
+    {
+      "type": "java.lang.invoke.MethodHandle"
+    },
+    {
+      "type": "java.lang.reflect.RecordComponent"
+    },
+    {
+      "type": "java.security.AlgorithmParametersSpi"
+    },
+    {
+      "type": "java.security.KeyStoreSpi"
+    },
+    {
+      "type": "java.security.MessageDigestSpi"
+    },
+    {
+      "type": "java.security.SecureRandomParameters"
+    },
+    {
+      "type": "java.security.interfaces.RSAPrivateKey"
+    },
+    {
+      "type": "java.security.interfaces.RSAPublicKey"
+    },
+    {
+      "type": "java.sql.Date"
+    },
+    {
+      "type": "java.util.Date"
+    },
+    {
+      "type": "java.util.HashSet"
+    },
+    {
+      "type": "java.util.LinkedHashSet"
+    },
+    {
+      "type": "java.util.List"
+    },
+    {
+      "type": "java.util.concurrent.ArrayBlockingQueue"
+    },
+    {
+      "type": "java.util.concurrent.atomic.AtomicBoolean",
+      "fields": [
+        {
+          "name": "value"
+        }
+      ]
+    },
+    {
+      "type": "java.util.concurrent.atomic.AtomicReference",
+      "fields": [
+        {
+          "name": "value"
+        }
+      ]
+    },
+    {
+      "type": "java.util.concurrent.atomic.Striped64",
+      "fields": [
+        {
+          "name": "base"
+        },
+        {
+          "name": "cellsBusy"
+        }
+      ]
+    },
+    {
+      "type": "java.util.concurrent.locks.AbstractOwnableSynchronizer"
+    },
+    {
+      "type": "java.util.concurrent.locks.AbstractQueuedSynchronizer"
+    },
+    {
+      "type": "java.util.concurrent.locks.AbstractQueuedSynchronizer$ConditionObject"
+    },
+    {
+      "type": "java.util.concurrent.locks.ReentrantLock"
+    },
+    {
+      "type": "java.util.concurrent.locks.ReentrantLock$NonfairSync"
+    },
+    {
+      "type": "java.util.concurrent.locks.ReentrantLock$Sync"
+    },
+    {
+      "type": "javax.security.auth.x500.X500Principal",
+      "fields": [
+        {
+          "name": "thisX500Name"
+        }
+      ],
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "sun.security.x509.X500Name"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.AbstractTextDocumentRegistrationAndWorkDoneProgressOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.AbstractWorkDoneProgressOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.CallHierarchyCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.CallHierarchyRegistrationOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.ClientCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.ClientInfo",
+      "allDeclaredFields": true,
+      "unsafeAllocated": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.CodeActionCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.CodeActionKindCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.CodeActionLiteralSupportCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.CodeActionOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.CodeActionResolveSupportCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.CodeLensCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.CodeLensOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.CodeLensWorkspaceCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.ColorProviderCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.ColorProviderOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.CompletionCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.CompletionItemCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.CompletionItemInsertTextModeSupportCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.CompletionItemKind",
+      "fields": [
+        {
+          "name": "value"
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.CompletionItemKindCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.CompletionItemOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.CompletionItemResolveSupportCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.CompletionItemTag",
+      "fields": [
+        {
+          "name": "value"
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.CompletionItemTagSupportCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.CompletionListCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.CompletionOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.DeclarationCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.DeclarationRegistrationOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.DefinitionCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.DefinitionOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.Diagnostic",
+      "allDeclaredFields": true,
+      "unsafeAllocated": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.DiagnosticCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.DiagnosticCodeDescription",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.DiagnosticRegistrationOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.DiagnosticRelatedInformation",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.DiagnosticSeverity",
+      "fields": [
+        {
+          "name": "value"
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.DiagnosticTag",
+      "fields": [
+        {
+          "name": "value"
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.DiagnosticWorkspaceCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.DiagnosticsTagSupport",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.DidChangeConfigurationCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.DidChangeConfigurationParams",
+      "allDeclaredFields": true,
+      "unsafeAllocated": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.DidChangeTextDocumentParams",
+      "allDeclaredFields": true,
+      "unsafeAllocated": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.DidChangeWatchedFilesCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.DidCloseTextDocumentParams",
+      "unsafeAllocated": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.DidOpenTextDocumentParams",
+      "allDeclaredFields": true,
+      "unsafeAllocated": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.DidSaveTextDocumentParams",
+      "allDeclaredFields": true,
+      "unsafeAllocated": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.DocumentFilter",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.DocumentFormattingOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.DocumentHighlightCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.DocumentHighlightOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.DocumentLinkCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.DocumentLinkOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.DocumentOnTypeFormattingOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.DocumentRangeFormattingOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.DocumentSymbolCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.DocumentSymbolOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.DynamicRegistrationCapabilities",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.ExecuteCommandCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.ExecuteCommandOptions",
+      "allDeclaredFields": true,
+      "unsafeAllocated": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.ExecuteCommandParams",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.FileOperationFilter",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.FileOperationOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.FileOperationPattern",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.FileOperationPatternOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.FileOperationsServerCapabilities",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.FileOperationsWorkspaceCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.FoldingRangeCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.FoldingRangeKindSupportCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.FoldingRangeProviderOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.FoldingRangeSupportCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.FormattingCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.GeneralClientCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.HoverCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.HoverOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.ImplementationCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.ImplementationRegistrationOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.InitializeResult",
+      "allDeclaredFields": true,
+      "unsafeAllocated": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.InitializedParams",
+      "allDeclaredFields": true,
+      "unsafeAllocated": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.InlayHintCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.InlayHintRegistrationOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.InlayHintResolveSupportCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.InlayHintWorkspaceCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.InlineValueCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.InlineValueRegistrationOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.InlineValueWorkspaceCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.InsertTextMode",
+      "fields": [
+        {
+          "name": "value"
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.LinkedEditingRangeCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.LinkedEditingRangeRegistrationOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.Location",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.MarkdownCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.MessageParams",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.MessageType",
+      "fields": [
+        {
+          "name": "value"
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.MonikerCapabilities",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.MonikerRegistrationOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.NotebookDocumentClientCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.NotebookDocumentFilter",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.NotebookDocumentSyncClientCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.NotebookDocumentSyncRegistrationOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.NotebookSelector",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.NotebookSelectorCell",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.OnTypeFormattingCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.ParameterInformationCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.Position",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.PositionEncodingKind",
+      "unsafeAllocated": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.PrepareSupportDefaultBehavior",
+      "fields": [
+        {
+          "name": "value"
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.PublishDiagnosticsCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.PublishDiagnosticsParams",
+      "allDeclaredFields": true,
+      "unsafeAllocated": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.Range",
+      "allDeclaredFields": true,
+      "unsafeAllocated": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.RangeFormattingCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.ReferenceOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.ReferencesCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.RegularExpressionsCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.RenameCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.RenameOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.SaveOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.SelectionRangeCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.SelectionRangeRegistrationOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.SemanticTokensCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.SemanticTokensClientCapabilitiesRequests",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.SemanticTokensClientCapabilitiesRequestsFull",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.SemanticTokensLegend",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.SemanticTokensServerFull",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.SemanticTokensWithRegistrationOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.SemanticTokensWorkspaceCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.ServerCapabilities",
+      "allDeclaredFields": true,
+      "unsafeAllocated": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.ServerInfo",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.SetTraceParams",
+      "allDeclaredFields": true,
+      "unsafeAllocated": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.ShowDocumentCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.SignatureHelpCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.SignatureHelpOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.SignatureInformationCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.StaleRequestCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.SymbolCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.SymbolKind",
+      "fields": [
+        {
+          "name": "value"
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.SymbolKindCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.SymbolTag",
+      "fields": [
+        {
+          "name": "value"
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.SymbolTagSupportCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.SynchronizationCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.TextDocumentClientCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.TextDocumentContentChangeEvent",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.TextDocumentIdentifier",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.TextDocumentItem",
+      "allDeclaredFields": true,
+      "unsafeAllocated": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.TextDocumentRegistrationOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.TextDocumentSyncKind",
+      "fields": [
+        {
+          "name": "value"
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.TextDocumentSyncOptions",
+      "allDeclaredFields": true,
+      "unsafeAllocated": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.TypeDefinitionCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.TypeDefinitionRegistrationOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.TypeHierarchyCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.TypeHierarchyRegistrationOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.VersionedTextDocumentIdentifier",
+      "allDeclaredFields": true,
+      "unsafeAllocated": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.WindowClientCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.WindowShowMessageRequestActionItemCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.WindowShowMessageRequestCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.WorkspaceClientCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.WorkspaceEditCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.WorkspaceEditChangeAnnotationSupportCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.WorkspaceFolder",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.WorkspaceFoldersOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.WorkspaceServerCapabilities",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.WorkspaceSymbolOptions",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.WorkspaceSymbolResolveSupportCapabilities",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.adapters.ClientCapabilitiesTypeAdapter$Factory",
+      "unsafeAllocated": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.adapters.CodeActionResponseAdapter",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.adapters.DocumentDiagnosticReportTypeAdapter",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.adapters.DocumentSymbolResponseAdapter",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.adapters.EitherTypeAdapter$Factory",
+      "unsafeAllocated": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.adapters.InitializeParamsTypeAdapter$Factory",
+      "unsafeAllocated": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.adapters.InlineValueResponseAdapter",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.adapters.LocationLinkListAdapter",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.adapters.PrepareRenameResponseAdapter",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.adapters.SemanticTokensFullDeltaResponseAdapter",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.adapters.ServerCapabilitiesTypeAdapter$Factory",
+      "unsafeAllocated": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.adapters.VersionedTextDocumentIdentifierTypeAdapter$Factory",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.adapters.WorkspaceEditTypeAdapter$Factory",
+      "unsafeAllocated": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.adapters.WorkspaceSymbolResponseAdapter",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.jsonrpc.json.adapters.EitherTypeAdapter$Factory",
+      "unsafeAllocated": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.jsonrpc.json.adapters.IdTypeAdapter$Factory",
+      "unsafeAllocated": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.jsonrpc.json.adapters.JsonElementTypeAdapter$Factory",
+      "unsafeAllocated": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.jsonrpc.json.adapters.MessageTypeAdapter$Factory",
+      "unsafeAllocated": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.services.LanguageClient"
+    },
+    {
+      "type": "org.eclipse.lsp4j.services.LanguageClientAware"
+    },
+    {
+      "type": "org.eclipse.lsp4j.services.LanguageServer",
+      "methods": [
+        {
+          "name": "exit",
+          "parameterTypes": []
+        },
+        {
+          "name": "getNotebookDocumentService",
+          "parameterTypes": []
+        },
+        {
+          "name": "getTextDocumentService",
+          "parameterTypes": []
+        },
+        {
+          "name": "getWorkspaceService",
+          "parameterTypes": []
+        },
+        {
+          "name": "initialize",
+          "parameterTypes": [
+            "org.eclipse.lsp4j.InitializeParams"
+          ]
+        },
+        {
+          "name": "initialized",
+          "parameterTypes": [
+            "org.eclipse.lsp4j.InitializedParams"
+          ]
+        },
+        {
+          "name": "setTrace",
+          "parameterTypes": [
+            "org.eclipse.lsp4j.SetTraceParams"
+          ]
+        },
+        {
+          "name": "shutdown",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.services.NotebookDocumentService"
+    },
+    {
+      "type": "org.eclipse.lsp4j.services.TextDocumentService",
+      "methods": [
+        {
+          "name": "didChange",
+          "parameterTypes": [
+            "org.eclipse.lsp4j.DidChangeTextDocumentParams"
+          ]
+        },
+        {
+          "name": "didOpen",
+          "parameterTypes": [
+            "org.eclipse.lsp4j.DidOpenTextDocumentParams"
+          ]
+        },
+        {
+          "name": "didSave",
+          "parameterTypes": [
+            "org.eclipse.lsp4j.DidSaveTextDocumentParams"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.services.WorkspaceService",
+      "methods": [
+        {
+          "name": "didChangeConfiguration",
+          "parameterTypes": [
+            "org.eclipse.lsp4j.DidChangeConfigurationParams"
+          ]
+        },
+        {
+          "name": "executeCommand",
+          "parameterTypes": [
+            "org.eclipse.lsp4j.ExecuteCommandParams"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.gradle.api.internal.file.temp.GradleUserHomeTemporaryFileProvider"
+    },
+    {
+      "type": "org.gradle.api.internal.tasks.testing.TestClassProcessor",
+      "methods": [
+        {
+          "name": "processTestClass",
+          "parameterTypes": [
+            "org.gradle.api.internal.tasks.testing.TestClassRunInfo"
+          ]
+        },
+        {
+          "name": "startProcessing",
+          "parameterTypes": [
+            "org.gradle.api.internal.tasks.testing.TestResultProcessor"
+          ]
+        },
+        {
+          "name": "stop",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.gradle.api.internal.tasks.testing.TestClassRunInfo"
+    },
+    {
+      "type": "org.gradle.api.internal.tasks.testing.TestResultProcessor",
+      "methods": [
+        {
+          "name": "completed",
+          "parameterTypes": [
+            "java.lang.Object",
+            "org.gradle.api.internal.tasks.testing.TestCompleteEvent"
+          ]
+        },
+        {
+          "name": "started",
+          "parameterTypes": [
+            "org.gradle.api.internal.tasks.testing.TestDescriptorInternal",
+            "org.gradle.api.internal.tasks.testing.TestStartEvent"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.gradle.api.internal.tasks.testing.filter.TestFilterSpec"
+    },
+    {
+      "type": "org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformSpec"
+    },
+    {
+      "type": "org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessor",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformSpec",
+            "org.gradle.internal.id.IdGenerator",
+            "org.gradle.internal.actor.ActorFactory",
+            "org.gradle.internal.time.Clock"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessorFactory"
+    },
+    {
+      "type": "org.gradle.api.internal.tasks.testing.worker.RemoteTestClassProcessor",
+      "methods": [
+        {
+          "name": "processTestClass",
+          "parameterTypes": [
+            "org.gradle.api.internal.tasks.testing.TestClassRunInfo"
+          ]
+        },
+        {
+          "name": "startProcessing",
+          "parameterTypes": []
+        },
+        {
+          "name": "stop",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.gradle.api.internal.tasks.testing.worker.TestWorker"
+    },
+    {
+      "type": "org.gradle.api.internal.tasks.testing.worker.TestWorker$State"
+    },
+    {
+      "type": "org.gradle.api.internal.tasks.testing.worker.TestWorker$TestFrameworkServiceRegistry",
+      "methods": [
+        {
+          "name": "createActorFactory",
+          "parameterTypes": [
+            "org.gradle.internal.concurrent.ExecutorFactory"
+          ]
+        },
+        {
+          "name": "createClock",
+          "parameterTypes": []
+        },
+        {
+          "name": "createExecutorFactory",
+          "parameterTypes": []
+        },
+        {
+          "name": "createIdGenerator",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.gradle.internal.file.StatStatistics$Collector"
+    },
+    {
+      "type": "org.gradle.internal.logging.services.LoggingServiceRegistry",
+      "methods": [
+        {
+          "name": "createLoggingManagerFactory",
+          "parameterTypes": [
+            "org.gradle.internal.time.Clock"
+          ]
+        },
+        {
+          "name": "createTimeProvider",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.gradle.internal.logging.services.LoggingServiceRegistry$CommandLineLogging"
+    },
+    {
+      "type": "org.gradle.internal.nativeintegration.filesystem.services.FileSystemServices",
+      "methods": [
+        {
+          "name": "configure",
+          "parameterTypes": [
+            "org.gradle.internal.service.ServiceRegistration"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.gradle.internal.nativeintegration.filesystem.services.GenericFileSystem$Factory"
+    },
+    {
+      "type": "org.gradle.internal.nativeintegration.services.NativeServices",
+      "methods": [
+        {
+          "name": "createNativeCapabilities",
+          "parameterTypes": []
+        },
+        {
+          "name": "createSystemInfo",
+          "parameterTypes": [
+            "org.gradle.internal.os.OperatingSystem"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.gradle.internal.nativeintegration.services.NativeServices$1",
+      "methods": [
+        {
+          "name": "configure",
+          "parameterTypes": [
+            "org.gradle.internal.service.ServiceRegistration"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.gradle.internal.nativeintegration.services.NativeServices$NativeFeatures$1$2"
+    },
+    {
+      "type": "org.gradle.internal.remote.services.MessagingServices",
+      "methods": [
+        {
+          "name": "createMessagingClient",
+          "parameterTypes": [
+            "org.gradle.internal.remote.internal.OutgoingConnector",
+            "org.gradle.internal.concurrent.ExecutorFactory"
+          ]
+        },
+        {
+          "name": "createOutgoingConnector",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.gradle.internal.service.MethodHandleBasedServiceMethodFactory",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.io.DataInputStream"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker$2",
+      "methods": [
+        {
+          "name": "configure",
+          "parameterTypes": [
+            "org.gradle.internal.service.ServiceRegistration"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker$WorkerServices",
+      "methods": [
+        {
+          "name": "createGradleUserHomeDirProvider",
+          "parameterTypes": []
+        },
+        {
+          "name": "createWorkerDirectoryProvider",
+          "parameterTypes": [
+            "org.gradle.initialization.GradleUserHomeDirProvider"
+          ]
+        },
+        {
+          "name": "createWorkerLogEventListener",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.junit.internal.AssumptionViolatedException"
+    },
+    {
+      "type": "org.junit.jupiter.api.Test"
+    },
+    {
+      "type": "org.junit.platform.commons.annotation.Testable"
+    },
+    {
+      "type": "org.junit.vintage.engine.VintageTestEngine"
+    },
+    {
+      "type": "org.slf4j.simple.SimpleServiceProvider"
+    },
+    {
+      "type": "sun.security.pkcs12.PKCS12KeyStore",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.pkcs12.PKCS12KeyStore$DualFormatPKCS12",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.DSA$SHA224withDSA",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.DSA$SHA256withDSA",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.JavaKeyStore$DualFormatJKS",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.JavaKeyStore$JKS",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.NativePRNG",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        },
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.security.SecureRandomParameters"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.SHA",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.SHA2$SHA224",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.SHA2$SHA256",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.SHA5$SHA384",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.SHA5$SHA512",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.X509Factory",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.provider.certpath.PKIXCertPathValidator",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.rsa.PSSParameters",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.rsa.RSAKeyFactory$Legacy",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.rsa.RSAPSSSignature",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.rsa.RSASignature$SHA224withRSA",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.rsa.RSASignature$SHA256withRSA",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.ssl.KeyManagerFactoryImpl$SunX509",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.ssl.SSLContextImpl$DefaultSSLContext",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.ssl.TrustManagerFactoryImpl$PKIXFactory",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "sun.security.util.ObjectIdentifier"
+    },
+    {
+      "type": "sun.security.x509.AuthorityInfoAccessExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.AuthorityKeyIdentifierExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.BasicConstraintsExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.CRLDistributionPointsExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.CertificateExtensions"
+    },
+    {
+      "type": "sun.security.x509.CertificatePoliciesExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.ExtendedKeyUsageExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.KeyUsageExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.NetscapeCertTypeExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.PrivateKeyUsageExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.SubjectAlternativeNameExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "sun.security.x509.SubjectKeyIdentifierExtension",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.Boolean",
+            "java.lang.Object"
+          ]
+        }
+      ]
+    },
+    {
+      "type": {
+        "proxy": [
+          "ch.so.agi.lsp.interlis.InterlisLanguageClient",
+          "org.eclipse.lsp4j.jsonrpc.Endpoint"
+        ]
+      }
+    }
+  ],
+  "serialization": [
+    {
+      "type": "java.lang.Enum"
+    },
+    {
+      "type": "java.lang.Object[]"
+    },
+    {
+      "type": "java.util.HashSet"
+    },
+    {
+      "type": "java.util.LinkedHashSet"
+    },
+    {
+      "type": "java.util.concurrent.ArrayBlockingQueue"
+    },
+    {
+      "type": "java.util.concurrent.locks.AbstractOwnableSynchronizer"
+    },
+    {
+      "type": "java.util.concurrent.locks.AbstractQueuedSynchronizer"
+    },
+    {
+      "type": "java.util.concurrent.locks.AbstractQueuedSynchronizer$ConditionObject"
+    },
+    {
+      "type": "java.util.concurrent.locks.ReentrantLock"
+    },
+    {
+      "type": "java.util.concurrent.locks.ReentrantLock$NonfairSync"
+    },
+    {
+      "type": "java.util.concurrent.locks.ReentrantLock$Sync"
+    },
+    {
+      "type": "org.gradle.api.internal.tasks.testing.filter.TestFilterSpec"
+    },
+    {
+      "type": "org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformSpec"
+    },
+    {
+      "type": "org.gradle.api.internal.tasks.testing.junitplatform.JUnitPlatformTestClassProcessorFactory"
+    },
+    {
+      "type": "org.gradle.api.internal.tasks.testing.worker.TestWorker"
+    },
+    {
+      "type": "org.gradle.api.internal.tasks.testing.worker.TestWorker$State"
+    },
+    {
+      "type": "org.junit.platform.launcher.TestIdentifier$SerializedForm"
+    }
+  ],
+  "jni": [
+    {
+      "type": "java.lang.Boolean",
+      "methods": [
+        {
+          "name": "getBoolean",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "java.lang.String",
+      "methods": [
+        {
+          "name": "lastIndexOf",
+          "parameterTypes": [
+            "int"
+          ]
+        },
+        {
+          "name": "substring",
+          "parameterTypes": [
+            "int"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "java.lang.System",
+      "methods": [
+        {
+          "name": "getProperty",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        },
+        {
+          "name": "setProperty",
+          "parameterTypes": [
+            "java.lang.String",
+            "java.lang.String"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "worker.org.gradle.process.internal.worker.GradleWorkerMain",
+      "methods": [
+        {
+          "name": "main",
+          "parameterTypes": [
+            "java.lang.String[]"
+          ]
+        }
+      ]
+    }
+  ]
+}
