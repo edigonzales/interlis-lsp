@@ -22,9 +22,14 @@ The server uses stdio transport. Your editor/extension should spawn it and conne
 - `DiagnosticsMapper` converts messages to LSP `Diagnostic`s.
 - Tests: simple unit tests for the validator and a smoke test for the command handler.
 
+## Reminder
+- OUTPUT-Tab kann nicht gelöscht werden. Man müsste einen eigenen LanguageClient (aufm Server) schreiben und dann auch ein Signal senden (zum Clearen).
+
 ## TODO
 
 - rename validate -> compile
 - messaging, logging finalisieren. inkl client popup (?) + Parser für ili2c log
-- compile on save (und nicht onChange).
+- compile onSave (und nicht onChange). Falls man onChange möchte, darf nicht die gespeicherte Datei zum LSP geschickt werden, sondern der Memory-Inhalt.
+- probiere onChange mit "fast approach" siehe Frage bei jEdit.
+- Enable assert in tests. And more tests.
  

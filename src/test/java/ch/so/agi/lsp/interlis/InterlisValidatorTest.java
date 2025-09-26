@@ -10,8 +10,8 @@ public class InterlisValidatorTest {
         ClientSettings cfg = new ClientSettings();
         cfg.setModelRepositories("https://models.example.org,/opt/models");
 
-        InterlisValidator v = new InterlisValidator(cfg);
-        InterlisValidator.ValidationOutcome out = v.validate("/tmp/example.ili");
+        Ili2cUtil v = new Ili2cUtil(cfg);
+        Ili2cUtil.CompilationOutcome out = v.compile("/tmp/example.ili");
 
         assertNotNull(out.getLogText());
         assertFalse(out.getLogText().isEmpty());

@@ -1,6 +1,7 @@
 package ch.so.agi.lsp.interlis;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.text.DateFormat;
@@ -24,12 +25,12 @@ import ch.interlis.iox_j.logging.FileLogger;
 /**
  * Wraps calls into the ili2c compiler. Replace placeholders with real ili2c API calls.
  */
-public class InterlisValidator {
-    private static final Logger LOG = LoggerFactory.getLogger(InterlisValidator.class);
+public class Ili2cUtil {
+    private static final Logger LOG = LoggerFactory.getLogger(Ili2cUtil.class);
 
     private final ClientSettings settings;
 
-    public InterlisValidator(ClientSettings settings) {
+    public Ili2cUtil(ClientSettings settings) {
         this.settings = settings != null ? settings : new ClientSettings();
     }
     
@@ -55,31 +56,45 @@ public class InterlisValidator {
         public String getText() { return text; }
     }
 
-    public static class ValidationOutcome {
+    public static class CompilationOutcome {
         private final String logText;
         private final List<Message> messages;
-        public ValidationOutcome(String logText, List<Message> messages) {
+        
+        public CompilationOutcome(String logText, List<Message> messages) {
             this.logText = logText;
             this.messages = messages;
         }
-        public String getLogText() { return logText; }
-        public List<Message> getMessages() { return messages; }
+
+        public String getLogText() {
+            return logText;
+        }
+
+        public List<Message> getMessages() {
+            return messages;
+        }
     }
 
     /** Validate an .ili file by calling ili2c's Java API (no external process!). */
-    public ValidationOutcome validate(String fileUriOrPath) {
+    public CompilationOutcome compile(String fileUriOrPath) {
         StringBuilder log = new StringBuilder();
         List<Message> messages = new ArrayList<>();
         
-//        LOG.info("fileUriOrPath: " + fileUriOrPath);
-//        LOG.info("settings.getModelRepositories(): " + settings.getModelRepositories());
-                
+        LOG.info("fileUriOrPath: " + fileUriOrPath);
+        LOG.info("settings.getModelRepositories(): " + settings.getModelRepositories());
+               
+        Path logFile = null;
+        FileLogger flog = null;
+        String logText = "";
         try {
-            Path logFile = Files.createTempFile("ili2c_", ".log");
-            FileLogger flog = new FileLogger(logFile.toFile(), false);
+            logFile = Files.createTempFile("ili2c_", ".log");
+            flog = new FileLogger(logFile.toFile(), false);
+            
+            LOG.info("logFile: " + logFile.toString());
+
             
             StdListener.getInstance().skipInfo(true);
             EhiLogger.getInstance().addListener(flog);
+            EhiLogger.getInstance().removeListener(StdListener.getInstance());
             
             EhiLogger.logState("ili2c-" + TransferDescription.getVersion());
  
@@ -108,27 +123,31 @@ public class InterlisValidator {
             } else {
                 EhiLogger.logState("...compiler run done " + dateOut);
             }
+        } catch (Exception e) {
+            return new CompilationOutcome("[ili2c] failed: " + e.getMessage(), messages);
+        } finally {
+            EhiLogger.getInstance().addListener(StdListener.getInstance());
 
-            EhiLogger.getInstance().removeListener(flog);
-            flog.close();
-
-            LOG.info(logFile.toString());
-            //Files.deleteIfExists(logFile);                
-        } catch (IOException e) {
-            // TODO error message
+            if (flog != null) {
+                try { flog.close(); } catch (Exception ignore) {}
+                EhiLogger.getInstance().removeListener(flog);
+            }
         }
-        
-        
-        
-        
-        // Kills everything
-//        System.out.println("Hallo Welt.");
 
-        // --- BEGIN PLACEHOLDER: Replace with real ili2c calls ---
-        log.append("ERROR: ").append(fileUriOrPath).append(":5:10 Unexpected token 'MODEL'").append('\n');
-        messages.add(new Message(Message.Severity.ERROR, fileUriOrPath, 5, 10, "Unexpected token 'MODEL'"));
+        try {
+            logText = Files.exists(logFile) ? Files.readString(logFile, StandardCharsets.UTF_8) : "[ili2c] log file not found: " + logFile;
+        } catch (IOException io) {
+            logText = "[ili2c] failed to read log file: " + io.getMessage();
+        } finally {
+            // TODO
+            // try { Files.deleteIfExists(logFile); } catch (IOException ignore) {}
+        }
+
+        messages = Ili2cLogParser.parseErrors(logText);
+//        log.append("ERROR: ").append(fileUriOrPath).append(":5:10 Unexpected token 'MODEL'").append('\n');
+//        messages.add(new Message(Message.Severity.ERROR, fileUriOrPath, 5, 10, "Unexpected token 'MODEL'"));
         // --- END PLACEHOLDER ---
 
-        return new ValidationOutcome(log.toString(), messages);
+        return new CompilationOutcome(logText, messages);
     }
 }

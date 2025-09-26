@@ -24,8 +24,8 @@
     ],
     "commands": [
       {
-        "command": "interlis.validate.run",
-        "title": "INTERLIS: Validate current file"
+        "command": "interlis.compile.run",
+        "title": "INTERLIS: Compile current file"
       }
     ],
     "configuration": {
@@ -45,6 +45,11 @@
           "type": "string",
           "default": "%ILI_DIR;https://models.interlis.ch;%JAR_DIR",
           "markdownDescription": "Preferred INTERLIS model repositories as a comma-separated string."
+        },
+        "interlisLsp.autoShowOutputOnStart": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the INTERLIS LSP output channel when the extension activates."
         }
       }
     }

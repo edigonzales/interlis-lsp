@@ -1,39 +1,36 @@
 import * as vscode from "vscode";
-import { LanguageClient, LanguageClientOptions, Executable, ServerOptions } from "vscode-languageclient/node";
+import { LanguageClient, LanguageClientOptions, Executable, ServerOptions, State } from "vscode-languageclient/node";
 
 let client: LanguageClient | undefined;
+let revealOutputOnNextLog = false;
 
 export async function activate(context: vscode.ExtensionContext) {
-  const cfg = vscode.workspace.getConfiguration();
-  const jarPath = cfg.get<string>("interlisLsp.server.jarPath")!;
-  const javaPath = cfg.get<string>("interlisLsp.javaPath")!;
+  const cfg = vscode.workspace.getConfiguration("interlisLsp");
+  const jarPath = vscode.workspace.getConfiguration().get<string>("interlisLsp.server.jarPath")!;
+  const javaPath = vscode.workspace.getConfiguration().get<string>("interlisLsp.javaPath") || "java";
 
+  // Single channel
   const output = vscode.window.createOutputChannel("INTERLIS LSP");
 
-  const serverExec: Executable = {
+  const exec: Executable = {
     command: javaPath,
-    // oder =System.err
     args: [
-      "-Dorg.slf4j.simpleLogger.logFile=/Users/stefan/tmp/interlis-lsp.log", 
+      "-Dorg.slf4j.simpleLogger.logFile=/Users/stefan/tmp/interlis-lsp.log",
       "-Dorg.slf4j.simpleLogger.showDateTime=true",
-      "-Dorg.slf4j.simpleLogger.dateTimeFormat=\"yyyy-MM-dd HH:mm:ss.SSS\"",
+      '-Dorg.slf4j.simpleLogger.dateTimeFormat=yyyy-MM-dd HH:mm:ss.SSS', // no quotes inside
       "-jar",
       jarPath
     ],
     options: { env: process.env }
   };
-  const serverOptions: ServerOptions = serverExec;
+  const serverOptions: ServerOptions = exec;
 
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ language: "interlis", scheme: "file" }],
-    // send current settings once at startup
     initializationOptions: {
-      modelRepositories: cfg.get<string>("interlisLsp.modelRepositories") ?? ""
+      modelRepositories: cfg.get<string>("modelRepositories") ?? ""
     },
-    synchronize: { 
-      fileEvents: vscode.workspace.createFileSystemWatcher("**/*.ili"),
-      configurationSection: "interlisLsp" 
-    },
+    synchronize: { configurationSection: "interlisLsp" },
     outputChannel: output,
     traceOutputChannel: output
   };
@@ -42,26 +39,47 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(client);
   await client.start();
 
-  // Our client-side command uses a different id and calls the server command
-  context.subscriptions.push(
-    vscode.commands.registerCommand("interlis.validate.run", async () => {
-      const editor = vscode.window.activeTextEditor;
-      if (!editor) {
-        vscode.window.showWarningMessage("Open an .ili file first.");
-        return;
+  // Register notification handlers ONCE, immediately
+  let handlersRegistered = false;
+  const registerHandlersOnce = () => {
+    if (handlersRegistered) return;
+    handlersRegistered = true;
+
+    client!.onNotification("interlis/clearLog", () => {
+      output.clear();
+      if (revealOutputOnNextLog) {
+        output.show(true);
+        revealOutputOnNextLog = false;
       }
+    });
+
+    client!.onNotification("interlis/log", (p: { text?: string }) => {
+      if (p?.text) output.append(p.text);
+    });
+  };
+
+  registerHandlersOnce(); // ensure handlers exist now
+  client.onDidChangeState(e => { if (e.newState === State.Running) registerHandlersOnce(); });
+
+  // Manual compile command — rely ONLY on notifications for output
+  context.subscriptions.push(
+    vscode.commands.registerCommand("interlis.compile.run", async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) { vscode.window.showWarningMessage("Open an .ili file first."); return; }
+
+      revealOutputOnNextLog = true; // show OUTPUT for manual runs
       const fileUri = editor.document.uri.toString();
+
       try {
-        const log = await client!.sendRequest("workspace/executeCommand", {
-          command: "interlis.validate",          // <-- server command id
+        await client!.sendRequest("workspace/executeCommand", {
+          command: "interlis.compile",
           arguments: [fileUri]
         });
-        const chan = vscode.window.createOutputChannel("INTERLIS LSP – Log");
-        chan.clear();
-        chan.appendLine(String(log ?? ""));
-        chan.show(true);
+        // DO NOT clear/append here — the server already did via notifications
       } catch (e: any) {
-        vscode.window.showErrorMessage(`Validation failed: ${e?.message ?? e}`);
+        vscode.window.showErrorMessage(`Compilation failed: ${e?.message ?? e}`);
+        // Optional: bring Output to front to show any client-side errors
+        output.show(true);
       }
     })
   );

@@ -22,21 +22,21 @@ public class InterlisTextDocumentService implements TextDocumentService {
     @Override
     public void didOpen(DidOpenTextDocumentParams params) {
         String uri = params.getTextDocument().getUri();
-        validateAndPublish(uri, "didOpen");
+        compileAndPublish(uri, "didOpen");
     }
 
     @Override
     public void didChange(DidChangeTextDocumentParams params) {
-        String uri = params.getTextDocument().getUri();
-        // For typing responsiveness you might debounce; for now run directly
-        validateAndPublish(uri, "didChange");
+//        String uri = params.getTextDocument().getUri();
+//        // For typing responsiveness you might debounce; for now run directly
+//        validateAndPublish(uri, "didChange");
     }
 
     @Override
     public void didSave(DidSaveTextDocumentParams params) {
         String uri = params.getTextDocument().getUri();
         // Often a good moment to do an authoritative compile based on on-disk state
-        validateAndPublish(uri, "didSave");
+        compileAndPublish(uri, "didSave");
     }
 
     @Override
@@ -45,17 +45,19 @@ public class InterlisTextDocumentService implements TextDocumentService {
         server.publishDiagnostics(uri, Collections.emptyList());
     }
 
-    private void validateAndPublish(String documentUri, String source) {
+    private void compileAndPublish(String documentUri, String source) {
         try {
             String pathOrUri = toFilesystemPathIfPossible(documentUri);
             ClientSettings cfg = server.getClientSettings();
             LOG.debug("Validating [{}] via {} with modelRepositories={}", pathOrUri, source,
                     cfg.getModelRepositoriesList());
 
-            InterlisValidator validator = new InterlisValidator(cfg);
-            InterlisValidator.ValidationOutcome outcome = validator.validate(pathOrUri);
+            Ili2cUtil validator = new Ili2cUtil(cfg);
+            Ili2cUtil.CompilationOutcome outcome = validator.compile(pathOrUri);
 
             server.publishDiagnostics(documentUri, DiagnosticsMapper.toDiagnostics(outcome.getMessages()));
+            server.clearOutput();  
+            server.logToClient(outcome.getLogText());
         } catch (Exception ex) {
             LOG.error("Validation failed for {} (source={})", documentUri, source, ex);
         }

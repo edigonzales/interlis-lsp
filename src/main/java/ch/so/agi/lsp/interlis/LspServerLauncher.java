@@ -8,8 +8,9 @@ import java.util.concurrent.ExecutionException;
 public class LspServerLauncher {
     public static void main(String[] args) throws ExecutionException, InterruptedException {
         InterlisLanguageServer server = new InterlisLanguageServer();
-        Launcher<LanguageClient> launcher = Launcher.createLauncher(
-                server, LanguageClient.class, System.in, System.out);
+        
+        Launcher<InterlisLanguageClient> launcher = Launcher.createLauncher(
+                server, InterlisLanguageClient.class, System.in, System.out);
 
         server.connect(launcher.getRemoteProxy());
         launcher.startListening().get();

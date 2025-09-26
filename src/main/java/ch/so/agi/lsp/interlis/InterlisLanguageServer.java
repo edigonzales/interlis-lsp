@@ -11,13 +11,14 @@ import java.util.concurrent.atomic.AtomicReference;
  * Main LSP entrypoint. Wires TextDocument/Workspace services and exposes capabilities.
  */
 public class InterlisLanguageServer implements LanguageServer, LanguageClientAware {
-    private LanguageClient client;
+    private InterlisLanguageClient client;
+    
     private final InterlisTextDocumentService textDocumentService;
     private final InterlisWorkspaceService workspaceService;
     
     private final AtomicReference<ClientSettings> clientSettings = new AtomicReference<>(new ClientSettings());
 
-    public static final String CMD_VALIDATE = "interlis.validate"; // workspace/executeCommand
+    public static final String CMD_COMPILE = "interlis.compile"; // workspace/executeCommand
 
     public InterlisLanguageServer() {
         this.textDocumentService = new InterlisTextDocumentService(this);
@@ -41,7 +42,7 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
         SaveOptions save = new SaveOptions(); save.setIncludeText(false); 
         sync.setSave(save);
         
-        ExecuteCommandOptions exec = new ExecuteCommandOptions(Collections.singletonList(CMD_VALIDATE));
+        ExecuteCommandOptions exec = new ExecuteCommandOptions(Collections.singletonList(CMD_COMPILE));
         caps.setExecuteCommandProvider(exec);
 
         InitializeResult result = new InitializeResult(caps);
@@ -77,7 +78,7 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
 
     @Override
     public void connect(LanguageClient client) {
-        this.client = client;
+        this.client = (InterlisLanguageClient) client;
     }
 
     public LanguageClient getClient() {
@@ -96,5 +97,19 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
 
     public void setClientSettings(ClientSettings s) {
         clientSettings.set(s != null ? s : new ClientSettings());
+    }
+    
+    public void clearOutput() {
+        if (client != null)
+            client.clearLog();
+    }
+    
+    public void logToClient(String text) {
+        if (client == null || text == null || text.isBlank()) return;
+        // If logs can be huge, chunk them to avoid oversized JSON payloads (optional)
+        final int CHUNK = 8000; // chars
+        for (int i = 0; i < text.length(); i += CHUNK) {
+            client.log(new InterlisLanguageClient.LogParams(text.substring(i, Math.min(text.length(), i + CHUNK))));
+        }    
     }
 }

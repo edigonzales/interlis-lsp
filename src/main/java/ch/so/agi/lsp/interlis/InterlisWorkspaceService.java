@@ -41,7 +41,7 @@ public class InterlisWorkspaceService implements WorkspaceService {
 
     @Override
     public CompletableFuture<Object> executeCommand(ExecuteCommandParams params) {
-        if (InterlisLanguageServer.CMD_VALIDATE.equals(params.getCommand())) {
+        if (InterlisLanguageServer.CMD_COMPILE.equals(params.getCommand())) {
             List<Object> args = params.getArguments();
 
             String fileUriOrPath = coerceArgToString(args != null && !args.isEmpty() ? args.get(0) : null);
@@ -65,7 +65,7 @@ public class InterlisWorkspaceService implements WorkspaceService {
             }
 
             LOG.info("validate called with: {}", pathOrUri);
-            return handlers.validate(pathOrUri);
+            return handlers.compile(pathOrUri);
         }
         return CompletableFuture.completedFuture(null);
     }

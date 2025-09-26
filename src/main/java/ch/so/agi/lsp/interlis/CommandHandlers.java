@@ -16,18 +16,19 @@ public class CommandHandlers {
     }
 
     /** Validate an .ili file and return textual log; also publishes diagnostics. */
-    public CompletableFuture<Object> validate(String fileUriOrPath) {
+    public CompletableFuture<Object> compile(String fileUriOrPath) {
         if (server.getClient() != null) {
             server.getClient().logMessage(new MessageParams(
-                MessageType.Log, "validate called for " + fileUriOrPath));
+                MessageType.Log, "compile called for " + fileUriOrPath));
         }
         
         ClientSettings cfg = server.getClientSettings();
-        
-        InterlisValidator validator = new InterlisValidator(cfg);
-        InterlisValidator.ValidationOutcome outcome = validator.validate(fileUriOrPath);
+        Ili2cUtil validator = new Ili2cUtil(cfg);
+        Ili2cUtil.CompilationOutcome outcome = validator.compile(fileUriOrPath);
         List<Diagnostic> diagnostics = DiagnosticsMapper.toDiagnostics(outcome.getMessages());
         server.publishDiagnostics(fileUriOrPath, diagnostics);
+        server.clearOutput();
+        server.logToClient(outcome.getLogText());
         return CompletableFuture.completedFuture(outcome.getLogText());
     }
 }
