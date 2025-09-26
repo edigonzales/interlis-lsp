@@ -408,5 +408,10 @@
 { "name": "org.eclipse.lsp4j.PublishDiagnosticsParams",            "allPublicConstructors": true, "allDeclaredFields": true },
 { "name": "org.eclipse.lsp4j.Diagnostic",                          "allPublicConstructors": true, "allDeclaredFields": true },
 { "name": "org.eclipse.lsp4j.Range",                               "allPublicConstructors": true, "allDeclaredFields": true },
-{ "name": "org.eclipse.lsp4j.Position",                            "allPublicConstructors": true, "allDeclaredFields": true }
+{ "name": "org.eclipse.lsp4j.Position",                            "allPublicConstructors": true, "allDeclaredFields": true },
+
+{ "name": "org.eclipse.lsp4j.services.TextDocumentService", "allPublicMethods": true },
+{ "name": "org.eclipse.lsp4j.services.WorkspaceService",     "allPublicMethods": true },
+{ "name": "org.eclipse.lsp4j.services.LanguageServer",       "allPublicMethods": true },
+{ "name": "org.eclipse.lsp4j.services.LanguageClient",       "allPublicMethods": true }
 ]
