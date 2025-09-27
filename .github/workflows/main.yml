@@ -122,8 +122,6 @@ jobs:
 
   build-jvm:
     env:
-      DOCKER_PASSWORD: ${{secrets.DOCKER_PASSWORD}}
-      DOCKER_USERNAME: ${{secrets.DOCKER_USERNAME}} 
       BUILD_NUMBER: ${{ github.run_number }}
 
     runs-on: ubuntu-24.04
@@ -167,6 +165,38 @@ jobs:
           name: app-fatjar
           path: ${{ steps.fatjar.outputs.jar }}
           if-no-files-found: error
+
+  runtimes:
+    env:
+      BUILD_NUMBER: ${{ github.run_number }}
+    name: Build jlink runtime (${{ matrix.os }})
+    needs: build-jvm
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-24.04, macos-13, macos-14, windows-2022 ]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '24'
+          cache: 'gradle'
+
+      - name: Download fat JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: app-fatjar
+          path: ./dist
+
+      - name: Show downloaded files
+        run: ls -la ./dist
 
   #     - uses: actions/upload-artifact@v4
   #       if: ${{ failure() }}
