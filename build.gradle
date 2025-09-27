@@ -12,7 +12,7 @@ group = 'ch.so.agi.lsp.interlis'
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(24)
-        vendor = JvmVendorSpec.GRAAL_VM
+        //vendor = JvmVendorSpec.GRAAL_VM
     }
     sourceCompatibility = '24'
     targetCompatibility = '24'
