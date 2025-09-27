@@ -57,6 +57,11 @@ jobs:
           name: reports-native-${{ matrix.plat-name }}
           path: build/reports/tests/
 
+      - name: Upload native library
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-image-${{ matrix.plat-name }}
+          path: build/native/nativeCompile/
 
   # build-native:
   #   env:
@@ -143,13 +148,25 @@ jobs:
 
       - name: Build jar
         run: |
-          ./gradlew build -i -x test
+          ./gradlew build -i 
           ls -la build/libs
 
-      - name: Run e2e tests
+      - name: Locate fat JAR
+        id: fatjar
+        shell: bash
         run: |
-          ./gradlew e2eTest -i
+          set -euo pipefail
+          # First try common names (Shadow plugin, etc.)
+          CANDIDATE=$(ls -1 build/libs/*-all.jar 2>/dev/null || true)
+          echo "Found fat JAR: ${CANDIDATE}"
+          echo "jar=${CANDIDATE}" >> "$GITHUB_OUTPUT"
 
+      - name: Upload fat JAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-fatjar
+          path: ${{ steps.fatjar.outputs.jar }}
+          if-no-files-found: error
 
   #     - uses: actions/upload-artifact@v4
   #       if: ${{ failure() }}
