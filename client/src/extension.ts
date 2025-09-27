@@ -62,7 +62,10 @@ export async function activate(context: vscode.ExtensionContext) {
     });
 
     client!.onNotification("interlis/log", (p: { text?: string }) => {
-      if (p?.text) output.append(p.text);
+      if (p?.text) {
+        output.append(p.text);
+        ensurePanelVisible();
+      }
     });
   };
 
@@ -91,6 +94,13 @@ export async function activate(context: vscode.ExtensionContext) {
       }
     })
   );
+}
+
+async function ensurePanelVisible(preserveEditorFocus = true) {
+  await vscode.commands.executeCommand("workbench.action.focusPanel");
+  if (preserveEditorFocus) {
+    await vscode.commands.executeCommand("workbench.action.focusActiveEditorGroup");
+  }
 }
 
 export function deactivate() {
