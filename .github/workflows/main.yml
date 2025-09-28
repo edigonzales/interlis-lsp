@@ -219,6 +219,32 @@ jobs:
           # (Optional) test the runtime can launch the app
           "./$RUNTIME_DIR/bin/java" -version
 
+      # Windows jlink (PowerShell)
+      - name: Build runtime (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $jar = Get-ChildItem -Path dist -Filter *.jar | Select-Object -First 1
+          if (-not $jar) { throw "No JAR found in dist" }
+          $runtimeDir = "runtime-${{ matrix.os }}"
+          $mods = & jdeps --print-module-deps --ignore-missing-deps --multi-release 24 $jar.FullName
+          Write-Host "Modules: $mods"
+          & jlink `
+            --add-modules $mods `
+            --no-header-files --no-man-pages `
+            --strip-debug --compress=2 `
+            --output $runtimeDir
+          Write-Host "Created $runtimeDir"
+          & ".\$runtimeDir\bin\java.exe" -version
+
+      - name: Upload runtime artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jre-runtime-${{ matrix.os }}
+          path: runtime-${{ matrix.os }}
+          if-no-files-found: error
+
+          
   #     - uses: actions/upload-artifact@v4
   #       if: ${{ failure() }}
   #       with:
