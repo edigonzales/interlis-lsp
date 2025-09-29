@@ -5,6 +5,10 @@ let client: LanguageClient | undefined;
 let revealOutputOnNextLog = false;
 const CARET_SENTINEL = "__INTERLIS_AUTOCLOSE_CARET__";
 
+type PendingCaret = { version: number; position: vscode.Position };
+
+const pendingCarets = new Map<string, PendingCaret>();
+
 export async function activate(context: vscode.ExtensionContext) {
   const cfg = vscode.workspace.getConfiguration("interlisLsp");
   const jarPath = vscode.workspace.getConfiguration().get<string>("interlisLsp.server.jarPath")!;
@@ -38,6 +42,7 @@ export async function activate(context: vscode.ExtensionContext) {
     provideOnTypeFormattingEdits: async (document, position, ch, options, token, next) => {
       const edits = await next(document, position, ch, options, token);
       if (!edits || edits.length === 0) {
+        pendingCarets.delete(document.uri.toString());
         return edits;
       }
 
@@ -73,14 +78,9 @@ export async function activate(context: vscode.ExtensionContext) {
       });
 
       if (caret) {
-        setTimeout(() => {
-          const active = vscode.window.activeTextEditor;
-          if (active && active.document.uri.toString() === document.uri.toString()) {
-            const selection = new vscode.Selection(caret!, caret!);
-            active.selection = selection;
-            active.revealRange(new vscode.Range(caret!, caret!));
-          }
-        }, 0);
+        pendingCarets.set(document.uri.toString(), { version: document.version + 1, position: caret });
+      } else {
+        pendingCarets.delete(document.uri.toString());
       }
 
       return sanitized;
@@ -101,6 +101,32 @@ export async function activate(context: vscode.ExtensionContext) {
   client = new LanguageClient("interlisLsp", "INTERLIS Language Server", serverOptions, clientOptions);
   context.subscriptions.push(client);
   await client.start();
+
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeTextDocument(event => {
+      const key = event.document.uri.toString();
+      const pending = pendingCarets.get(key);
+      if (!pending) {
+        return;
+      }
+
+      if (event.document.version < pending.version) {
+        return;
+      }
+
+      pendingCarets.delete(key);
+
+      const active = vscode.window.activeTextEditor;
+      if (!active || active.document.uri.toString() !== key) {
+        return;
+      }
+
+      const { position } = pending;
+      const selection = new vscode.Selection(position, position);
+      active.selection = selection;
+      active.revealRange(new vscode.Range(position, position));
+    })
+  );
 
   // Register notification handlers ONCE, immediately
   let handlersRegistered = false;
