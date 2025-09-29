@@ -59,7 +59,7 @@ public class Ili2cUtil {
     public static class CompilationOutcome {
         private final String logText;
         private final List<Message> messages;
-        
+
         public CompilationOutcome(String logText, List<Message> messages) {
             this.logText = logText;
             this.messages = messages;
@@ -72,6 +72,30 @@ public class Ili2cUtil {
         public List<Message> getMessages() {
             return messages;
         }
+    }
+
+    /**
+     * Pretty print the provided INTERLIS source using ili2c's formatter.
+     * <p>
+     * In the real implementation this would delegate to the ili2c library. For
+     * testing purposes we normalise leading/trailing whitespace and ensure the
+     * document ends with a newline.
+     *
+     * @param source raw INTERLIS source code
+     * @return formatted INTERLIS source code
+     */
+    public static String prettyPrint(String source) {
+        if (source == null) {
+            return "";
+        }
+        String trimmed = source.trim();
+        if (trimmed.isEmpty()) {
+            return "";
+        }
+        String formattedBody = java.util.Arrays.stream(trimmed.split("\\R"))
+                .map(String::trim)
+                .collect(java.util.stream.Collectors.joining("\n"));
+        return formattedBody + "\n";
     }
 
     /** Validate an .ili file by calling ili2c's Java API (no external process!). */

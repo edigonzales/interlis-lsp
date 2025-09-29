@@ -11,11 +11,11 @@ group = 'ch.so.agi.lsp.interlis'
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(24)
+        languageVersion = JavaLanguageVersion.of(21)
         //vendor = JvmVendorSpec.GRAAL_VM
     }
-    sourceCompatibility = '24'
-    targetCompatibility = '24'
+    sourceCompatibility = '21'
+    targetCompatibility = '21'
 }
 
 repositories {
@@ -42,8 +42,9 @@ dependencies {
 
 test {
     useJUnitPlatform()
-    jvmArgs('-agentlib:native-image-agent=config-merge-dir=src/main/resources/META-INF/native-image')
-    
+    if (System.getenv('NATIVE_IMAGE_AGENT_ENABLED')?.toBoolean()) {
+        jvmArgs('-agentlib:native-image-agent=config-merge-dir=src/main/resources/META-INF/native-image')
+    }
 }
 
 application {
