@@ -60,7 +60,8 @@ export async function activate(context: vscode.ExtensionContext) {
           const before = newText.slice(0, idx);
           const beforeLines = before.split(/\r?\n/);
           const lineDelta = beforeLines.length - 1;
-          const charDelta = beforeLines[beforeLines.length - 1].length;
+          const lastLine = beforeLines[beforeLines.length - 1] ?? "";
+          const charDelta = lastLine.length;
           const line = edit.range.start.line + lineDelta;
           const character = lineDelta === 0
             ? edit.range.start.character + charDelta
