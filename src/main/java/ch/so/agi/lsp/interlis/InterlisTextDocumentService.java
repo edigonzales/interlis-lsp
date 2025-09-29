@@ -6,9 +6,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 public class InterlisTextDocumentService implements TextDocumentService {
     private static final Logger LOG = LoggerFactory.getLogger(InterlisTextDocumentService.class);
@@ -45,6 +48,24 @@ public class InterlisTextDocumentService implements TextDocumentService {
         server.publishDiagnostics(uri, Collections.emptyList());
     }
 
+    @Override
+    public CompletableFuture<List<? extends TextEdit>> formatting(DocumentFormattingParams params) {
+        List<? extends TextEdit> edits = Collections.emptyList();
+        try {
+            String uri = params.getTextDocument().getUri();
+            String originalText = readDocument(uri);
+            String formattedText = Ili2cUtil.prettyPrint(originalText);
+
+            if (!formattedText.equals(originalText)) {
+                TextEdit edit = new TextEdit(fullDocumentRange(originalText), formattedText);
+                edits = Collections.singletonList(edit);
+            }
+        } catch (Exception ex) {
+            LOG.error("Formatting failed", ex);
+        }
+        return CompletableFuture.completedFuture(edits);
+    }
+
     private void compileAndPublish(String documentUri, String source) {
         try {
             String pathOrUri = toFilesystemPathIfPossible(documentUri);
@@ -72,5 +93,35 @@ public class InterlisTextDocumentService implements TextDocumentService {
             } catch (Exception ignored) { /* leave as-is */ }
         }
         return uriOrPath;
+    }
+
+    private static String readDocument(String uriOrPath) throws Exception {
+        if (uriOrPath == null) {
+            return "";
+        }
+        if (uriOrPath.startsWith("file:")) {
+            return Files.readString(Paths.get(URI.create(uriOrPath)));
+        }
+        return Files.readString(Paths.get(uriOrPath));
+    }
+
+    private static Range fullDocumentRange(String text) {
+        int line = 0;
+        int column = 0;
+        for (int i = 0; i < text.length(); i++) {
+            char ch = text.charAt(i);
+            if (ch == '\r') {
+                continue;
+            }
+            if (ch == '\n') {
+                line++;
+                column = 0;
+            } else {
+                column++;
+            }
+        }
+        Position start = new Position(0, 0);
+        Position end = new Position(line, column);
+        return new Range(start, end);
     }
 }
