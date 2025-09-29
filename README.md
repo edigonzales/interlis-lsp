@@ -32,7 +32,9 @@ The server uses stdio transport. Your editor/extension should spawn it and conne
 - ~~compile onSave (und nicht onChange). Falls man onChange möchte, darf nicht die gespeicherte Datei zum LSP geschickt werden, sondern der Memory-Inhalt.~~
 - probiere onChange mit "fast approach" siehe Frage bei jEdit.
 - Enable assert in tests. And more tests.
-- snipptes / autoclose
+- snippets / autoclose
 - pretty print (2 lokalen Modellen)     
 - syntax highlighting
+- Server Capabilities dokumentieren, e.g. initializeAdvertisesFormattingCapability für output verwenden.
+- UML
  

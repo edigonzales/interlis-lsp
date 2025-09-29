@@ -53,10 +53,13 @@ public class InterlisTextDocumentService implements TextDocumentService {
         List<? extends TextEdit> edits = Collections.emptyList();
         try {
             String uri = params.getTextDocument().getUri();
+            String pathOrUri = toFilesystemPathIfPossible(uri);
             String originalText = readDocument(uri);
-            String formattedText = Ili2cUtil.prettyPrint(originalText);
+            
+            ClientSettings cfg = server.getClientSettings();
+            String formattedText = Ili2cUtil.prettyPrint(cfg, pathOrUri);
 
-            if (!formattedText.equals(originalText)) {
+            if (formattedText != null && !formattedText.equals(originalText)) {
                 TextEdit edit = new TextEdit(fullDocumentRange(originalText), formattedText);
                 edits = Collections.singletonList(edit);
             }
@@ -73,8 +76,7 @@ public class InterlisTextDocumentService implements TextDocumentService {
             LOG.debug("Validating [{}] via {} with modelRepositories={}", pathOrUri, source,
                     cfg.getModelRepositoriesList());
 
-            Ili2cUtil validator = new Ili2cUtil(cfg);
-            Ili2cUtil.CompilationOutcome outcome = validator.compile(pathOrUri);
+            Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(cfg, pathOrUri);
 
             server.publishDiagnostics(documentUri, DiagnosticsMapper.toDiagnostics(outcome.getMessages()));
             server.clearOutput();  

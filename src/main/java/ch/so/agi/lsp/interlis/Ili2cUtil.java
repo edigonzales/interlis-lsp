@@ -1,6 +1,8 @@
 package ch.so.agi.lsp.interlis;
 
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -19,6 +21,8 @@ import ch.interlis.ili2c.Ili2cSettings;
 import ch.interlis.ili2c.config.Configuration;
 import ch.interlis.ili2c.config.FileEntry;
 import ch.interlis.ili2c.config.FileEntryKind;
+import ch.interlis.ili2c.generator.Interlis2Generator;
+import ch.interlis.ili2c.metamodel.Model;
 import ch.interlis.ili2c.metamodel.TransferDescription;
 import ch.interlis.iox_j.logging.FileLogger;
 
@@ -28,11 +32,11 @@ import ch.interlis.iox_j.logging.FileLogger;
 public class Ili2cUtil {
     private static final Logger LOG = LoggerFactory.getLogger(Ili2cUtil.class);
 
-    private final ClientSettings settings;
+//    private final ClientSettings settings;
 
-    public Ili2cUtil(ClientSettings settings) {
-        this.settings = settings != null ? settings : new ClientSettings();
-    }
+//    public Ili2cUtil(ClientSettings settings) {
+//        this.settings = settings != null ? settings : new ClientSettings();
+//    }
     
     public static class Message {
         public enum Severity { ERROR, WARNING, INFO }
@@ -57,12 +61,18 @@ public class Ili2cUtil {
     }
 
     public static class CompilationOutcome {
+        private final TransferDescription td;
         private final String logText;
         private final List<Message> messages;
 
-        public CompilationOutcome(String logText, List<Message> messages) {
+        public CompilationOutcome(TransferDescription td, String logText, List<Message> messages) {
+            this.td = td;
             this.logText = logText;
             this.messages = messages;
+        }
+        
+        public TransferDescription getTransferDescription() {
+            return td;
         }
 
         public String getLogText() {
@@ -83,24 +93,42 @@ public class Ili2cUtil {
      *
      * @param source raw INTERLIS source code
      * @return formatted INTERLIS source code
+     * @throws IOException 
      */
-    public static String prettyPrint(String source) {
-        if (source == null) {
+    public static String prettyPrint(ClientSettings settings, String sourceFile) throws IOException {
+        settings = settings != null ? settings : new ClientSettings();
+
+        if (sourceFile == null) {
             return "";
         }
-        String trimmed = source.trim();
-        if (trimmed.isEmpty()) {
-            return "";
+        
+        Path targetFile = Files.createTempFile("", ".ili");
+        OutputStreamWriter target = new OutputStreamWriter(new FileOutputStream(targetFile.toAbsolutePath().toString()), "UTF-8");
+        
+        TransferDescription desc = new TransferDescription();
+        // TODO Do we want to use a cache again?
+        TransferDescription td = compile(settings, sourceFile).getTransferDescription();
+        
+        if (td == null) {
+            LOG.error("td is null");
+            return null;
         }
-        String formattedBody = java.util.Arrays.stream(trimmed.split("\\R"))
-                .map(String::trim)
-                .collect(java.util.stream.Collectors.joining("\n"));
-        return formattedBody + "\n";
+        
+        for (Model model : td.getModelsFromLastFile()) {
+            desc.add(model);
+        }
+        
+        Interlis2Generator gen = new Interlis2Generator();
+        gen.generate(target, desc, false); // emitPredefined = config.isIncPredefModel() ?
+        
+        String formattedBody = Files.readString(targetFile);            
+        return formattedBody;
     }
 
     /** Validate an .ili file by calling ili2c's Java API (no external process!). */
-    public CompilationOutcome compile(String fileUriOrPath) {
-        StringBuilder log = new StringBuilder();
+    public static CompilationOutcome compile(ClientSettings settings, String fileUriOrPath) {
+        settings = settings != null ? settings : new ClientSettings();
+        
         List<Message> messages = new ArrayList<>();
         
         LOG.info("fileUriOrPath: " + fileUriOrPath);
@@ -108,6 +136,7 @@ public class Ili2cUtil {
                
         Path logFile = null;
         FileLogger flog = null;
+        TransferDescription td = null;
         String logText = "";
         try {
             logFile = Files.createTempFile("ili2c_", ".log");
@@ -115,7 +144,6 @@ public class Ili2cUtil {
             
             LOG.info("logFile: " + logFile.toString());
 
-            
             StdListener.getInstance().skipInfo(true);
             EhiLogger.getInstance().addListener(flog);
             EhiLogger.getInstance().removeListener(StdListener.getInstance());
@@ -140,7 +168,7 @@ public class Ili2cUtil {
             Date today = new Date();
             String dateOut = dateFormatter.format(today);
 
-            TransferDescription td = ch.interlis.ili2c.Main.runCompiler(cfg, set, null);
+            td = ch.interlis.ili2c.Main.runCompiler(cfg, set, null);
             
             if (td == null) {
                 EhiLogger.logError("...compiler run failed " + dateOut);
@@ -148,7 +176,7 @@ public class Ili2cUtil {
                 EhiLogger.logState("...compiler run done " + dateOut);
             }
         } catch (Exception e) {
-            return new CompilationOutcome("[ili2c] failed: " + e.getMessage(), messages);
+            return new CompilationOutcome(null, "[ili2c] failed: " + e.getMessage(), messages);
         } finally {
             EhiLogger.getInstance().addListener(StdListener.getInstance());
 
@@ -163,15 +191,14 @@ public class Ili2cUtil {
         } catch (IOException io) {
             logText = "[ili2c] failed to read log file: " + io.getMessage();
         } finally {
-            // TODO
-            // try { Files.deleteIfExists(logFile); } catch (IOException ignore) {}
+            try {
+                Files.deleteIfExists(logFile);
+            } catch (IOException ignore) {
+            }
         }
 
         messages = Ili2cLogParser.parseErrors(logText);
-//        log.append("ERROR: ").append(fileUriOrPath).append(":5:10 Unexpected token 'MODEL'").append('\n');
-//        messages.add(new Message(Message.Severity.ERROR, fileUriOrPath, 5, 10, "Unexpected token 'MODEL'"));
-        // --- END PLACEHOLDER ---
 
-        return new CompilationOutcome(logText, messages);
+        return new CompilationOutcome(td, logText, messages);
     }
 }

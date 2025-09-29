@@ -3,15 +3,14 @@ package ch.so.agi.lsp.interlis;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
-public class InterlisValidatorTest {
+public class InterlisCompilerTest {
 
     @Test
     void returnsLogAndMessages() {
         ClientSettings cfg = new ClientSettings();
         cfg.setModelRepositories("https://models.example.org,/opt/models");
 
-        Ili2cUtil v = new Ili2cUtil(cfg);
-        Ili2cUtil.CompilationOutcome out = v.compile("/tmp/example.ili");
+        Ili2cUtil.CompilationOutcome out = Ili2cUtil.compile(cfg, "/tmp/example.ili");
 
         assertNotNull(out.getLogText());
         assertFalse(out.getLogText().isEmpty());

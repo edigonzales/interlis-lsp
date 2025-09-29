@@ -23,8 +23,7 @@ public class CommandHandlers {
         }
         
         ClientSettings cfg = server.getClientSettings();
-        Ili2cUtil validator = new Ili2cUtil(cfg);
-        Ili2cUtil.CompilationOutcome outcome = validator.compile(fileUriOrPath);
+        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(cfg, fileUriOrPath);
         List<Diagnostic> diagnostics = DiagnosticsMapper.toDiagnostics(outcome.getMessages());
         server.publishDiagnostics(fileUriOrPath, diagnostics);
         server.clearOutput();

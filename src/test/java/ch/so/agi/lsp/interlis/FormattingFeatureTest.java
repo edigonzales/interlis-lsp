@@ -36,7 +36,22 @@ class FormattingFeatureTest {
         InterlisTextDocumentService service = (InterlisTextDocumentService) server.getTextDocumentService();
 
         Path iliFile = Files.createTempFile("ili-format", ".ili");
-        String unformatted = "\n   MODEL Foo;   \nEND Foo.   \n";
+        String unformatted = """
+INTERLIS 2.4;
+
+MODEL 
+
+ModelA (de)
+  AT "https://example.com"
+  VERSION "2025-09-17"
+  =
+
+  STRUCTURE StructA =
+    attr1 : TEXT;
+  END StructA;
+
+END ModelA.     
+                """;
         Files.writeString(iliFile, unformatted);
 
         DocumentFormattingParams params = new DocumentFormattingParams();
@@ -46,7 +61,21 @@ class FormattingFeatureTest {
         assertEquals(1, edits.size());
 
         TextEdit edit = edits.get(0);
-        assertEquals("MODEL Foo;\nEND Foo.\n", edit.getNewText());
+        String expected = """
+INTERLIS 2.4;
+
+MODEL ModelA (de)
+  AT "https://example.com"
+  VERSION "2025-09-17"
+  =
+
+  STRUCTURE StructA =
+    attr1 : TEXT;
+  END StructA;
+
+END ModelA.
+                """;
+        assertEquals(expected, edit.getNewText());
         assertEquals(0, edit.getRange().getStart().getLine());
         assertEquals(0, edit.getRange().getStart().getCharacter());
     }
@@ -57,8 +86,21 @@ class FormattingFeatureTest {
         InterlisTextDocumentService service = (InterlisTextDocumentService) server.getTextDocumentService();
 
         Path iliFile = Files.createTempFile("ili-format", ".ili");
-        String formatted = "MODEL Foo;\nEND Foo.\n";
-        Files.writeString(iliFile, formatted);
+        String unformatted = """
+INTERLIS 2.4;
+
+MODEL ModelA (de)
+  AT "https://example.com"
+  VERSION "2025-09-17"
+  =
+
+  STRUCTURE StructA =
+    attr1 : TEXT;
+  END StructA;
+
+END ModelA.
+                """;
+        Files.writeString(iliFile, unformatted);
 
         DocumentFormattingParams params = new DocumentFormattingParams();
         params.setTextDocument(new TextDocumentIdentifier(iliFile.toUri().toString()));
