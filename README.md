@@ -31,10 +31,16 @@ The server uses stdio transport. Your editor/extension should spawn it and conne
 - ~~messaging, logging finalisieren. inkl client popup (?) + Parser für ili2c log~~
 - ~~compile onSave (und nicht onChange). Falls man onChange möchte, darf nicht die gespeicherte Datei zum LSP geschickt werden, sondern der Memory-Inhalt.~~
 - probiere onChange mit "fast approach" siehe Frage bei jEdit.
-- Enable assert in tests. And more tests.
+- ~~Enable assert in tests.~~ And more tests.
 - snippets / autoclose
-- pretty print (2 lokalen Modellen)     
+- ~~pretty print (2 lokalen Modellen)~~    
 - syntax highlighting
+- syntax highlighting: brackets nur für Klammern (Wörter mit Snippets oder onEnterRules)
+- syntax highlighting: autoClosingPairs auch hier word pairs mit snippets oder onEnterRules)
+- syntax highlighting: 2) Enhance with Semantic Tokens from your Java LSP ?? Semantic folding
+Real “fold by AST” works best via your LSP (foldingRangeProvider) so blocks fold exactly from … = to the matching END ….
 - Server Capabilities dokumentieren, e.g. initializeAdvertisesFormattingCapability für output verwenden.
 - UML
+- Hyperlink
+- word output
  

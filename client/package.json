@@ -19,7 +19,16 @@
         ],
         "extensions": [
           ".ili"
-        ]
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "interlis",
+        "scopeName": "source.interlis",
+        "path": "./syntaxes/interlis.tmLanguage.json",
+        "embeddedLanguages": {}
       }
     ],
     "commands": [
@@ -51,6 +60,16 @@
           "default": true,
           "description": "Show the INTERLIS LSP output channel when the extension activates."
         }
+      }
+    },
+    "configurationDefaults": {
+      "editor.tokenColorCustomizations": {
+        "textMateRules": [
+          {
+            "scope": "source.interlis comment.line.meta-attribute.interlis",
+            "settings": { "foreground": "#d19a66", "fontStyle": "" }
+          }
+        ]
       }
     }
   },
