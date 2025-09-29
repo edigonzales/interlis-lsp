@@ -235,6 +235,9 @@
       "type": "java.sql.Date"
     },
     {
+      "type": "java.util.Collections$SingletonList"
+    },
+    {
       "type": "java.util.Date"
     },
     {
@@ -560,6 +563,7 @@
     {
       "type": "org.eclipse.lsp4j.Diagnostic",
       "allDeclaredFields": true,
+      "allPublicConstructors": true,
       "unsafeAllocated": true
     },
     {
@@ -644,6 +648,7 @@
     {
       "type": "org.eclipse.lsp4j.DidChangeTextDocumentParams",
       "allDeclaredFields": true,
+      "allPublicConstructors": true,
       "unsafeAllocated": true,
       "methods": [
         {
@@ -664,11 +669,14 @@
     },
     {
       "type": "org.eclipse.lsp4j.DidCloseTextDocumentParams",
+      "allDeclaredFields": true,
+      "allPublicConstructors": true,
       "unsafeAllocated": true
     },
     {
       "type": "org.eclipse.lsp4j.DidOpenTextDocumentParams",
       "allDeclaredFields": true,
+      "allPublicConstructors": true,
       "unsafeAllocated": true,
       "methods": [
         {
@@ -680,6 +688,7 @@
     {
       "type": "org.eclipse.lsp4j.DidSaveTextDocumentParams",
       "allDeclaredFields": true,
+      "allPublicConstructors": true,
       "unsafeAllocated": true,
       "methods": [
         {
@@ -695,6 +704,16 @@
     {
       "type": "org.eclipse.lsp4j.DocumentFormattingOptions",
       "allDeclaredFields": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.DocumentFormattingParams",
+      "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
     },
     {
       "type": "org.eclipse.lsp4j.DocumentHighlightCapabilities",
@@ -842,6 +861,15 @@
     {
       "type": "org.eclipse.lsp4j.FormattingCapabilities",
       "allDeclaredFields": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "org.eclipse.lsp4j.FormattingOptions",
       "methods": [
         {
           "name": "<init>",
@@ -1076,6 +1104,7 @@
     {
       "type": "org.eclipse.lsp4j.Position",
       "allDeclaredFields": true,
+      "allPublicConstructors": true,
       "methods": [
         {
           "name": "<init>",
@@ -1108,11 +1137,13 @@
     {
       "type": "org.eclipse.lsp4j.PublishDiagnosticsParams",
       "allDeclaredFields": true,
+      "allPublicConstructors": true,
       "unsafeAllocated": true
     },
     {
       "type": "org.eclipse.lsp4j.Range",
       "allDeclaredFields": true,
+      "allPublicConstructors": true,
       "unsafeAllocated": true,
       "methods": [
         {
@@ -1372,6 +1403,7 @@
     {
       "type": "org.eclipse.lsp4j.TextDocumentContentChangeEvent",
       "allDeclaredFields": true,
+      "allPublicConstructors": true,
       "methods": [
         {
           "name": "<init>",
@@ -1382,6 +1414,7 @@
     {
       "type": "org.eclipse.lsp4j.TextDocumentIdentifier",
       "allDeclaredFields": true,
+      "allPublicConstructors": true,
       "methods": [
         {
           "name": "<init>",
@@ -1392,6 +1425,7 @@
     {
       "type": "org.eclipse.lsp4j.TextDocumentItem",
       "allDeclaredFields": true,
+      "allPublicConstructors": true,
       "unsafeAllocated": true,
       "methods": [
         {
@@ -1416,6 +1450,10 @@
       "type": "org.eclipse.lsp4j.TextDocumentSyncOptions",
       "allDeclaredFields": true,
       "unsafeAllocated": true
+    },
+    {
+      "type": "org.eclipse.lsp4j.TextEdit",
+      "allDeclaredFields": true
     },
     {
       "type": "org.eclipse.lsp4j.TypeDefinitionCapabilities",
@@ -1448,6 +1486,7 @@
     {
       "type": "org.eclipse.lsp4j.VersionedTextDocumentIdentifier",
       "allDeclaredFields": true,
+      "allPublicConstructors": true,
       "unsafeAllocated": true
     },
     {
@@ -1666,13 +1705,15 @@
       "unsafeAllocated": true
     },
     {
-      "type": "org.eclipse.lsp4j.services.LanguageClient"
+      "type": "org.eclipse.lsp4j.services.LanguageClient",
+      "allPublicMethods": true
     },
     {
       "type": "org.eclipse.lsp4j.services.LanguageClientAware"
     },
     {
       "type": "org.eclipse.lsp4j.services.LanguageServer",
+      "allPublicMethods": true,
       "methods": [
         {
           "name": "exit",
@@ -1719,6 +1760,7 @@
     },
     {
       "type": "org.eclipse.lsp4j.services.TextDocumentService",
+      "allPublicMethods": true,
       "methods": [
         {
           "name": "didChange",
@@ -1737,11 +1779,18 @@
           "parameterTypes": [
             "org.eclipse.lsp4j.DidSaveTextDocumentParams"
           ]
+        },
+        {
+          "name": "formatting",
+          "parameterTypes": [
+            "org.eclipse.lsp4j.DocumentFormattingParams"
+          ]
         }
       ]
     },
     {
       "type": "org.eclipse.lsp4j.services.WorkspaceService",
+      "allPublicMethods": true,
       "methods": [
         {
           "name": "didChangeConfiguration",
