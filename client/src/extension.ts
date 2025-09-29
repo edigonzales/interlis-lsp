@@ -3,6 +3,7 @@ import { LanguageClient, LanguageClientOptions, Executable, ServerOptions, State
 
 let client: LanguageClient | undefined;
 let revealOutputOnNextLog = false;
+const CARET_SENTINEL = "__INTERLIS_AUTOCLOSE_CARET__";
 
 export async function activate(context: vscode.ExtensionContext) {
   const cfg = vscode.workspace.getConfiguration("interlisLsp");
@@ -33,12 +34,66 @@ export async function activate(context: vscode.ExtensionContext) {
   };
   const serverOptions: ServerOptions = exec;
 
+  const caretMiddleware: LanguageClientOptions["middleware"] = {
+    provideOnTypeFormattingEdits: async (document, position, ch, options, token, next) => {
+      const edits = await next(document, position, ch, options, token);
+      if (!edits || edits.length === 0) {
+        return edits;
+      }
+
+      let caret: vscode.Position | undefined;
+      const sanitized = edits.map(edit => {
+        if (!edit || typeof edit.newText !== "string") {
+          return edit;
+        }
+
+        let newText = edit.newText;
+        let localCaret: vscode.Position | undefined;
+        let idx = newText.indexOf(CARET_SENTINEL);
+
+        while (idx !== -1) {
+          const before = newText.slice(0, idx);
+          const beforeLines = before.split(/\r?\n/);
+          const lineDelta = beforeLines.length - 1;
+          const charDelta = beforeLines[beforeLines.length - 1].length;
+          const line = edit.range.start.line + lineDelta;
+          const character = lineDelta === 0
+            ? edit.range.start.character + charDelta
+            : charDelta;
+          localCaret = new vscode.Position(line, character);
+          newText = before + newText.slice(idx + CARET_SENTINEL.length);
+          idx = newText.indexOf(CARET_SENTINEL);
+        }
+
+        if (localCaret) {
+          caret = localCaret;
+        }
+
+        return newText === edit.newText ? edit : vscode.TextEdit.replace(edit.range, newText);
+      });
+
+      if (caret) {
+        setTimeout(() => {
+          const active = vscode.window.activeTextEditor;
+          if (active && active.document.uri.toString() === document.uri.toString()) {
+            const selection = new vscode.Selection(caret!, caret!);
+            active.selection = selection;
+            active.revealRange(new vscode.Range(caret!, caret!));
+          }
+        }, 0);
+      }
+
+      return sanitized;
+    }
+  };
+
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ language: "interlis", scheme: "file" }],
     initializationOptions: {
       modelRepositories: cfg.get<string>("modelRepositories") ?? ""
     },
     synchronize: { configurationSection: "interlisLsp" },
+    middleware: caretMiddleware,
     outputChannel: output,
     traceOutputChannel: output
   };

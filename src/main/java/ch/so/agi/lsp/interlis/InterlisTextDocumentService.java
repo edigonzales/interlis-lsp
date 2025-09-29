@@ -17,6 +17,7 @@ public class InterlisTextDocumentService implements TextDocumentService {
     private static final Logger LOG = LoggerFactory.getLogger(InterlisTextDocumentService.class);
 
     private final InterlisLanguageServer server;
+    private final DocumentTracker documents = new DocumentTracker();
 
     public InterlisTextDocumentService(InterlisLanguageServer server) {
         this.server = server;
@@ -25,14 +26,13 @@ public class InterlisTextDocumentService implements TextDocumentService {
     @Override
     public void didOpen(DidOpenTextDocumentParams params) {
         String uri = params.getTextDocument().getUri();
+        documents.open(params.getTextDocument());
         compileAndPublish(uri, "didOpen");
     }
 
     @Override
     public void didChange(DidChangeTextDocumentParams params) {
-//        String uri = params.getTextDocument().getUri();
-//        // For typing responsiveness you might debounce; for now run directly
-//        validateAndPublish(uri, "didChange");
+        documents.applyChanges(params.getTextDocument(), params.getContentChanges());
     }
 
     @Override
@@ -46,6 +46,7 @@ public class InterlisTextDocumentService implements TextDocumentService {
     public void didClose(DidCloseTextDocumentParams params) {
         String uri = params.getTextDocument().getUri();
         server.publishDiagnostics(uri, Collections.emptyList());
+        documents.close(uri);
     }
 
     @Override
@@ -66,6 +67,15 @@ public class InterlisTextDocumentService implements TextDocumentService {
         } catch (Exception ex) {
             LOG.error("Formatting failed", ex);
         }
+        return CompletableFuture.completedFuture(edits);
+    }
+
+    @Override
+    public CompletableFuture<List<? extends TextEdit>> onTypeFormatting(DocumentOnTypeFormattingParams params) {
+        String uri = params.getTextDocument().getUri();
+        String text = documents.getText(uri);
+
+        List<TextEdit> edits = InterlisAutoCloser.computeEdits(text, params);
         return CompletableFuture.completedFuture(edits);
     }
 
