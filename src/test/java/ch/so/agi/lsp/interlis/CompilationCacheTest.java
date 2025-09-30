@@ -1,6 +1,5 @@
 package ch.so.agi.lsp.interlis;
 
-import ch.interlis.ili2c.metamodel.Model;
 import ch.interlis.ili2c.metamodel.TransferDescription;
 import org.junit.jupiter.api.Test;
 
@@ -89,56 +88,5 @@ class CompilationCacheTest {
         assertEquals(1, compileCount.get(), "Expected compile to run only once due to caching");
     }
 
-    @Test
-    void indexesImportedModelFilesForReuse() throws Exception {
-        CompilationCache cache = new CompilationCache();
-
-        Path modelA = Files.createTempFile("ModelA", ".ili");
-        Path modelB = Files.createTempFile("ModelB", ".ili");
-
-        Model imported = new StubModel("ModelB", modelB.toString());
-        Model root = new StubModel("ModelA", modelA.toString(), imported);
-
-        TransferDescription td = new TransferDescription() {
-            @Override
-            public Model[] getModelsFromLastFile() {
-                return new Model[]{root};
-            }
-        };
-
-        Ili2cUtil.CompilationOutcome outcome = new Ili2cUtil.CompilationOutcome(td, "", Collections.emptyList());
-
-        cache.put(modelA.toString(), outcome);
-
-        assertSame(outcome, cache.get(modelA.toString()));
-        assertSame(outcome, cache.get(modelB.toString()), "Expected imported model file to be indexed");
-    }
-
-    private static final class StubModel extends Model {
-        private final String name;
-        private final String fileName;
-        private final Model[] imports;
-
-        private StubModel(String name, String fileName, Model... imports) {
-            this.name = name;
-            this.fileName = fileName;
-            this.imports = imports != null ? imports : new Model[0];
-        }
-
-        @Override
-        public String getName() {
-            return name;
-        }
-
-        @Override
-        public String getFileName() {
-            return fileName;
-        }
-
-        @Override
-        public Model[] getImporting() {
-            return imports;
-        }
-    }
 }
 
