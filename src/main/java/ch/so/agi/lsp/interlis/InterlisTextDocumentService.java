@@ -49,6 +49,7 @@ public class InterlisTextDocumentService implements TextDocumentService {
     public void didClose(DidCloseTextDocumentParams params) {
         String uri = params.getTextDocument().getUri();
         server.publishDiagnostics(uri, Collections.emptyList());
+        definitionFinder.evictCompilation(uri);
         documents.close(uri);
     }
 
@@ -102,9 +103,10 @@ public class InterlisTextDocumentService implements TextDocumentService {
                     cfg.getModelRepositoriesList());
 
             Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(cfg, pathOrUri);
+            definitionFinder.cacheCompilation(documentUri, outcome);
 
             server.publishDiagnostics(documentUri, DiagnosticsMapper.toDiagnostics(outcome.getMessages()));
-            server.clearOutput();  
+            server.clearOutput();
             server.logToClient(outcome.getLogText());
         } catch (Exception ex) {
             LOG.error("Validation failed for {} (source={})", documentUri, source, ex);
