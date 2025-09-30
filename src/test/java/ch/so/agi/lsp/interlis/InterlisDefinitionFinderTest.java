@@ -1,5 +1,7 @@
 package ch.so.agi.lsp.interlis;
 
+import ch.interlis.ili2c.metamodel.Model;
+import ch.interlis.ili2c.metamodel.TransferDescription;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
@@ -11,7 +13,11 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -221,6 +227,111 @@ class InterlisDefinitionFinderTest {
         finder.findDefinition(params);
 
         assertEquals(1, compiler.invocations.get(), "Expected compile to run only once due to caching");
+    }
+
+    @Test
+    void sharesCachedCompilationWithImportedDocuments(@TempDir Path tempDir) throws Exception {
+        Path repositoryDir = Files.createDirectories(tempDir.resolve("models"));
+
+        Path importedModel = repositoryDir.resolve("SharedBase.ili");
+        String importedContent = """
+                INTERLIS 2.3;
+                MODEL SharedBase (en) AT \"http://example.org\" VERSION \"2024-01-01\" =
+                  TOPIC SharedTopic =
+                    STRUCTURE SharedExample =
+                    END SharedExample;
+                  END SharedTopic;
+                END SharedBase.
+                """.stripIndent();
+        Files.writeString(importedModel, importedContent);
+
+        Path rootModel = repositoryDir.resolve("DependentModel.ili");
+        String rootContent = """
+                INTERLIS 2.3;
+                MODEL DependentModel (en) AT \"http://example.org\" VERSION \"2024-01-01\" =
+                  IMPORTS SharedBase;
+                  TOPIC DependentTopic =
+                    CLASS UsesShared =
+                      attr1 : SharedBase.SharedTopic.SharedExample;
+                    END UsesShared;
+                  END DependentTopic;
+                END DependentModel.
+                """.stripIndent();
+        Files.writeString(rootModel, rootContent);
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        ClientSettings settings = new ClientSettings();
+        settings.setModelRepositories(repositoryDir.toAbsolutePath().toString());
+        server.setClientSettings(settings);
+
+        DocumentTracker tracker = new DocumentTracker();
+        TextDocumentItem rootItem = new TextDocumentItem(rootModel.toUri().toString(), "interlis", 1, rootContent);
+        tracker.open(rootItem);
+        TextDocumentItem importedItem = new TextDocumentItem(importedModel.toUri().toString(), "interlis", 1, importedContent);
+        tracker.open(importedItem);
+
+        CountingCompilationProvider compiler = new CountingCompilationProvider();
+        InterlisDefinitionFinder finder = new InterlisDefinitionFinder(server, tracker, compiler);
+
+        Ili2cUtil.CompilationOutcome outcome = compiler.compile(settings, rootModel.toAbsolutePath().toString());
+        TransferDescription td = outcome.getTransferDescription();
+        assertNotNull(td, "Expected compilation to produce a transfer description");
+        LinkedHashSet<String> dependencyUris = new LinkedHashSet<>();
+        if (td != null) {
+            for (Model model : td.getModelsFromLastFile()) {
+                if (model == null) {
+                    continue;
+                }
+                collectModelPath(dependencyUris, model.getFileName());
+
+                Model[] imports = model.getImporting();
+                if (imports != null) {
+                    for (Model imported : imports) {
+                        if (imported != null) {
+                            collectModelPath(dependencyUris, imported.getFileName());
+                        }
+                    }
+                }
+            }
+        }
+
+        finder.cacheCompilation(rootItem.getUri(), new ArrayList<>(dependencyUris), outcome);
+
+        String expectedRootKey = Paths.get(InterlisTextDocumentService.toFilesystemPathIfPossible(rootItem.getUri()))
+                .toAbsolutePath().normalize().toString();
+        String expectedImportedKey = Paths.get(InterlisTextDocumentService.toFilesystemPathIfPossible(importedItem.getUri()))
+                .toAbsolutePath().normalize().toString();
+
+        java.lang.reflect.Field cacheField = InterlisDefinitionFinder.class.getDeclaredField("compilationCache");
+        cacheField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        ConcurrentMap<String, ?> cache = (ConcurrentMap<String, ?>) cacheField.get(finder);
+        assertTrue(cache.containsKey(expectedRootKey), "Expected root compilation to be cached under normalized path");
+        assertTrue(cache.containsKey(expectedImportedKey), "Expected imported compilation to reuse shared cache entry");
+
+        TextDocumentPositionParams rootParams = new TextDocumentPositionParams();
+        rootParams.setTextDocument(new TextDocumentIdentifier(rootItem.getUri()));
+        int rootOffset = rootContent.indexOf("SharedBase") + 1;
+        rootParams.setPosition(DocumentTracker.positionAt(rootContent, rootOffset));
+        finder.findDefinition(rootParams);
+        assertEquals(1, compiler.invocations.get(), "Expected cached compilation to satisfy root lookup");
+
+        TextDocumentPositionParams importedParams = new TextDocumentPositionParams();
+        importedParams.setTextDocument(new TextDocumentIdentifier(importedItem.getUri()));
+        int importedOffset = importedContent.indexOf("SharedExample") + 1;
+        importedParams.setPosition(DocumentTracker.positionAt(importedContent, importedOffset));
+        finder.findDefinition(importedParams);
+
+        assertEquals(1, compiler.invocations.get(), "Expected shared compilation to be reused for dependency lookups");
+    }
+
+    private void collectModelPath(LinkedHashSet<String> uris, String fileName) {
+        if (fileName == null) {
+            return;
+        }
+        String normalizedPath = InterlisTextDocumentService.toFilesystemPathIfPossible(fileName);
+        Path modelPath = Paths.get(normalizedPath).toAbsolutePath().normalize();
+        uris.add(modelPath.toUri().toString());
     }
 
     private static final class CountingCompilationProvider implements InterlisDefinitionFinder.CompilationProvider {

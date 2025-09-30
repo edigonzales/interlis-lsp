@@ -12,14 +12,17 @@ import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -30,6 +33,8 @@ final class InterlisDefinitionFinder {
     private final DocumentTracker documents;
     private final CompilationProvider compiler;
     private final ConcurrentMap<String, CachedCompilation> compilationCache = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Set<String>> rootDependencies = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Set<String>> dependencyToRoots = new ConcurrentHashMap<>();
 
     interface CompilationProvider {
         Ili2cUtil.CompilationOutcome compile(ClientSettings settings, String fileUriOrPath);
@@ -109,36 +114,124 @@ final class InterlisDefinitionFinder {
         return Either.forLeft(locations);
     }
 
-    void cacheCompilation(String uri, Ili2cUtil.CompilationOutcome outcome) {
+    void cacheCompilation(String uri, List<String> dependencyUris, Ili2cUtil.CompilationOutcome outcome) {
         if (uri == null || outcome == null) {
             return;
         }
-        String key = InterlisTextDocumentService.toFilesystemPathIfPossible(uri);
-        compilationCache.put(key, new CachedCompilation(documents != null ? documents.getVersion(uri) : null, outcome));
+        String rootKey = toCacheKey(uri);
+        if (rootKey == null || rootKey.isBlank()) {
+            return;
+        }
+
+        CachedCompilation cached = new CachedCompilation(documents != null ? documents.getVersion(uri) : null, outcome);
+
+        clearRootDependencies(rootKey);
+
+        compilationCache.put(rootKey, cached);
+
+        Set<String> dependencyKeys = new LinkedHashSet<>();
+        if (dependencyUris != null) {
+            for (String dep : dependencyUris) {
+                String depKey = toCacheKey(dep);
+                if (depKey != null && !depKey.isBlank()) {
+                    dependencyKeys.add(depKey);
+                }
+            }
+        }
+
+        if (dependencyKeys.isEmpty()) {
+            rootDependencies.remove(rootKey);
+            return;
+        }
+
+        rootDependencies.put(rootKey, dependencyKeys);
+        for (String dependencyKey : dependencyKeys) {
+            compilationCache.put(dependencyKey, cached);
+            dependencyToRoots.compute(dependencyKey, (key, roots) -> {
+                Set<String> updated = roots != null ? roots : ConcurrentHashMap.newKeySet();
+                updated.add(rootKey);
+                return updated;
+            });
+        }
     }
 
     void evictCompilation(String uri) {
         if (uri == null) {
             return;
         }
-        String key = InterlisTextDocumentService.toFilesystemPathIfPossible(uri);
-        compilationCache.remove(key);
+        String rootKey = toCacheKey(uri);
+        if (rootKey == null || rootKey.isBlank()) {
+            return;
+        }
+
+        compilationCache.remove(rootKey);
+        clearRootDependencies(rootKey);
     }
 
     private Ili2cUtil.CompilationOutcome getOrCompile(String pathOrUri, Integer version) {
-        if (pathOrUri == null || pathOrUri.isBlank()) {
+        String key = toCacheKey(pathOrUri);
+        if (key == null || key.isBlank()) {
             return new Ili2cUtil.CompilationOutcome(null, "", Collections.emptyList());
         }
 
-        CachedCompilation cached = compilationCache.get(pathOrUri);
-        if (cached != null && Objects.equals(cached.version, version) && cached.outcome != null) {
+        CachedCompilation cached = compilationCache.get(key);
+        if (cached != null && versionMatches(cached.version, version) && cached.outcome != null) {
             return cached.outcome;
         }
 
         ClientSettings cfg = server.getClientSettings();
         Ili2cUtil.CompilationOutcome outcome = compiler.compile(cfg, pathOrUri);
-        compilationCache.put(pathOrUri, new CachedCompilation(version, outcome));
+        compilationCache.put(key, new CachedCompilation(version, outcome));
         return outcome;
+    }
+
+    private void clearRootDependencies(String rootKey) {
+        Set<String> dependencies = rootDependencies.remove(rootKey);
+        if (dependencies == null || dependencies.isEmpty()) {
+            return;
+        }
+
+        for (String dependencyKey : dependencies) {
+            dependencyToRoots.compute(dependencyKey, (key, roots) -> {
+                if (roots == null) {
+                    compilationCache.remove(dependencyKey);
+                    return null;
+                }
+
+                roots.remove(rootKey);
+                if (roots.isEmpty()) {
+                    compilationCache.remove(dependencyKey);
+                    return null;
+                }
+
+                return roots;
+            });
+        }
+    }
+
+    private static String toCacheKey(String uriOrPath) {
+        if (uriOrPath == null || uriOrPath.isBlank()) {
+            return null;
+        }
+
+        String path = InterlisTextDocumentService.toFilesystemPathIfPossible(uriOrPath);
+        try {
+            Path p = Paths.get(path).toAbsolutePath().normalize();
+            return p.toString();
+        } catch (Exception ex) {
+            try {
+                return Paths.get(URI.create(uriOrPath)).toAbsolutePath().normalize().toString();
+            } catch (Exception ignored) {
+                return uriOrPath;
+            }
+        }
+    }
+
+    private static boolean versionMatches(Integer cachedVersion, Integer requestedVersion) {
+        if (cachedVersion == null || requestedVersion == null) {
+            return true;
+        }
+        return Objects.equals(cachedVersion, requestedVersion);
     }
 
     private static boolean isIdentifierPart(char ch) {
