@@ -3,6 +3,11 @@ import { LanguageClient, LanguageClientOptions, Executable, ServerOptions, State
 
 let client: LanguageClient | undefined;
 let revealOutputOnNextLog = false;
+const CARET_SENTINEL = "__INTERLIS_AUTOCLOSE_CARET__";
+
+type PendingCaret = { version: number; position: vscode.Position };
+
+const pendingCarets = new Map<string, PendingCaret>();
 
 export async function activate(context: vscode.ExtensionContext) {
   const cfg = vscode.workspace.getConfiguration("interlisLsp");
@@ -33,12 +38,63 @@ export async function activate(context: vscode.ExtensionContext) {
   };
   const serverOptions: ServerOptions = exec;
 
+  const caretMiddleware: LanguageClientOptions["middleware"] = {
+    provideOnTypeFormattingEdits: async (document, position, ch, options, token, next) => {
+      const edits = await next(document, position, ch, options, token);
+      if (!edits || edits.length === 0) {
+        pendingCarets.delete(document.uri.toString());
+        return edits;
+      }
+
+      let caret: vscode.Position | undefined;
+      const sanitized = edits.map(edit => {
+        if (!edit || typeof edit.newText !== "string") {
+          return edit;
+        }
+
+        let newText = edit.newText;
+        let localCaret: vscode.Position | undefined;
+        let idx = newText.indexOf(CARET_SENTINEL);
+
+        while (idx !== -1) {
+          const before = newText.slice(0, idx);
+          const beforeLines = before.split(/\r?\n/);
+          const lineDelta = beforeLines.length - 1;
+          const lastLine = beforeLines[beforeLines.length - 1] ?? "";
+          const charDelta = lastLine.length;
+          const line = edit.range.start.line + lineDelta;
+          const character = lineDelta === 0
+            ? edit.range.start.character + charDelta
+            : charDelta;
+          localCaret = new vscode.Position(line, character);
+          newText = before + newText.slice(idx + CARET_SENTINEL.length);
+          idx = newText.indexOf(CARET_SENTINEL);
+        }
+
+        if (localCaret) {
+          caret = localCaret;
+        }
+
+        return newText === edit.newText ? edit : vscode.TextEdit.replace(edit.range, newText);
+      });
+
+      if (caret) {
+        pendingCarets.set(document.uri.toString(), { version: document.version + 1, position: caret });
+      } else {
+        pendingCarets.delete(document.uri.toString());
+      }
+
+      return sanitized;
+    }
+  };
+
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ language: "interlis", scheme: "file" }],
     initializationOptions: {
       modelRepositories: cfg.get<string>("modelRepositories") ?? ""
     },
     synchronize: { configurationSection: "interlisLsp" },
+    middleware: caretMiddleware,
     outputChannel: output,
     traceOutputChannel: output
   };
@@ -46,6 +102,32 @@ export async function activate(context: vscode.ExtensionContext) {
   client = new LanguageClient("interlisLsp", "INTERLIS Language Server", serverOptions, clientOptions);
   context.subscriptions.push(client);
   await client.start();
+
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeTextDocument(event => {
+      const key = event.document.uri.toString();
+      const pending = pendingCarets.get(key);
+      if (!pending) {
+        return;
+      }
+
+      if (event.document.version < pending.version) {
+        return;
+      }
+
+      pendingCarets.delete(key);
+
+      const active = vscode.window.activeTextEditor;
+      if (!active || active.document.uri.toString() !== key) {
+        return;
+      }
+
+      const { position } = pending;
+      const selection = new vscode.Selection(position, position);
+      active.selection = selection;
+      active.revealRange(new vscode.Range(position, position));
+    })
+  );
 
   // Register notification handlers ONCE, immediately
   let handlersRegistered = false;
