@@ -155,6 +155,29 @@ final class InterlisDefinitionFinder {
         }
     }
 
+    void invalidateDocument(String uri) {
+        if (uri == null) {
+            return;
+        }
+        String key = toCacheKey(uri);
+        if (key == null || key.isBlank()) {
+            return;
+        }
+
+        compilationCache.remove(key);
+        clearRootDependencies(key);
+
+        Set<String> roots = dependencyToRoots.remove(key);
+        if (roots == null || roots.isEmpty()) {
+            return;
+        }
+
+        for (String rootKey : new LinkedHashSet<>(roots)) {
+            compilationCache.remove(rootKey);
+            clearRootDependencies(rootKey);
+        }
+    }
+
     void evictCompilation(String uri) {
         if (uri == null) {
             return;

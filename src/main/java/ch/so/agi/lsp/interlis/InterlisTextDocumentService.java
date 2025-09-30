@@ -41,11 +41,17 @@ public class InterlisTextDocumentService implements TextDocumentService {
     @Override
     public void didChange(DidChangeTextDocumentParams params) {
         documents.applyChanges(params.getTextDocument(), params.getContentChanges());
+
+        VersionedTextDocumentIdentifier identifier = params.getTextDocument();
+        if (identifier != null) {
+            definitionFinder.invalidateDocument(identifier.getUri());
+        }
     }
 
     @Override
     public void didSave(DidSaveTextDocumentParams params) {
         String uri = params.getTextDocument().getUri();
+        definitionFinder.invalidateDocument(uri);
         // Often a good moment to do an authoritative compile based on on-disk state
         compileAndPublish(uri, "didSave");
     }

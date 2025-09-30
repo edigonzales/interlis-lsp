@@ -325,6 +325,72 @@ class InterlisDefinitionFinderTest {
         assertEquals(1, compiler.invocations.get(), "Expected shared compilation to be reused for dependency lookups");
     }
 
+    @Test
+    void invalidatesRootCompilationWhenDependencyChanges(@TempDir Path tempDir) throws Exception {
+        Path repositoryDir = Files.createDirectories(tempDir.resolve("models"));
+
+        Path dependencyModel = repositoryDir.resolve("Dependency.ili");
+        String dependencyContent = """
+                INTERLIS 2.3;
+                MODEL Dependency (en) AT \"http://example.org\" VERSION \"2024-01-01\" =
+                  TOPIC DepTopic =
+                    CLASS Thing =
+                    END Thing;
+                  END DepTopic;
+                END Dependency.
+                """.stripIndent();
+        Files.writeString(dependencyModel, dependencyContent);
+
+        Path rootModel = repositoryDir.resolve("Root.ili");
+        String rootContent = """
+                INTERLIS 2.3;
+                MODEL Root (en) AT \"http://example.org\" VERSION \"2024-01-01\" =
+                  IMPORTS Dependency;
+                  TOPIC RootTopic =
+                    CLASS Usage =
+                      attr1 : Dependency.DepTopic.Thing;
+                    END Usage;
+                  END RootTopic;
+                END Root.
+                """.stripIndent();
+        Files.writeString(rootModel, rootContent);
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        ClientSettings settings = new ClientSettings();
+        settings.setModelRepositories(repositoryDir.toAbsolutePath().toString());
+        server.setClientSettings(settings);
+
+        DocumentTracker tracker = new DocumentTracker();
+        TextDocumentItem rootItem = new TextDocumentItem(rootModel.toUri().toString(), "interlis", 1, rootContent);
+        tracker.open(rootItem);
+
+        TextDocumentItem dependencyItem = new TextDocumentItem(dependencyModel.toUri().toString(), "interlis", 1, dependencyContent);
+        tracker.open(dependencyItem);
+
+        CountingCompilationProvider compiler = new CountingCompilationProvider();
+        InterlisDefinitionFinder finder = new InterlisDefinitionFinder(server, tracker, compiler);
+
+        Ili2cUtil.CompilationOutcome outcome = compiler.compile(settings, rootModel.toAbsolutePath().toString());
+        LinkedHashSet<String> dependencyUris = new LinkedHashSet<>();
+        collectModelPath(dependencyUris, rootModel.toString());
+        collectModelPath(dependencyUris, dependencyModel.toString());
+
+        finder.cacheCompilation(rootItem.getUri(), new ArrayList<>(dependencyUris), outcome);
+
+        TextDocumentPositionParams params = new TextDocumentPositionParams();
+        params.setTextDocument(new TextDocumentIdentifier(rootItem.getUri()));
+        int offset = rootContent.indexOf("Dependency") + 1;
+        params.setPosition(DocumentTracker.positionAt(rootContent, offset));
+
+        finder.findDefinition(params);
+        assertEquals(1, compiler.invocations.get(), "Expected cached compilation to satisfy initial lookup");
+
+        finder.invalidateDocument(dependencyItem.getUri());
+
+        finder.findDefinition(params);
+        assertEquals(2, compiler.invocations.get(), "Expected dependency change to force recompilation of root");
+    }
+
     private void collectModelPath(LinkedHashSet<String> uris, String fileName) {
         if (fileName == null) {
             return;
