@@ -153,6 +153,11 @@ final class InterlisDefinitionFinder {
                     return updated;
                 });
 
+                if (hasUnsavedChanges(dep)) {
+                    removeProjectionOwnedBy(rootKey, depKey);
+                    continue;
+                }
+
                 CachedCompilation existing = compilationCache.get(depKey);
                 if (existing != null && !existing.dependencyProjection) {
                     continue;
@@ -169,6 +174,35 @@ final class InterlisDefinitionFinder {
         }
 
         rootDependencies.put(rootKey, dependencyKeys);
+    }
+
+    private boolean hasUnsavedChanges(String dependencyUri) {
+        if (documents == null || dependencyUri == null) {
+            return false;
+        }
+
+        String liveText = documents.getText(dependencyUri);
+        if (liveText == null) {
+            return false;
+        }
+
+        try {
+            String diskText = InterlisTextDocumentService.readDocument(dependencyUri);
+            return !Objects.equals(normalizeLineEndings(liveText), normalizeLineEndings(diskText));
+        } catch (Exception ex) {
+            LOG.debug("Failed to read {} while checking for unsaved edits", dependencyUri, ex);
+            return true;
+        }
+    }
+
+    private static String normalizeLineEndings(String text) {
+        if (text == null) {
+            return null;
+        }
+        if (!text.contains("\r")) {
+            return text;
+        }
+        return text.replace("\r\n", "\n").replace('\r', '\n');
     }
 
     void invalidateDocument(String uri) {

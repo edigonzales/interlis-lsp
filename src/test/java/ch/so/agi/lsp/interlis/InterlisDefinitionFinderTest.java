@@ -4,9 +4,11 @@ import ch.interlis.ili2c.metamodel.Model;
 import ch.interlis.ili2c.metamodel.TransferDescription;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.Position;
+import org.eclipse.lsp4j.TextDocumentContentChangeEvent;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.TextDocumentItem;
 import org.eclipse.lsp4j.TextDocumentPositionParams;
+import org.eclipse.lsp4j.VersionedTextDocumentIdentifier;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -470,6 +472,87 @@ class InterlisDefinitionFinderTest {
         outcomeField.setAccessible(true);
         Object cachedOutcome = outcomeField.get(cachedEntry);
         assertSame(dependencyFailure, cachedOutcome, "Expected root caching to preserve dependency compilation outcome");
+    }
+
+    @Test
+    void skipsProjectingCompilationOntoDependencyWithUnsavedChanges(@TempDir Path tempDir) throws Exception {
+        Path repositoryDir = Files.createDirectories(tempDir.resolve("models"));
+
+        Path dependencyModel = repositoryDir.resolve("DependencyWithDraft.ili");
+        String dependencyContent = """
+                INTERLIS 2.3;
+                MODEL DependencyWithDraft (en) AT \"http://example.org\" VERSION \"2024-01-01\" =
+                  TOPIC DraftTopic =
+                    CLASS Thing =
+                    END Thing;
+                  END DraftTopic;
+                END DependencyWithDraft.
+                """.stripIndent();
+        Files.writeString(dependencyModel, dependencyContent);
+
+        Path rootModel = repositoryDir.resolve("DraftConsumer.ili");
+        String rootContent = """
+                INTERLIS 2.3;
+                MODEL DraftConsumer (en) AT \"http://example.org\" VERSION \"2024-01-01\" =
+                  IMPORTS DependencyWithDraft;
+                  TOPIC DraftTopic =
+                    CLASS Usage =
+                      attr1 : DependencyWithDraft.DraftTopic.Thing;
+                    END Usage;
+                  END DraftTopic;
+                END DraftConsumer.
+                """.stripIndent();
+        Files.writeString(rootModel, rootContent);
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        ClientSettings settings = new ClientSettings();
+        settings.setModelRepositories(repositoryDir.toAbsolutePath().toString());
+        server.setClientSettings(settings);
+
+        DocumentTracker tracker = new DocumentTracker();
+        TextDocumentItem rootItem = new TextDocumentItem(rootModel.toUri().toString(), "interlis", 1, rootContent);
+        tracker.open(rootItem);
+        TextDocumentItem dependencyItem = new TextDocumentItem(dependencyModel.toUri().toString(), "interlis", 1, dependencyContent);
+        tracker.open(dependencyItem);
+
+        InterlisDefinitionFinder finder = new InterlisDefinitionFinder(server, tracker);
+
+        Ili2cUtil.CompilationOutcome rootOutcome = Ili2cUtil.compile(settings, rootModel.toAbsolutePath().toString());
+        ArrayList<String> dependencyUris = new ArrayList<>();
+        dependencyUris.add(rootItem.getUri());
+        dependencyUris.add(dependencyItem.getUri());
+
+        finder.cacheCompilation(rootItem.getUri(), dependencyUris, rootOutcome);
+
+        String dependencyKey = Paths.get(InterlisTextDocumentService.toFilesystemPathIfPossible(dependencyItem.getUri()))
+                .toAbsolutePath().normalize().toString();
+        String rootKey = Paths.get(InterlisTextDocumentService.toFilesystemPathIfPossible(rootItem.getUri()))
+                .toAbsolutePath().normalize().toString();
+
+        java.lang.reflect.Field cacheField = InterlisDefinitionFinder.class.getDeclaredField("compilationCache");
+        cacheField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        ConcurrentMap<String, ?> cache = (ConcurrentMap<String, ?>) cacheField.get(finder);
+        assertTrue(cache.containsKey(dependencyKey), "Expected dependency projection to be cached before edits");
+
+        VersionedTextDocumentIdentifier dependencyIdentifier = new VersionedTextDocumentIdentifier();
+        dependencyIdentifier.setUri(dependencyItem.getUri());
+        dependencyIdentifier.setVersion(2);
+        TextDocumentContentChangeEvent change = new TextDocumentContentChangeEvent();
+        change.setRange(null);
+        change.setText(dependencyContent + "\n!! draft edit");
+        tracker.applyChanges(dependencyIdentifier, Collections.singletonList(change));
+        finder.invalidateDocument(dependencyItem.getUri());
+
+        finder.cacheCompilation(rootItem.getUri(), dependencyUris, rootOutcome);
+
+        cache = (ConcurrentMap<String, ?>) cacheField.get(finder);
+        assertTrue(cache.containsKey(rootKey), "Expected root compilation to remain cached");
+        assertFalse(cache.containsKey(dependencyKey), "Expected dependency with unsaved edits to skip projection");
+
+        finder.invalidateDocument(dependencyItem.getUri());
+        cache = (ConcurrentMap<String, ?>) cacheField.get(finder);
+        assertFalse(cache.containsKey(rootKey), "Dependency invalidation should evict root entry even without projection");
     }
 
     private void collectModelPath(LinkedHashSet<String> uris, String fileName) {
