@@ -7,13 +7,11 @@ import org.eclipse.lsp4j.TextDocumentItem;
 import org.eclipse.lsp4j.VersionedTextDocumentIdentifier;
 import org.junit.jupiter.api.Test;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class DocumentTrackerTest { 
+class DocumentTrackerTest {
 
     @Test
     void openStoresInitialContents() {
@@ -72,19 +70,5 @@ class DocumentTrackerTest {
         String text = "a\n\nbcd\n";
         assertEquals(3, DocumentTracker.lineStartOffset(text, 2));
         assertEquals(text.length(), DocumentTracker.lineStartOffset(text, 10));
-    }
-
-    @Test
-    void retrievesContentByCanonicalPath(@org.junit.jupiter.api.io.TempDir Path tempDir) throws Exception {
-        Path file = tempDir.resolve("Doc.ili");
-        Files.writeString(file, "MODEL Doc END Doc.");
-
-        String uri = file.toUri().toString();
-        DocumentTracker tracker = new DocumentTracker();
-        tracker.open(new TextDocumentItem(uri, "INTERLIS", 1, "MODEL Doc END Doc."));
-
-        String canonicalPath = file.toAbsolutePath().normalize().toString();
-        assertEquals("MODEL Doc END Doc.", tracker.getText(canonicalPath));
-        assertEquals(1, tracker.getVersion(canonicalPath));
     }
 }

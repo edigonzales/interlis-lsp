@@ -6,16 +6,11 @@ import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import ch.interlis.ili2c.metamodel.Model;
-import ch.interlis.ili2c.metamodel.TransferDescription;
-
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
@@ -41,17 +36,11 @@ public class InterlisTextDocumentService implements TextDocumentService {
     @Override
     public void didChange(DidChangeTextDocumentParams params) {
         documents.applyChanges(params.getTextDocument(), params.getContentChanges());
-
-        VersionedTextDocumentIdentifier identifier = params.getTextDocument();
-        if (identifier != null) {
-            definitionFinder.invalidateDocument(identifier.getUri());
-        }
     }
 
     @Override
     public void didSave(DidSaveTextDocumentParams params) {
         String uri = params.getTextDocument().getUri();
-        definitionFinder.invalidateDocument(uri);
         // Often a good moment to do an authoritative compile based on on-disk state
         compileAndPublish(uri, "didSave");
     }
@@ -60,7 +49,6 @@ public class InterlisTextDocumentService implements TextDocumentService {
     public void didClose(DidCloseTextDocumentParams params) {
         String uri = params.getTextDocument().getUri();
         server.publishDiagnostics(uri, Collections.emptyList());
-        definitionFinder.evictCompilation(uri);
         documents.close(uri);
     }
 
@@ -114,65 +102,12 @@ public class InterlisTextDocumentService implements TextDocumentService {
                     cfg.getModelRepositoriesList());
 
             Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(cfg, pathOrUri);
-            List<String> dependencyUris = collectDependencyUris(outcome);
-            definitionFinder.cacheCompilation(documentUri, dependencyUris, outcome);
 
             server.publishDiagnostics(documentUri, DiagnosticsMapper.toDiagnostics(outcome.getMessages()));
-            server.clearOutput();
+            server.clearOutput();  
             server.logToClient(outcome.getLogText());
         } catch (Exception ex) {
             LOG.error("Validation failed for {} (source={})", documentUri, source, ex);
-        }
-    }
-
-    private List<String> collectDependencyUris(Ili2cUtil.CompilationOutcome outcome) {
-        TransferDescription td = outcome != null ? outcome.getTransferDescription() : null;
-        if (td == null) {
-            return Collections.emptyList();
-        }
-
-        LinkedHashSet<String> uris = new LinkedHashSet<>();
-        for (Model model : td.getModelsFromLastFile()) {
-            if (model == null) {
-                continue;
-            }
-            addModelPath(uris, model.getFileName());
-
-            Model[] imports = model.getImporting();
-            if (imports != null) {
-                for (Model imported : imports) {
-                    if (imported != null) {
-                        addModelPath(uris, imported.getFileName());
-                    }
-                }
-            }
-        }
-        return new ArrayList<>(uris);
-    }
-
-    private void addModelPath(LinkedHashSet<String> uris, String fileName) {
-        String candidate = normaliseModelPathToUri(fileName);
-        if (candidate != null && !candidate.isBlank()) {
-            uris.add(candidate);
-        }
-    }
-
-    private static String normaliseModelPathToUri(String fileName) {
-        if (fileName == null || fileName.isBlank()) {
-            return null;
-        }
-
-        try {
-            String normalizedPath = toFilesystemPathIfPossible(fileName);
-            Path path = Paths.get(normalizedPath).toAbsolutePath().normalize();
-            return path.toUri().toString();
-        } catch (Exception ex) {
-            try {
-                return URI.create(fileName).toString();
-            } catch (Exception ignored) {
-                LOG.debug("Failed to normalise model path {}", fileName, ex);
-                return null;
-            }
         }
     }
 
