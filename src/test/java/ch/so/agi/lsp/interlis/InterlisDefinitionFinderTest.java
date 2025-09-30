@@ -15,6 +15,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.concurrent.ConcurrentMap;
@@ -389,6 +390,86 @@ class InterlisDefinitionFinderTest {
 
         finder.findDefinition(params);
         assertEquals(2, compiler.invocations.get(), "Expected dependency change to force recompilation of root");
+    }
+
+    @Test
+    void keepsDependencyCompilationWhenRootCachesSuccessfulOutcome(@TempDir Path tempDir) throws Exception {
+        Path repositoryDir = Files.createDirectories(tempDir.resolve("models"));
+
+        Path dependencyModel = repositoryDir.resolve("DependentSource.ili");
+        String dependencyContent = """
+                INTERLIS 2.3;
+                MODEL DependentSource (en) AT \"http://example.org\" VERSION \"2024-01-01\" =
+                  TOPIC DepTopic =
+                    CLASS Thing =
+                    END Thing;
+                  END DepTopic;
+                END DependentSource.
+                """.stripIndent();
+        Files.writeString(dependencyModel, dependencyContent);
+
+        Path rootModel = repositoryDir.resolve("RootConsumer.ili");
+        String rootContent = """
+                INTERLIS 2.3;
+                MODEL RootConsumer (en) AT \"http://example.org\" VERSION \"2024-01-01\" =
+                  IMPORTS DependentSource;
+                  TOPIC RootTopic =
+                    CLASS Usage =
+                      attr1 : DependentSource.DepTopic.Thing;
+                    END Usage;
+                  END RootTopic;
+                END RootConsumer.
+                """.stripIndent();
+        Files.writeString(rootModel, rootContent);
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        ClientSettings settings = new ClientSettings();
+        settings.setModelRepositories(repositoryDir.toAbsolutePath().toString());
+        server.setClientSettings(settings);
+
+        DocumentTracker tracker = new DocumentTracker();
+        TextDocumentItem dependencyItem = new TextDocumentItem(dependencyModel.toUri().toString(), "interlis", 2, dependencyContent);
+        tracker.open(dependencyItem);
+        TextDocumentItem rootItem = new TextDocumentItem(rootModel.toUri().toString(), "interlis", 1, rootContent);
+        tracker.open(rootItem);
+
+        InterlisDefinitionFinder finder = new InterlisDefinitionFinder(server, tracker);
+
+        Ili2cUtil.Message failureMessage = new Ili2cUtil.Message(
+                Ili2cUtil.Message.Severity.ERROR,
+                dependencyModel.toString(),
+                5,
+                3,
+                "simulated compile failure");
+        Ili2cUtil.CompilationOutcome dependencyFailure = new Ili2cUtil.CompilationOutcome(
+                null,
+                "failure",
+                Collections.singletonList(failureMessage));
+
+        finder.cacheCompilation(dependencyItem.getUri(), Collections.emptyList(), dependencyFailure);
+
+        Ili2cUtil.CompilationOutcome rootOutcome = Ili2cUtil.compile(settings, rootModel.toAbsolutePath().toString());
+        LinkedHashSet<String> dependencyUris = new LinkedHashSet<>();
+        dependencyUris.add(rootModel.toUri().toString());
+        dependencyUris.add(dependencyModel.toUri().toString());
+
+        finder.cacheCompilation(rootItem.getUri(), new ArrayList<>(dependencyUris), rootOutcome);
+
+        String expectedDependencyKey = Paths.get(InterlisTextDocumentService.toFilesystemPathIfPossible(dependencyItem.getUri()))
+                .toAbsolutePath().normalize().toString();
+
+        java.lang.reflect.Field cacheField = InterlisDefinitionFinder.class.getDeclaredField("compilationCache");
+        cacheField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        ConcurrentMap<String, ?> cache = (ConcurrentMap<String, ?>) cacheField.get(finder);
+
+        Object cachedEntry = cache.get(expectedDependencyKey);
+        assertNotNull(cachedEntry, "Expected dependency entry to remain cached");
+
+        java.lang.reflect.Field outcomeField = cachedEntry.getClass().getDeclaredField("outcome");
+        outcomeField.setAccessible(true);
+        Object cachedOutcome = outcomeField.get(cachedEntry);
+        assertSame(dependencyFailure, cachedOutcome, "Expected root caching to preserve dependency compilation outcome");
     }
 
     private void collectModelPath(LinkedHashSet<String> uris, String fileName) {

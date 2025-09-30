@@ -43,10 +43,15 @@ final class InterlisDefinitionFinder {
     private static final class CachedCompilation {
         final Integer version;
         final Ili2cUtil.CompilationOutcome outcome;
+        final String sourceRootKey;
+        final boolean dependencyProjection;
 
-        CachedCompilation(Integer version, Ili2cUtil.CompilationOutcome outcome) {
+        CachedCompilation(Integer version, Ili2cUtil.CompilationOutcome outcome,
+                          String sourceRootKey, boolean dependencyProjection) {
             this.version = version;
             this.outcome = outcome;
+            this.sourceRootKey = sourceRootKey;
+            this.dependencyProjection = dependencyProjection;
         }
     }
 
@@ -123,19 +128,38 @@ final class InterlisDefinitionFinder {
             return;
         }
 
-        CachedCompilation cached = new CachedCompilation(documents != null ? documents.getVersion(uri) : null, outcome);
+        CachedCompilation rootCached = new CachedCompilation(
+                documents != null ? documents.getVersion(uri) : null,
+                outcome,
+                rootKey,
+                false);
 
         clearRootDependencies(rootKey);
 
-        compilationCache.put(rootKey, cached);
+        compilationCache.put(rootKey, rootCached);
 
         Set<String> dependencyKeys = new LinkedHashSet<>();
         if (dependencyUris != null) {
             for (String dep : dependencyUris) {
                 String depKey = toCacheKey(dep);
-                if (depKey != null && !depKey.isBlank()) {
-                    dependencyKeys.add(depKey);
+                if (depKey == null || depKey.isBlank() || Objects.equals(depKey, rootKey)) {
+                    continue;
                 }
+                dependencyKeys.add(depKey);
+
+                dependencyToRoots.compute(depKey, (key, roots) -> {
+                    Set<String> updated = roots != null ? roots : ConcurrentHashMap.newKeySet();
+                    updated.add(rootKey);
+                    return updated;
+                });
+
+                CachedCompilation existing = compilationCache.get(depKey);
+                if (existing != null && !existing.dependencyProjection) {
+                    continue;
+                }
+
+                CachedCompilation projected = new CachedCompilation(null, outcome, rootKey, true);
+                compilationCache.put(depKey, projected);
             }
         }
 
@@ -145,14 +169,6 @@ final class InterlisDefinitionFinder {
         }
 
         rootDependencies.put(rootKey, dependencyKeys);
-        for (String dependencyKey : dependencyKeys) {
-            compilationCache.put(dependencyKey, cached);
-            dependencyToRoots.compute(dependencyKey, (key, roots) -> {
-                Set<String> updated = roots != null ? roots : ConcurrentHashMap.newKeySet();
-                updated.add(rootKey);
-                return updated;
-            });
-        }
     }
 
     void invalidateDocument(String uri) {
@@ -204,7 +220,7 @@ final class InterlisDefinitionFinder {
 
         ClientSettings cfg = server.getClientSettings();
         Ili2cUtil.CompilationOutcome outcome = compiler.compile(cfg, pathOrUri);
-        compilationCache.put(key, new CachedCompilation(version, outcome));
+        compilationCache.put(key, new CachedCompilation(version, outcome, key, false));
         return outcome;
     }
 
@@ -217,18 +233,25 @@ final class InterlisDefinitionFinder {
         for (String dependencyKey : dependencies) {
             dependencyToRoots.compute(dependencyKey, (key, roots) -> {
                 if (roots == null) {
-                    compilationCache.remove(dependencyKey);
+                    removeProjectionOwnedBy(rootKey, dependencyKey);
                     return null;
                 }
 
                 roots.remove(rootKey);
                 if (roots.isEmpty()) {
-                    compilationCache.remove(dependencyKey);
+                    removeProjectionOwnedBy(rootKey, dependencyKey);
                     return null;
                 }
 
                 return roots;
             });
+        }
+    }
+
+    private void removeProjectionOwnedBy(String rootKey, String dependencyKey) {
+        CachedCompilation cached = compilationCache.get(dependencyKey);
+        if (cached != null && cached.dependencyProjection && Objects.equals(cached.sourceRootKey, rootKey)) {
+            compilationCache.remove(dependencyKey, cached);
         }
     }
 
