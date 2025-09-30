@@ -19,11 +19,12 @@ public class InterlisTextDocumentService implements TextDocumentService {
 
     private final InterlisLanguageServer server;
     private final DocumentTracker documents = new DocumentTracker();
+    private final CompilationCache compilationCache = new CompilationCache();
     private final InterlisDefinitionFinder definitionFinder;
 
     public InterlisTextDocumentService(InterlisLanguageServer server) {
         this.server = server;
-        this.definitionFinder = new InterlisDefinitionFinder(server, documents);
+        this.definitionFinder = new InterlisDefinitionFinder(server, documents, compilationCache);
     }
 
     @Override
@@ -102,6 +103,7 @@ public class InterlisTextDocumentService implements TextDocumentService {
                     cfg.getModelRepositoriesList());
 
             Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(cfg, pathOrUri);
+            compilationCache.put(pathOrUri, outcome);
 
             server.publishDiagnostics(documentUri, DiagnosticsMapper.toDiagnostics(outcome.getMessages()));
             server.clearOutput();  

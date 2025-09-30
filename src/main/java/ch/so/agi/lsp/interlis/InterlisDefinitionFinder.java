@@ -18,16 +18,31 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.BiFunction;
 
 final class InterlisDefinitionFinder {
     private static final Logger LOG = LoggerFactory.getLogger(InterlisDefinitionFinder.class);
 
     private final InterlisLanguageServer server;
     private final DocumentTracker documents;
+    private final CompilationCache compilationCache;
+    private final BiFunction<ClientSettings, String, Ili2cUtil.CompilationOutcome> compiler;
 
     InterlisDefinitionFinder(InterlisLanguageServer server, DocumentTracker documents) {
+        this(server, documents, null);
+    }
+
+    InterlisDefinitionFinder(InterlisLanguageServer server, DocumentTracker documents, CompilationCache cache) {
+        this(server, documents, cache, Ili2cUtil::compile);
+    }
+
+    InterlisDefinitionFinder(InterlisLanguageServer server, DocumentTracker documents,
+                             CompilationCache cache,
+                             BiFunction<ClientSettings, String, Ili2cUtil.CompilationOutcome> compiler) {
         this.server = server;
         this.documents = documents;
+        this.compilationCache = cache;
+        this.compiler = compiler != null ? compiler : Ili2cUtil::compile;
     }
 
     Either<List<? extends Location>, List<? extends LocationLink>> findDefinition(TextDocumentPositionParams params) throws Exception {
@@ -73,8 +88,8 @@ final class InterlisDefinitionFinder {
 
         String pathOrUri = InterlisTextDocumentService.toFilesystemPathIfPossible(uri);
         ClientSettings cfg = server.getClientSettings();
-        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(cfg, pathOrUri);
-        TransferDescription td = outcome.getTransferDescription();
+        Ili2cUtil.CompilationOutcome outcome = getOrCompile(pathOrUri, cfg);
+        TransferDescription td = outcome != null ? outcome.getTransferDescription() : null;
         if (td == null) {
             return Either.forLeft(Collections.emptyList());
         }
@@ -153,5 +168,18 @@ final class InterlisDefinitionFinder {
             LOG.warn("Failed to build definition location for {}", pathOrUri, ex);
             return null;
         }
+    }
+
+    private Ili2cUtil.CompilationOutcome getOrCompile(String pathOrUri, ClientSettings cfg) {
+        Ili2cUtil.CompilationOutcome cached = compilationCache != null ? compilationCache.get(pathOrUri) : null;
+        if (cached != null && cached.getTransferDescription() != null) {
+            return cached;
+        }
+
+        Ili2cUtil.CompilationOutcome outcome = compiler.apply(cfg, pathOrUri);
+        if (compilationCache != null) {
+            compilationCache.put(pathOrUri, outcome);
+        }
+        return outcome;
     }
 }

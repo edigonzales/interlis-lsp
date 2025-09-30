@@ -52,7 +52,7 @@ class InterlisDefinitionFinderTest {
         TextDocumentItem item = new TextDocumentItem(sourceFile.toUri().toString(), "interlis", 1, sourceContent);
         tracker.open(item);
 
-        InterlisDefinitionFinder finder = new InterlisDefinitionFinder(server, tracker);
+        InterlisDefinitionFinder finder = new InterlisDefinitionFinder(server, tracker, new CompilationCache());
 
         TextDocumentPositionParams params = new TextDocumentPositionParams();
         params.setTextDocument(new TextDocumentIdentifier(item.getUri()));
@@ -96,7 +96,7 @@ class InterlisDefinitionFinderTest {
         TextDocumentItem item = new TextDocumentItem(sourceFile.toUri().toString(), "interlis", 1, sourceContent);
         tracker.open(item);
 
-        InterlisDefinitionFinder finder = new InterlisDefinitionFinder(server, tracker);
+        InterlisDefinitionFinder finder = new InterlisDefinitionFinder(server, tracker, new CompilationCache());
 
         TextDocumentPositionParams params = new TextDocumentPositionParams();
         params.setTextDocument(new TextDocumentIdentifier(item.getUri()));
