@@ -9,6 +9,10 @@ import org.eclipse.lsp4j.TextDocumentItem;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.net.URI;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Objects;
 
 /**
  * Keeps track of the live contents of open text documents so on-type features can
@@ -19,10 +23,12 @@ final class DocumentTracker {
     private static final class DocumentState {
         String text;
         Integer version;
+        final String canonicalPath;
 
-        DocumentState(String text, Integer version) {
+        DocumentState(String text, Integer version, String uriOrPath) {
             this.text = text != null ? text : "";
             this.version = version;
+            this.canonicalPath = canonicalPath(uriOrPath);
         }
     }
 
@@ -30,7 +36,7 @@ final class DocumentTracker {
 
     void open(TextDocumentItem item) {
         if (item == null) return;
-        documents.put(item.getUri(), new DocumentState(item.getText(), item.getVersion()));
+        documents.put(item.getUri(), new DocumentState(item.getText(), item.getVersion(), item.getUri()));
     }
 
     void close(String uri) {
@@ -45,7 +51,7 @@ final class DocumentTracker {
         }
 
         String uri = identifier.getUri();
-        DocumentState state = documents.computeIfAbsent(uri, u -> new DocumentState("", null));
+        DocumentState state = documents.computeIfAbsent(uri, u -> new DocumentState("", null, u));
         String text = state.text;
 
         for (TextDocumentContentChangeEvent change : changes) {
@@ -72,14 +78,69 @@ final class DocumentTracker {
         state.version = identifier.getVersion();
     }
 
-    String getText(String uri) {
-        DocumentState state = uri == null ? null : documents.get(uri);
-        return state != null ? state.text : null;
+    String getText(String uriOrPath) {
+        if (uriOrPath == null) {
+            return null;
+        }
+
+        DocumentState direct = documents.get(uriOrPath);
+        if (direct != null) {
+            return direct.text;
+        }
+
+        String canonical = canonicalPath(uriOrPath);
+        if (canonical == null) {
+            return null;
+        }
+
+        for (DocumentState state : documents.values()) {
+            if (Objects.equals(state.canonicalPath, canonical)) {
+                return state.text;
+            }
+        }
+        return null;
     }
 
-    Integer getVersion(String uri) {
-        DocumentState state = uri == null ? null : documents.get(uri);
-        return state != null ? state.version : null;
+    Integer getVersion(String uriOrPath) {
+        if (uriOrPath == null) {
+            return null;
+        }
+
+        DocumentState direct = documents.get(uriOrPath);
+        if (direct != null) {
+            return direct.version;
+        }
+
+        String canonical = canonicalPath(uriOrPath);
+        if (canonical == null) {
+            return null;
+        }
+
+        for (DocumentState state : documents.values()) {
+            if (Objects.equals(state.canonicalPath, canonical)) {
+                return state.version;
+            }
+        }
+        return null;
+    }
+
+    private static String canonicalPath(String uriOrPath) {
+        if (uriOrPath == null || uriOrPath.isBlank()) {
+            return null;
+        }
+
+        String candidate = InterlisTextDocumentService.toFilesystemPathIfPossible(uriOrPath);
+        try {
+            Path path = Paths.get(candidate).toAbsolutePath().normalize();
+            return path.toString();
+        } catch (Exception ex) {
+            try {
+                Path path = Paths.get(URI.create(uriOrPath)).toAbsolutePath().normalize();
+                return path.toString();
+            } catch (Exception ignored) {
+                return null;
+            }
+        }
     }
 
     static int toOffset(String text, Position position) {
