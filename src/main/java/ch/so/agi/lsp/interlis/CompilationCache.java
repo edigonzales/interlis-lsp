@@ -2,7 +2,12 @@ package ch.so.agi.lsp.interlis;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import ch.interlis.ili2c.metamodel.Model;
+import ch.interlis.ili2c.metamodel.TransferDescription;
+
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -35,7 +40,9 @@ final class CompilationCache {
         if (key == null || outcome == null || outcome.getTransferDescription() == null) {
             return;
         }
-        entries.put(key, new Entry(outcome));
+        Entry entry = new Entry(outcome);
+        entries.put(key, entry);
+        indexRelatedFiles(outcome.getTransferDescription(), entry);
     }
 
     void invalidate(String pathOrUri) {
@@ -47,6 +54,40 @@ final class CompilationCache {
 
     void clear() {
         entries.clear();
+    }
+
+    private void indexRelatedFiles(TransferDescription td, Entry entry) {
+        if (td == null) {
+            return;
+        }
+
+        Set<String> visited = new HashSet<>();
+        for (Model model : td.getModelsFromLastFile()) {
+            if (model != null) {
+                indexModel(model, entry, visited);
+            }
+        }
+    }
+
+    private void indexModel(Model model, Entry entry, Set<String> visited) {
+        if (model == null) {
+            return;
+        }
+
+        String modelFile = model.getFileName();
+        String modelKey = canonicalKey(modelFile);
+        if (modelKey != null && visited.add(modelKey)) {
+            entries.put(modelKey, entry);
+        }
+
+        Model[] imports = model.getImporting();
+        if (imports != null) {
+            for (Model imported : imports) {
+                if (imported != null) {
+                    indexModel(imported, entry, visited);
+                }
+            }
+        }
     }
 
     private static String canonicalKey(String pathOrUri) {
