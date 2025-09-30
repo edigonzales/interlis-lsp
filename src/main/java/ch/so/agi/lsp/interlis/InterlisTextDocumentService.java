@@ -2,6 +2,7 @@ package ch.so.agi.lsp.interlis;
 
 import org.eclipse.lsp4j.*;
 import org.eclipse.lsp4j.services.TextDocumentService;
+import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,9 +19,11 @@ public class InterlisTextDocumentService implements TextDocumentService {
 
     private final InterlisLanguageServer server;
     private final DocumentTracker documents = new DocumentTracker();
+    private final InterlisDefinitionFinder definitionFinder;
 
     public InterlisTextDocumentService(InterlisLanguageServer server) {
         this.server = server;
+        this.definitionFinder = new InterlisDefinitionFinder(server, documents);
     }
 
     @Override
@@ -46,6 +49,7 @@ public class InterlisTextDocumentService implements TextDocumentService {
     public void didClose(DidCloseTextDocumentParams params) {
         String uri = params.getTextDocument().getUri();
         server.publishDiagnostics(uri, Collections.emptyList());
+        definitionFinder.evictCompilation(uri);
         documents.close(uri);
     }
 
@@ -79,6 +83,18 @@ public class InterlisTextDocumentService implements TextDocumentService {
         return CompletableFuture.completedFuture(edits);
     }
 
+    @Override
+    public CompletableFuture<Either<List<? extends Location>, List<? extends LocationLink>>> definition(DefinitionParams params) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return definitionFinder.findDefinition(params);
+            } catch (Exception ex) {
+                LOG.error("Definition lookup failed", ex);
+                return Either.forLeft(Collections.emptyList());
+            }
+        });
+    }
+
     private void compileAndPublish(String documentUri, String source) {
         try {
             String pathOrUri = toFilesystemPathIfPossible(documentUri);
@@ -87,16 +103,17 @@ public class InterlisTextDocumentService implements TextDocumentService {
                     cfg.getModelRepositoriesList());
 
             Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(cfg, pathOrUri);
+            definitionFinder.cacheCompilation(documentUri, outcome);
 
             server.publishDiagnostics(documentUri, DiagnosticsMapper.toDiagnostics(outcome.getMessages()));
-            server.clearOutput();  
+            server.clearOutput();
             server.logToClient(outcome.getLogText());
         } catch (Exception ex) {
             LOG.error("Validation failed for {} (source={})", documentUri, source, ex);
         }
     }
 
-    private static String toFilesystemPathIfPossible(String uriOrPath) {
+    static String toFilesystemPathIfPossible(String uriOrPath) {
         if (uriOrPath == null) return null;
         if (uriOrPath.startsWith("file:")) {
             try {
@@ -107,7 +124,7 @@ public class InterlisTextDocumentService implements TextDocumentService {
         return uriOrPath;
     }
 
-    private static String readDocument(String uriOrPath) throws Exception {
+    static String readDocument(String uriOrPath) throws Exception {
         if (uriOrPath == null) {
             return "";
         }
