@@ -13,18 +13,28 @@ import java.nio.file.Paths;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.BiFunction;
 
 public class InterlisTextDocumentService implements TextDocumentService {
     private static final Logger LOG = LoggerFactory.getLogger(InterlisTextDocumentService.class);
 
     private final InterlisLanguageServer server;
     private final DocumentTracker documents = new DocumentTracker();
-    private final CompilationCache compilationCache = new CompilationCache();
+    private final CompilationCache compilationCache;
     private final InterlisDefinitionFinder definitionFinder;
+    private final BiFunction<ClientSettings, String, Ili2cUtil.CompilationOutcome> compiler;
 
     public InterlisTextDocumentService(InterlisLanguageServer server) {
+        this(server, new CompilationCache(), Ili2cUtil::compile);
+    }
+
+    InterlisTextDocumentService(InterlisLanguageServer server,
+                                CompilationCache cache,
+                                BiFunction<ClientSettings, String, Ili2cUtil.CompilationOutcome> compiler) {
         this.server = server;
-        this.definitionFinder = new InterlisDefinitionFinder(server, documents, compilationCache);
+        this.compilationCache = cache != null ? cache : new CompilationCache();
+        this.compiler = compiler != null ? compiler : Ili2cUtil::compile;
+        this.definitionFinder = new InterlisDefinitionFinder(server, documents, this.compilationCache);
     }
 
     @Override
@@ -37,6 +47,9 @@ public class InterlisTextDocumentService implements TextDocumentService {
     @Override
     public void didChange(DidChangeTextDocumentParams params) {
         documents.applyChanges(params.getTextDocument(), params.getContentChanges());
+        String uri = params.getTextDocument().getUri();
+        String pathOrUri = toFilesystemPathIfPossible(uri);
+        compilationCache.invalidate(pathOrUri);
     }
 
     @Override
@@ -102,11 +115,17 @@ public class InterlisTextDocumentService implements TextDocumentService {
             LOG.debug("Validating [{}] via {} with modelRepositories={}", pathOrUri, source,
                     cfg.getModelRepositoriesList());
 
-            Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(cfg, pathOrUri);
-            compilationCache.put(pathOrUri, outcome);
+            Ili2cUtil.CompilationOutcome outcome = compilationCache.get(pathOrUri);
+            if (outcome == null || outcome.getTransferDescription() == null) {
+                outcome = compiler.apply(cfg, pathOrUri);
+                compilationCache.put(pathOrUri, outcome);
+            }
+            if (outcome == null) {
+                outcome = new Ili2cUtil.CompilationOutcome(null, "", Collections.emptyList());
+            }
 
             server.publishDiagnostics(documentUri, DiagnosticsMapper.toDiagnostics(outcome.getMessages()));
-            server.clearOutput();  
+            server.clearOutput();
             server.logToClient(outcome.getLogText());
         } catch (Exception ex) {
             LOG.error("Validation failed for {} (source={})", documentUri, source, ex);
