@@ -1,5 +1,6 @@
 package ch.so.agi.lsp.interlis;
 
+import ch.interlis.ili2c.metamodel.Element;
 import ch.interlis.ili2c.metamodel.Model;
 import ch.interlis.ili2c.metamodel.TransferDescription;
 import org.eclipse.lsp4j.Location;
@@ -16,6 +17,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.BiFunction;
@@ -94,14 +96,17 @@ final class InterlisDefinitionFinder {
             return Either.forLeft(Collections.emptyList());
         }
 
-        String targetPath = resolveModelPath(td, token);
-        if (targetPath == null || targetPath.isBlank()) {
-            return Either.forLeft(Collections.emptyList());
-        }
-
-        Location location = buildLocation(targetPath, token);
+        Location location = buildElementLocation(td, token);
         if (location == null) {
-            return Either.forLeft(Collections.emptyList());
+            String targetPath = resolveModelPath(td, token);
+            if (targetPath == null || targetPath.isBlank()) {
+                return Either.forLeft(Collections.emptyList());
+            }
+
+            location = buildLocation(targetPath, token);
+            if (location == null) {
+                return Either.forLeft(Collections.emptyList());
+            }
         }
 
         List<Location> locations = new ArrayList<>();
@@ -110,7 +115,165 @@ final class InterlisDefinitionFinder {
     }
 
     private static boolean isIdentifierPart(char ch) {
-        return Character.isLetterOrDigit(ch) || ch == '_';
+        return Character.isLetterOrDigit(ch) || ch == '_' || ch == '.';
+    }
+
+    private Location buildElementLocation(TransferDescription td, String token) {
+        Element element = resolveElement(td, token);
+        if (element == null) {
+            return null;
+        }
+
+        Model model = findEnclosingModel(element);
+        if (model == null) {
+            return null;
+        }
+
+        String fileName = model.getFileName();
+        if (fileName == null || fileName.isBlank()) {
+            return null;
+        }
+
+        String normalizedPath = InterlisTextDocumentService.toFilesystemPathIfPossible(fileName);
+        try {
+            Path path = Paths.get(normalizedPath);
+            String targetText = Files.exists(path) ? Files.readString(path) : "";
+            if (targetText.isEmpty()) {
+                return null;
+            }
+
+            String elementName = element.getName();
+            String lookup = (elementName != null && !elementName.isBlank()) ? elementName : token;
+            int sourceLine = element.getSourceLine();
+            Position start = new Position(Math.max(sourceLine - 1, 0), 0);
+            Position end = start;
+
+            int startOffset = -1;
+            if (sourceLine > 0) {
+                int lineStart = DocumentTracker.lineStartOffset(targetText, sourceLine - 1);
+                int lineEnd = DocumentTracker.lineStartOffset(targetText, sourceLine);
+                if (lineEnd < lineStart) {
+                    lineEnd = targetText.length();
+                }
+                int relativeIndex = -1;
+                if (lookup != null && !lookup.isBlank()) {
+                    String lineText = targetText.substring(lineStart, Math.min(lineEnd, targetText.length()));
+                    relativeIndex = lineText.indexOf(lookup);
+                    if (relativeIndex < 0 && token != null && !token.isBlank()) {
+                        relativeIndex = lineText.indexOf(lastSegment(token));
+                    }
+                }
+                if (relativeIndex >= 0) {
+                    startOffset = lineStart + relativeIndex;
+                }
+            }
+
+            if (startOffset < 0 && lookup != null && !lookup.isBlank()) {
+                startOffset = targetText.indexOf(lookup);
+            }
+            if (startOffset < 0 && token != null && !token.isBlank()) {
+                String segment = lastSegment(token);
+                if (!segment.isBlank()) {
+                    startOffset = targetText.indexOf(segment);
+                    if (startOffset >= 0) {
+                        lookup = segment;
+                    }
+                }
+            }
+
+            if (startOffset < 0) {
+                return null;
+            }
+
+            if (lookup == null || lookup.isBlank()) {
+                lookup = token;
+            }
+
+            start = DocumentTracker.positionAt(targetText, startOffset);
+            end = DocumentTracker.positionAt(targetText, startOffset + lookup.length());
+
+            Range range = new Range(start, end);
+            String targetUri = path.toUri().toString();
+            return new Location(targetUri, range);
+        } catch (Exception ex) {
+            LOG.warn("Failed to build element definition location for {}", token, ex);
+            return null;
+        }
+    }
+
+    private static Element resolveElement(TransferDescription td, String token) {
+        if (td == null || token == null || token.isBlank()) {
+            return null;
+        }
+
+        Element element = td.getElement(token);
+        if (element != null) {
+            return element;
+        }
+
+        String[] segments = token.split("\\.");
+        if (segments.length > 1) {
+            Element current = td.getElement(segments[0]);
+            if (current == null) {
+                return null;
+            }
+            for (int i = 1; i < segments.length && current != null; i++) {
+                if (!(current instanceof ch.interlis.ili2c.metamodel.Container<?> container)) {
+                    current = null;
+                    break;
+                }
+                current = findChild(container, segments[i]);
+            }
+            if (current != null) {
+                return current;
+            }
+        }
+
+        String segment = lastSegment(token);
+        if (!segment.equals(token)) {
+            element = td.getElement(segment);
+        }
+
+        return element;
+    }
+
+    private static Model findEnclosingModel(Element element) {
+        if (element instanceof Model) {
+            return (Model) element;
+        }
+
+        Element current = element;
+        while (current != null) {
+            ch.interlis.ili2c.metamodel.Container<?> container = current.getContainer();
+            if (container instanceof Model) {
+                return (Model) container;
+            }
+            current = container instanceof Element ? (Element) container : null;
+        }
+        return null;
+    }
+
+    private static Element findChild(ch.interlis.ili2c.metamodel.Container<?> container, String name) {
+        if (container == null || name == null || name.isBlank()) {
+            return null;
+        }
+
+        Iterator<?> iterator = container.iterator();
+        while (iterator.hasNext()) {
+            Object candidate = iterator.next();
+            if (candidate instanceof Element child && name.equals(child.getName())) {
+                return child;
+            }
+        }
+        return null;
+    }
+
+    private static String lastSegment(String token) {
+        if (token == null || token.isBlank()) {
+            return "";
+        }
+        int idx = token.lastIndexOf('.');
+        return idx >= 0 ? token.substring(idx + 1) : token;
     }
 
     private static String resolveModelPath(TransferDescription td, String name) {
