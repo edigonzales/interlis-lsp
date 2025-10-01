@@ -34,14 +34,17 @@ The server uses stdio transport. Your editor/extension should spawn it and conne
 - ~~Enable assert in tests.~~ And more tests.
 - snippets / autoclose
 - ~~pretty print (2 lokalen Modellen)~~    
-- syntax highlighting
-- syntax highlighting: brackets nur für Klammern (Wörter mit Snippets oder onEnterRules)
-- syntax highlighting: autoClosingPairs auch hier word pairs mit snippets oder onEnterRules)
+- ~~syntax highlighting~~
+- ~~syntax highlighting: brackets nur für Klammern (Wörter mit Snippets oder onEnterRules)~~
+- ~~syntax highlighting: autoClosingPairs auch hier word pairs mit snippets oder onEnterRules)~~
 - syntax highlighting: 2) Enhance with Semantic Tokens from your Java LSP ?? Semantic folding
 Real “fold by AST” works best via your LSP (foldingRangeProvider) so blocks fold exactly from … = to the matching END ….
 - Server Capabilities dokumentieren, e.g. initializeAdvertisesFormattingCapability für output verwenden.
-- UML
-- Hyperlink: -> Debug output, um besser zu verstehen, was abgeht. Auch die gefunden Modelle etc. pp
-- Hyperlink: auch Strukturen und Domains etc.
+- ~~UML~~
+- UML: plantuml support (auch mit PLANTUML SOURCE)
+- ~~Hyperlink: -> Debug output, um besser zu verstehen, was abgeht. Auch die gefunden Modelle etc. pp~~
+- ~~Hyperlink: auch Strukturen und Domains etc.~~
 - word output
+- Sequence Diagramme für verschiedene Features
+- Autocomplete / Suggestions
  

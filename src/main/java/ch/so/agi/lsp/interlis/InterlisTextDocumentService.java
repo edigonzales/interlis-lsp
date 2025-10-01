@@ -93,7 +93,6 @@ public class InterlisTextDocumentService implements TextDocumentService {
         String text = documents.getText(uri);
 
         List<TextEdit> edits = InterlisAutoCloser.computeEdits(text, params);
-        LOG.info("******************");
         return CompletableFuture.completedFuture(edits);
     }
 
