@@ -35,6 +35,10 @@
       {
         "command": "interlis.compile.run",
         "title": "INTERLIS: Compile current file"
+      },
+      {
+        "command": "interlis.uml.show",
+        "title": "INTERLIS: Show UML class diagram"
       }
     ],
     "configuration": {

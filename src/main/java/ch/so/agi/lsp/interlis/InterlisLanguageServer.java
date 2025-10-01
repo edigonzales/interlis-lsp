@@ -19,6 +19,7 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
     private final AtomicReference<ClientSettings> clientSettings = new AtomicReference<>(new ClientSettings());
 
     public static final String CMD_COMPILE = "interlis.compile"; // workspace/executeCommand
+    public static final String CMD_GENERATE_UML = "interlis.uml";
 
     public InterlisLanguageServer() {
         this.textDocumentService = new InterlisTextDocumentService(this);
@@ -42,7 +43,7 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
         SaveOptions save = new SaveOptions(); save.setIncludeText(false); 
         sync.setSave(save);
         
-        ExecuteCommandOptions exec = new ExecuteCommandOptions(Collections.singletonList(CMD_COMPILE));
+        ExecuteCommandOptions exec = new ExecuteCommandOptions(Arrays.asList(CMD_COMPILE, CMD_GENERATE_UML));
         caps.setExecuteCommandProvider(exec);
 
         caps.setPositionEncoding(org.eclipse.lsp4j.PositionEncodingKind.UTF16);

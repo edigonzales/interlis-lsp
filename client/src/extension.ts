@@ -4,6 +4,7 @@ import { LanguageClient, LanguageClientOptions, Executable, ServerOptions, State
 let client: LanguageClient | undefined;
 let revealOutputOnNextLog = false;
 const CARET_SENTINEL = "__INTERLIS_AUTOCLOSE_CARET__";
+let umlPanel: vscode.WebviewPanel | undefined;
 
 type PendingCaret = { version: number; position: vscode.Position };
 
@@ -173,6 +174,39 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.window.showErrorMessage(`Compilation failed: ${e?.message ?? e}`);
         // Optional: bring Output to front to show any client-side errors
         output.show(true);
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("interlis.uml.show", async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) { vscode.window.showWarningMessage("Open an .ili file first."); return; }
+
+      const fileUri = editor.document.uri.toString();
+
+      try {
+        const html = await client!.sendRequest("workspace/executeCommand", {
+          command: "interlis.uml",
+          arguments: [fileUri]
+        }) as string;
+
+        const column = editor.viewColumn ?? vscode.ViewColumn.Beside;
+        if (!umlPanel) {
+          umlPanel = vscode.window.createWebviewPanel(
+            "interlisUmlDiagram",
+            "INTERLIS UML Diagram",
+            column,
+            { enableScripts: true, retainContextWhenHidden: true }
+          );
+          umlPanel.onDidDispose(() => { umlPanel = undefined; }, undefined, context.subscriptions);
+        } else {
+          umlPanel.reveal(column, true);
+        }
+
+        umlPanel.webview.html = html;
+      } catch (e: any) {
+        vscode.window.showErrorMessage(`UML generation failed: ${e?.message ?? e}`);
       }
     })
   );

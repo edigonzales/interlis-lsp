@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>UML class diagram</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    html, body { height: 100%; margin: 0; }
+    .page { height: 100%; padding: 16px; box-sizing: border-box; }
+    .diagram-wrap {
+      position: relative; height: 70vh;
+      border: 1px solid #e5e5e5; border-radius: 10px; background: #fafafa;
+      overflow: hidden;
+      height: 100%;
+    }
+    .diagram-toolbar { position: absolute; top: 8px; right: 8px; z-index: 2; display: flex; gap: 6px; }
+    .diagram-toolbar button { padding: 6px 10px; border: 1px solid #d0d0d0; background: #fff; border-radius: 8px; cursor: pointer; }
+
+    /* 2) CSS fallback: kill any Mermaid max-widths */
+    .diagram-wrap svg { width: 100% !important; height: 100% !important; max-width: none !important; }
+    pre.mermaid { display: none; }
+  </style>
+</head>
+<body>
+
+<div class="page">
+  <pre class="mermaid" id="m1">
+${mermaidString}
+  </pre>
+</div>
+
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11.10.1/dist/mermaid.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: 'loose',
+      maxTextSize: 1000000,
+
+      // 1) Ask Mermaid not to force max-width on diagrams
+      flowchart: { useMaxWidth: false },
+      er:        { useMaxWidth: false },
+      sequence:  { useMaxWidth: false },
+      class:     { useMaxWidth: false },       // for classDiagram
+      classDiagram: { useMaxWidth: false },    // (some versions use this key)
+
+      // extra belt-and-suspenders: CSS injection at render time
+      themeCSS: '.mermaid svg{max-width:none !important;height:100% !important;width:100% !important;}'
+    });
+
+    (async function () {
+      var src = document.getElementById('m1');
+      var graphText = src ? src.textContent : '';
+      var out = await mermaid.render('m1-svg', graphText);
+
+      var wrap = document.createElement('div');
+      wrap.className = 'diagram-wrap';
+
+      var toolbar = document.createElement('div');
+      toolbar.className = 'diagram-toolbar';
+      toolbar.innerHTML =
+        '<button type="button" data-a="zin">+</button>' +
+        '<button type="button" data-a="zout">−</button>' +
+        '<button type="button" data-a="fit">Fit</button>' +
+        '<button type="button" data-a="download">Download SVG</button>';
+      wrap.appendChild(toolbar);
+
+      wrap.insertAdjacentHTML('beforeend', out.svg);
+      src.parentNode.replaceChild(wrap, src);
+
+      // 3) Normalize the rendered <svg> just in case
+      var svgEl = wrap.querySelector('svg');
+      if (svgEl) {
+        svgEl.style.maxWidth = 'none';
+        svgEl.style.width = '100%';
+        svgEl.style.height = '100%';
+        // Sometimes Mermaid sets explicit width/height numbers; wipe them
+        svgEl.setAttribute('width', '100%');
+        svgEl.setAttribute('height', '100%');
+      }
+
+      var pz = svgPanZoom(svgEl, {
+        zoomEnabled: true,
+        mouseWheelZoomEnabled: true,
+        controlIconsEnabled: false,
+        fit: true, center: true,
+        minZoom: 0.2, maxZoom: 10,
+        preventMouseEventsDefault: true
+      });
+
+      var STEP = 0.2;
+      toolbar.addEventListener('click', function (e) {
+        var a = e.target && e.target.getAttribute('data-a');
+        if (a === 'zin')  pz.zoomBy(1 + STEP);
+        if (a === 'zout') pz.zoomBy(1 / (1 + STEP));
+        if (a === 'fit')  { pz.resize(); pz.fit(); pz.center(); }
+        if (a === 'download') downloadSVG(svgEl, 'diagram.svg');
+        if (a === 'download-pdf') downloadPDF(svgEl, 'diagram.pdf');
+      });
+
+      window.addEventListener('resize', function () {
+        pz.resize(); pz.fit(); pz.center();
+      }, { passive: true });
+    })();
+
+
+
+function downloadSVG(svgEl, filename) {
+  // Clone so we can tweak without touching the on-page SVG
+  var clone = svgEl.cloneNode(true);
+
+  // Undo svg-pan-zoom’s viewport transform so you get the full diagram
+  var vp = clone.querySelector('.svg-pan-zoom_viewport');
+  if (vp) vp.removeAttribute('transform');
+
+  // Ensure clean sizing (portable in other tools)
+  var vb = clone.getAttribute('viewBox');
+  if (vb) {
+    var p = vb.trim().split(/\s+/);
+    var w = parseFloat(p[2]), h = parseFloat(p[3]);
+    if (!isNaN(w) && !isNaN(h)) {
+      clone.setAttribute('width', w + 'px');
+      clone.setAttribute('height', h + 'px');
+    }
+  }
+  clone.style.maxWidth = 'none';
+  clone.removeAttribute('style'); // drop width:100%/height:100% if present
+
+  // Ensure namespaces for standalone file
+  if (!clone.getAttribute('xmlns')) clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  if (!clone.getAttribute('xmlns:xlink')) clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+
+  // Serialize + download
+  var xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
+  var blob = new Blob([xml], { type: 'image/svg+xml;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = filename || 'diagram.svg';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+
+  </script>
+</body>
+</html>
