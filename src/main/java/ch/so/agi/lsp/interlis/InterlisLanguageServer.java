@@ -49,6 +49,7 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
         caps.setPositionEncoding(org.eclipse.lsp4j.PositionEncodingKind.UTF16);
         caps.setDocumentFormattingProvider(true);
         caps.setDefinitionProvider(true);
+        caps.setDocumentSymbolProvider(true);
 
         DocumentOnTypeFormattingOptions onType = new DocumentOnTypeFormattingOptions("=");
         caps.setDocumentOnTypeFormattingProvider(onType);
