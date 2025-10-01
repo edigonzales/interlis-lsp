@@ -41,11 +41,10 @@ public class InterlisWorkspaceService implements WorkspaceService {
 
     @Override
     public CompletableFuture<Object> executeCommand(ExecuteCommandParams params) {
-        if (InterlisLanguageServer.CMD_COMPILE.equals(params.getCommand())) {
-            List<Object> args = params.getArguments();
-
-            String fileUriOrPath = coerceArgToString(args != null && !args.isEmpty() ? args.get(0) : null);
-            if (fileUriOrPath == null || fileUriOrPath.isBlank()) {
+        if (InterlisLanguageServer.CMD_COMPILE.equals(params.getCommand())
+                || InterlisLanguageServer.CMD_GENERATE_UML.equals(params.getCommand())) {
+            String pathOrUri = extractPath(params.getArguments());
+            if (pathOrUri == null) {
                 ResponseError err = new ResponseError(ResponseErrorCode.InvalidParams,
                         "Expected the .ili file URI as the first argument", null);
                 CompletableFuture<Object> failed = new CompletableFuture<>();
@@ -53,23 +52,35 @@ public class InterlisWorkspaceService implements WorkspaceService {
                 return failed;
             }
 
-            // Optional: turn file:// URI into a platform path for ili2c
-            String pathOrUri = fileUriOrPath;
-            if (pathOrUri.startsWith("file:")) {
-                try {
-                    Path p = Paths.get(URI.create(pathOrUri));
-                    pathOrUri = p.toString();
-                } catch (Exception e) {
-                    LOG.warn("Could not convert URI to path: {}", pathOrUri, e);
-                }
+            if (InterlisLanguageServer.CMD_COMPILE.equals(params.getCommand())) {
+                LOG.info("validate called with: {}", pathOrUri);
+                return handlers.compile(pathOrUri);
             }
 
-            LOG.info("validate called with: {}", pathOrUri);
-            return handlers.compile(pathOrUri);
+            LOG.info("uml generation called with: {}", pathOrUri);
+            return handlers.generateUml(pathOrUri);
         }
         return CompletableFuture.completedFuture(null);
     }
-    
+
+    private String extractPath(List<Object> args) {
+        String fileUriOrPath = coerceArgToString(args != null && !args.isEmpty() ? args.get(0) : null);
+        if (fileUriOrPath == null || fileUriOrPath.isBlank()) {
+            return null;
+        }
+
+        String pathOrUri = fileUriOrPath;
+        if (pathOrUri.startsWith("file:")) {
+            try {
+                Path p = Paths.get(URI.create(pathOrUri));
+                pathOrUri = p.toString();
+            } catch (Exception e) {
+                LOG.warn("Could not convert URI to path: {}", pathOrUri, e);
+            }
+        }
+        return pathOrUri;
+    }
+
     private static String coerceArgToString(Object arg) {
         if (arg == null) return null;
         if (arg instanceof String s) return s;
