@@ -20,8 +20,10 @@ import org.eclipse.lsp4j.Range;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Builds {@link DocumentSymbol} hierarchies from an INTERLIS {@link TransferDescription}.
@@ -44,11 +46,60 @@ final class InterlisDocumentSymbolCollector {
             return result;
         }
 
+        Set<Model> seen = new HashSet<>();
         Arrays.stream(models)
                 .filter(model -> model != null)
-                .forEach(model -> result.add(buildModelSymbol(model)));
+                .forEach(model -> collectModelSymbols(model, seen, result));
 
         return result;
+    }
+
+    private void collectModelSymbols(Model model, Set<Model> seen, List<DocumentSymbol> result) {
+        if (!seen.add(model)) {
+            return;
+        }
+
+        DocumentSymbol modelSymbol = buildModelSymbol(model);
+        result.add(modelSymbol);
+
+        Range fallbackRange = copyRange(modelSymbol.getRange());
+        collectImportedModelSymbols(model, fallbackRange, seen, result);
+    }
+
+    private void collectImportedModelSymbols(Model model, Range fallbackRange, Set<Model> seen, List<DocumentSymbol> result) {
+        Model[] imports = model != null ? model.getImporting() : null;
+        if (imports == null || imports.length == 0) {
+            return;
+        }
+
+        for (Model imported : imports) {
+            if (imported == null || !seen.add(imported)) {
+                continue;
+            }
+
+            DocumentSymbol importedSymbol = buildModelSymbol(imported);
+            if (fallbackRange != null) {
+                Range copy = copyRange(fallbackRange);
+                alignSymbolRange(importedSymbol, copy);
+            }
+            result.add(importedSymbol);
+
+            collectImportedModelSymbols(imported, fallbackRange, seen, result);
+        }
+    }
+
+    private void alignSymbolRange(DocumentSymbol symbol, Range fallbackRange) {
+        if (symbol == null || fallbackRange == null) {
+            return;
+        }
+        Range selectionCopy = copyRange(fallbackRange);
+        symbol.setRange(copyRange(fallbackRange));
+        symbol.setSelectionRange(selectionCopy);
+        if (symbol.getChildren() != null) {
+            for (DocumentSymbol child : symbol.getChildren()) {
+                alignSymbolRange(child, fallbackRange);
+            }
+        }
     }
 
     private DocumentSymbol buildModelSymbol(Model model) {
@@ -109,6 +160,22 @@ final class InterlisDocumentSymbolCollector {
             attributes.add(attributeSymbol);
         }
         return attributes;
+    }
+
+    private static Range copyRange(Range original) {
+        if (original == null) {
+            return null;
+        }
+        Position start = copyPosition(original.getStart());
+        Position end = copyPosition(original.getEnd());
+        return new Range(start, end);
+    }
+
+    private static Position copyPosition(Position position) {
+        if (position == null) {
+            return new Position(0, 0);
+        }
+        return new Position(position.getLine(), position.getCharacter());
     }
 
     private DocumentSymbol createSymbol(Element element, String detail, SymbolKind kind) {

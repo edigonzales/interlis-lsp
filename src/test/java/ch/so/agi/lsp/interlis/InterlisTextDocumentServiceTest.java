@@ -199,6 +199,55 @@ class InterlisTextDocumentServiceTest {
         assertEquals(3, attributeSymbol.getSelectionRange().getStart().getLine());
     }
 
+    @Test
+    void documentSymbolsIncludeImportedModels(@TempDir Path tempDir) throws Exception {
+        Path modelPath = Files.createTempFile(tempDir, "ModelImports", ".ili");
+        String content = String.join("\n",
+                "MODEL ModelImports;",
+                "END ModelImports.",
+                "");
+        Files.writeString(modelPath, content);
+
+        ModelStub imported = new ModelStub("ImportedModel", "ImportedModel.ili");
+        ModelStub root = new ModelStub("ModelImports", modelPath.toString(), 1, imported);
+
+        TransferDescription td = new TransferDescription() {
+            @Override
+            public Model[] getModelsFromLastFile() {
+                return new Model[]{root};
+            }
+        };
+
+        Ili2cUtil.CompilationOutcome outcome = new Ili2cUtil.CompilationOutcome(td, "", Collections.emptyList());
+
+        CompilationCache cache = new CompilationCache();
+        cache.put(modelPath.toString(), outcome);
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        server.setClientSettings(new ClientSettings());
+
+        InterlisTextDocumentService service = new InterlisTextDocumentService(server, cache, (cfg, path) -> outcome);
+
+        TextDocumentItem item = new TextDocumentItem(modelPath.toUri().toString(), "interlis", 1, content);
+        service.didOpen(new DidOpenTextDocumentParams(item));
+
+        DocumentSymbolParams symbolParams = new DocumentSymbolParams(new TextDocumentIdentifier(item.getUri()));
+        List<Either<SymbolInformation, DocumentSymbol>> symbols = service.documentSymbol(symbolParams).get();
+
+        assertEquals(2, symbols.size());
+
+        DocumentSymbol mainSymbol = symbols.get(0).getRight();
+        assertNotNull(mainSymbol);
+        assertEquals("ModelImports", mainSymbol.getName());
+
+        DocumentSymbol importedSymbol = symbols.get(1).getRight();
+        assertNotNull(importedSymbol);
+        assertEquals("ImportedModel", importedSymbol.getName());
+        assertEquals(SymbolKind.Module, importedSymbol.getKind());
+        assertEquals(mainSymbol.getRange().getStart().getLine(), importedSymbol.getRange().getStart().getLine());
+        assertEquals(mainSymbol.getSelectionRange().getStart().getLine(), importedSymbol.getSelectionRange().getStart().getLine());
+    }
+
     private static final class TestTable extends Table {
         private final List<ViewableTransferElement> attributes = new ArrayList<>();
 
@@ -223,10 +272,16 @@ class InterlisTextDocumentServiceTest {
         private final String name;
         private final String fileName;
         private final ch.interlis.ili2c.metamodel.Model[] imports;
+        private final int sourceLine;
 
         private ModelStub(String name, String fileName, ch.interlis.ili2c.metamodel.Model... imports) {
+            this(name, fileName, 1, imports);
+        }
+
+        private ModelStub(String name, String fileName, int sourceLine, ch.interlis.ili2c.metamodel.Model... imports) {
             this.name = name;
             this.fileName = fileName;
+            this.sourceLine = sourceLine;
             this.imports = imports != null ? imports : new ch.interlis.ili2c.metamodel.Model[0];
         }
 
@@ -238,6 +293,11 @@ class InterlisTextDocumentServiceTest {
         @Override
         public String getFileName() {
             return fileName;
+        }
+
+        @Override
+        public int getSourceLine() {
+            return sourceLine;
         }
 
         @Override
