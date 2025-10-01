@@ -1,10 +1,12 @@
 import * as vscode from "vscode";
+import * as path from "path";
 import { LanguageClient, LanguageClientOptions, Executable, ServerOptions, State } from "vscode-languageclient/node";
 
 let client: LanguageClient | undefined;
 let revealOutputOnNextLog = false;
 const CARET_SENTINEL = "__INTERLIS_AUTOCLOSE_CARET__";
 let umlPanel: vscode.WebviewPanel | undefined;
+let lastDiagramSource: vscode.Uri | undefined;
 
 type PendingCaret = { version: number; position: vscode.Position };
 
@@ -191,7 +193,9 @@ export async function activate(context: vscode.ExtensionContext) {
           arguments: [fileUri]
         }) as string;
 
-        const column = editor.viewColumn ?? vscode.ViewColumn.Beside;
+        lastDiagramSource = editor.document.uri;
+
+        const column = vscode.ViewColumn.Beside;
         if (!umlPanel) {
           umlPanel = vscode.window.createWebviewPanel(
             "interlisUmlDiagram",
@@ -200,8 +204,45 @@ export async function activate(context: vscode.ExtensionContext) {
             { enableScripts: true, retainContextWhenHidden: true }
           );
           umlPanel.onDidDispose(() => { umlPanel = undefined; }, undefined, context.subscriptions);
+          umlPanel.webview.onDidReceiveMessage(async message => {
+            if (!message || message.type !== "downloadSvg" || typeof message.svg !== "string") {
+              return;
+            }
+
+            const filename = typeof message.filename === "string" && message.filename.trim().length > 0
+              ? message.filename.trim()
+              : "diagram.svg";
+
+            let defaultUri: vscode.Uri | undefined;
+            if (lastDiagramSource && lastDiagramSource.scheme === "file") {
+              const folder = path.dirname(lastDiagramSource.fsPath);
+              defaultUri = vscode.Uri.file(path.join(folder, filename));
+            }
+
+            try {
+              const target = await vscode.window.showSaveDialog({
+                defaultUri,
+                saveLabel: "Save UML diagram",
+                filters: { SVG: ["svg"] }
+              });
+              if (!target) {
+                return;
+              }
+
+              const encoder = new TextEncoder();
+              await vscode.workspace.fs.writeFile(target, encoder.encode(message.svg));
+
+              if (target.scheme === "file") {
+                vscode.window.showInformationMessage(`Saved UML diagram to ${target.fsPath}`);
+              } else {
+                vscode.window.showInformationMessage("Saved UML diagram.");
+              }
+            } catch (err: any) {
+              vscode.window.showErrorMessage(`Failed to save UML diagram: ${err?.message ?? err}`);
+            }
+          }, undefined, context.subscriptions);
         } else {
-          umlPanel.reveal(column, true);
+          umlPanel.reveal(umlPanel.viewColumn ?? vscode.ViewColumn.Beside, true);
         }
 
         umlPanel.webview.html = html;

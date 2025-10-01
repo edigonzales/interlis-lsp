@@ -6,18 +6,66 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     html, body { height: 100%; margin: 0; }
-    .page { height: 100%; padding: 16px; box-sizing: border-box; }
-    .diagram-wrap {
-      position: relative; height: 70vh;
-      border: 1px solid #e5e5e5; border-radius: 10px; background: #fafafa;
-      overflow: hidden;
+    body { background: #ffffff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #333; }
+    .page {
       height: 100%;
+      padding: 16px;
+      box-sizing: border-box;
+      display: grid;
+      grid-template-columns: minmax(0, 2.5fr) minmax(280px, 1fr);
+      gap: 16px;
     }
-    .diagram-toolbar { position: absolute; top: 8px; right: 8px; z-index: 2; display: flex; gap: 6px; }
-    .diagram-toolbar button { padding: 6px 10px; border: 1px solid #d0d0d0; background: #fff; border-radius: 8px; cursor: pointer; }
-
-    /* 2) CSS fallback: kill any Mermaid max-widths */
+    .diagram-pane, .source-pane {
+      border: 1px solid #e5e5e5;
+      border-radius: 10px;
+      background: #fafafa;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .diagram-wrap {
+      position: relative;
+      flex: 1 1 auto;
+      overflow: hidden;
+    }
+    .diagram-toolbar {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      z-index: 2;
+      display: flex;
+      gap: 6px;
+    }
+    .diagram-toolbar button {
+      padding: 6px 10px;
+      border: 1px solid #d0d0d0;
+      background: #fff;
+      border-radius: 8px;
+      cursor: pointer;
+    }
     .diagram-wrap svg { width: 100% !important; height: 100% !important; max-width: none !important; }
+    .source-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid #e5e5e5;
+      background: rgba(255, 255, 255, 0.8);
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      font-size: 12px;
+      color: #5a5a5a;
+    }
+    .source-content {
+      flex: 1 1 auto;
+      overflow: auto;
+      padding: 16px;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      background: #ffffff;
+      color: #333;
+      white-space: pre;
+    }
     pre.mermaid { display: none; }
   </style>
 </head>
@@ -49,6 +97,8 @@ ${mermaidString}
       themeCSS: '.mermaid svg{max-width:none !important;height:100% !important;width:100% !important;}'
     });
 
+    const vscode = acquireVsCodeApi();
+
     (async function () {
       var src = document.getElementById('m1');
       var graphText = src ? src.textContent : '';
@@ -67,7 +117,23 @@ ${mermaidString}
       wrap.appendChild(toolbar);
 
       wrap.insertAdjacentHTML('beforeend', out.svg);
-      src.parentNode.replaceChild(wrap, src);
+      var page = src.parentNode;
+      page.innerHTML = '';
+
+      var diagramPane = document.createElement('div');
+      diagramPane.className = 'diagram-pane';
+      diagramPane.appendChild(wrap);
+
+      var sourcePane = document.createElement('div');
+      sourcePane.className = 'source-pane';
+      sourcePane.innerHTML = '<div class="source-header">Mermaid source</div>';
+      var sourceContent = document.createElement('pre');
+      sourceContent.className = 'source-content';
+      sourceContent.textContent = graphText.trim();
+      sourcePane.appendChild(sourceContent);
+
+      page.appendChild(diagramPane);
+      page.appendChild(sourcePane);
 
       // 3) Normalize the rendered <svg> just in case
       var svgEl = wrap.querySelector('svg');
@@ -96,7 +162,6 @@ ${mermaidString}
         if (a === 'zout') pz.zoomBy(1 / (1 + STEP));
         if (a === 'fit')  { pz.resize(); pz.fit(); pz.center(); }
         if (a === 'download') downloadSVG(svgEl, 'diagram.svg');
-        if (a === 'download-pdf') downloadPDF(svgEl, 'diagram.pdf');
       });
 
       window.addEventListener('resize', function () {
@@ -131,17 +196,9 @@ function downloadSVG(svgEl, filename) {
   if (!clone.getAttribute('xmlns')) clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
   if (!clone.getAttribute('xmlns:xlink')) clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
 
-  // Serialize + download
+  // Serialize and hand off to the extension for saving
   var xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
-  var blob = new Blob([xml], { type: 'image/svg+xml;charset=utf-8' });
-  var url = URL.createObjectURL(blob);
-  var a = document.createElement('a');
-  a.href = url;
-  a.download = filename || 'diagram.svg';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  vscode.postMessage({ type: 'downloadSvg', filename: filename || 'diagram.svg', svg: xml });
 }
 
 

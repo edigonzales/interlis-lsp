@@ -13,6 +13,8 @@ class MermaidHtmlRendererTest {
         assertTrue(html.contains("classDiagram"));
         assertFalse(html.contains("${mermaidString}"));
         assertTrue(html.startsWith("<!doctype html>"));
+        assertTrue(html.contains("diagram-pane"));
+        assertTrue(html.contains("Mermaid source"));
     }
 
     @Test
