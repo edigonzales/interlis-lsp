@@ -10,6 +10,7 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -104,6 +105,56 @@ public class InterlisTextDocumentService implements TextDocumentService {
             } catch (Exception ex) {
                 LOG.error("Definition lookup failed", ex);
                 return Either.forLeft(Collections.emptyList());
+            }
+        });
+    }
+
+    @Override
+    public CompletableFuture<List<Either<SymbolInformation, DocumentSymbol>>> documentSymbol(DocumentSymbolParams params) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                if (params == null || params.getTextDocument() == null) {
+                    return Collections.emptyList();
+                }
+
+                String uri = params.getTextDocument().getUri();
+                if (uri == null || uri.isBlank()) {
+                    return Collections.emptyList();
+                }
+
+                String documentText = documents.getText(uri);
+                if (documentText == null) {
+                    documentText = readDocument(uri);
+                }
+                if (documentText == null) {
+                    documentText = "";
+                }
+
+                String pathOrUri = toFilesystemPathIfPossible(uri);
+                if (pathOrUri == null || pathOrUri.isBlank()) {
+                    return Collections.emptyList();
+                }
+
+                Ili2cUtil.CompilationOutcome outcome = compilationCache.get(pathOrUri);
+                if (outcome == null || outcome.getTransferDescription() == null) {
+                    outcome = compiler.apply(server.getClientSettings(), pathOrUri);
+                    compilationCache.put(pathOrUri, outcome);
+                }
+
+                if (outcome == null || outcome.getTransferDescription() == null) {
+                    return Collections.emptyList();
+                }
+
+                InterlisDocumentSymbolCollector collector = new InterlisDocumentSymbolCollector(documentText);
+                List<DocumentSymbol> symbols = collector.collect(outcome.getTransferDescription());
+                List<Either<SymbolInformation, DocumentSymbol>> result = new ArrayList<>(symbols.size());
+                for (DocumentSymbol symbol : symbols) {
+                    result.add(Either.forRight(symbol));
+                }
+                return result;
+            } catch (Exception ex) {
+                LOG.error("Document symbol request failed", ex);
+                return Collections.emptyList();
             }
         });
     }
