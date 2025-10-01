@@ -63,29 +63,45 @@ final class InterlisDocumentSymbolCollector {
         result.add(modelSymbol);
 
         Range fallbackRange = copyRange(modelSymbol.getRange());
-        collectImportedModelSymbols(model, fallbackRange, seen, result);
+        appendImportedModelSymbols(modelSymbol, model, fallbackRange, seen);
     }
 
-    private void collectImportedModelSymbols(Model model, Range fallbackRange, Set<Model> seen, List<DocumentSymbol> result) {
+    private void appendImportedModelSymbols(DocumentSymbol parent, Model model, Range fallbackRange, Set<Model> seen) {
+        if (parent == null) {
+            return;
+        }
+
         Model[] imports = model != null ? model.getImporting() : null;
         if (imports == null || imports.length == 0) {
             return;
         }
 
+        List<DocumentSymbol> children = parent.getChildren();
+        if (children == null) {
+            children = new ArrayList<>();
+            parent.setChildren(children);
+        }
+
         for (Model imported : imports) {
-            if (imported == null || !seen.add(imported)) {
+            if (imported == null) {
                 continue;
             }
 
-            DocumentSymbol importedSymbol = buildModelSymbol(imported);
-            if (fallbackRange != null) {
-                Range copy = copyRange(fallbackRange);
-                alignSymbolRange(importedSymbol, copy);
-            }
-            result.add(importedSymbol);
+            seen.add(imported);
 
-            collectImportedModelSymbols(imported, fallbackRange, seen, result);
+            DocumentSymbol importedSymbol = createImportedModelSymbol(imported);
+            if (fallbackRange != null) {
+                alignSymbolRange(importedSymbol, fallbackRange);
+            }
+
+            children.add(importedSymbol);
         }
+    }
+
+    private DocumentSymbol createImportedModelSymbol(Model model) {
+        DocumentSymbol symbol = createSymbol(model, "IMPORT", SymbolKind.Module);
+        symbol.setChildren(Collections.emptyList());
+        return symbol;
     }
 
     private void alignSymbolRange(DocumentSymbol symbol, Range fallbackRange) {

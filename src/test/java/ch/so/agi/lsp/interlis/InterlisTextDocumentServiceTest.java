@@ -234,18 +234,68 @@ class InterlisTextDocumentServiceTest {
         DocumentSymbolParams symbolParams = new DocumentSymbolParams(new TextDocumentIdentifier(item.getUri()));
         List<Either<SymbolInformation, DocumentSymbol>> symbols = service.documentSymbol(symbolParams).get();
 
-        assertEquals(2, symbols.size());
+        assertEquals(1, symbols.size());
 
         DocumentSymbol mainSymbol = symbols.get(0).getRight();
         assertNotNull(mainSymbol);
         assertEquals("ModelImports", mainSymbol.getName());
+        assertEquals(1, mainSymbol.getChildren().size());
 
-        DocumentSymbol importedSymbol = symbols.get(1).getRight();
-        assertNotNull(importedSymbol);
+        DocumentSymbol importedSymbol = mainSymbol.getChildren().get(0);
         assertEquals("ImportedModel", importedSymbol.getName());
+        assertEquals("IMPORT", importedSymbol.getDetail());
         assertEquals(SymbolKind.Module, importedSymbol.getKind());
+        assertTrue(importedSymbol.getChildren().isEmpty());
         assertEquals(mainSymbol.getRange().getStart().getLine(), importedSymbol.getRange().getStart().getLine());
         assertEquals(mainSymbol.getSelectionRange().getStart().getLine(), importedSymbol.getSelectionRange().getStart().getLine());
+    }
+
+    @Test
+    void documentSymbolsOmitTransitiveImportedModels(@TempDir Path tempDir) throws Exception {
+        Path modelPath = Files.createTempFile(tempDir, "ModelTransitiveImports", ".ili");
+        String content = String.join("\n",
+                "MODEL ModelTransitiveImports;",
+                "END ModelTransitiveImports.",
+                "");
+        Files.writeString(modelPath, content);
+
+        ModelStub transitive = new ModelStub("TransitiveImport", "TransitiveImport.ili");
+        ModelStub direct = new ModelStub("DirectImport", "DirectImport.ili", transitive);
+        ModelStub root = new ModelStub("ModelTransitiveImports", modelPath.toString(), 1, direct);
+
+        TransferDescription td = new TransferDescription() {
+            @Override
+            public Model[] getModelsFromLastFile() {
+                return new Model[]{root};
+            }
+        };
+
+        Ili2cUtil.CompilationOutcome outcome = new Ili2cUtil.CompilationOutcome(td, "", Collections.emptyList());
+
+        CompilationCache cache = new CompilationCache();
+        cache.put(modelPath.toString(), outcome);
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        server.setClientSettings(new ClientSettings());
+
+        InterlisTextDocumentService service = new InterlisTextDocumentService(server, cache, (cfg, path) -> outcome);
+
+        TextDocumentItem item = new TextDocumentItem(modelPath.toUri().toString(), "interlis", 1, content);
+        service.didOpen(new DidOpenTextDocumentParams(item));
+
+        DocumentSymbolParams symbolParams = new DocumentSymbolParams(new TextDocumentIdentifier(item.getUri()));
+        List<Either<SymbolInformation, DocumentSymbol>> symbols = service.documentSymbol(symbolParams).get();
+
+        assertEquals(1, symbols.size());
+
+        DocumentSymbol mainSymbol = symbols.get(0).getRight();
+        assertNotNull(mainSymbol);
+        assertEquals("ModelTransitiveImports", mainSymbol.getName());
+        assertEquals(1, mainSymbol.getChildren().size());
+
+        DocumentSymbol importSymbol = mainSymbol.getChildren().get(0);
+        assertEquals("DirectImport", importSymbol.getName());
+        assertEquals(0, importSymbol.getChildren().size());
     }
 
     private static final class TestTable extends Table {
