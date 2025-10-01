@@ -41,6 +41,7 @@ The server uses stdio transport. Your editor/extension should spawn it and conne
 Real “fold by AST” works best via your LSP (foldingRangeProvider) so blocks fold exactly from … = to the matching END ….
 - Server Capabilities dokumentieren, e.g. initializeAdvertisesFormattingCapability für output verwenden.
 - UML
-- Hyperlink
+- Hyperlink: -> Debug output, um besser zu verstehen, was abgeht. Auch die gefunden Modelle etc. pp
+- Hyperlink: auch Strukturen und Domains etc.
 - word output
  

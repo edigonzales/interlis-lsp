@@ -67,6 +67,10 @@
       }
     },
     "configurationDefaults": {
+      "[interlis]": {
+        "editor.formatOnType": true
+      },
+      "editor.fontLigatures": true,
       "editor.tokenColorCustomizations": {
         "textMateRules": [
           {

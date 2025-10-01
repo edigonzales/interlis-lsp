@@ -220,11 +220,15 @@ export async function activate(context: vscode.ExtensionContext) {
             }
 
             try {
-              const target = await vscode.window.showSaveDialog({
-                defaultUri,
+              const options: vscode.SaveDialogOptions = {
                 saveLabel: "Save UML diagram",
                 filters: { SVG: ["svg"] }
-              });
+              };
+              if (defaultUri) {
+                options.defaultUri = defaultUri;
+              }
+
+              const target = await vscode.window.showSaveDialog(options);
               if (!target) {
                 return;
               }
