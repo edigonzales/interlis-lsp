@@ -7,11 +7,16 @@ import ch.interlis.ili2c.metamodel.Table;
 import ch.interlis.ili2c.metamodel.Topic;
 import ch.interlis.ili2c.metamodel.TransferDescription;
 import ch.interlis.ili2c.metamodel.ViewableTransferElement;
+import org.eclipse.lsp4j.DidOpenTextDocumentParams;
+import org.eclipse.lsp4j.DidSaveTextDocumentParams;
 import org.eclipse.lsp4j.DocumentSymbol;
 import org.eclipse.lsp4j.DocumentSymbolParams;
-import org.eclipse.lsp4j.SymbolKind;
-import org.eclipse.lsp4j.DidOpenTextDocumentParams;
+import org.eclipse.lsp4j.MessageActionItem;
+import org.eclipse.lsp4j.MessageParams;
+import org.eclipse.lsp4j.PublishDiagnosticsParams;
+import org.eclipse.lsp4j.ShowMessageRequestParams;
 import org.eclipse.lsp4j.SymbolInformation;
+import org.eclipse.lsp4j.SymbolKind;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.TextDocumentItem;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
@@ -24,6 +29,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -116,6 +122,51 @@ class InterlisTextDocumentServiceTest {
         service.didOpen(params);
 
         assertEquals(1, compileCount.get(), "Expected imported model to trigger compilation when opened");
+    }
+
+    @Test
+    void didSaveForcesCompilationAndRefreshesCache(@TempDir Path tempDir) throws Exception {
+        Path modelPath = Files.createTempFile(tempDir, "ModelSave", ".ili");
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        server.setClientSettings(new ClientSettings());
+        TestClient client = new TestClient();
+        server.connect(client);
+
+        CompilationCache cache = new CompilationCache();
+
+        Ili2cUtil.CompilationOutcome cachedOutcome = new Ili2cUtil.CompilationOutcome(
+                new TransferDescription(),
+                "cached log",
+                Collections.emptyList());
+        cache.put(modelPath.toString(), cachedOutcome);
+
+        Ili2cUtil.CompilationOutcome freshOutcome = new Ili2cUtil.CompilationOutcome(
+                new TransferDescription(),
+                "fresh log",
+                Collections.emptyList());
+
+        AtomicInteger compileCount = new AtomicInteger();
+        InterlisTextDocumentService service = new InterlisTextDocumentService(
+                server,
+                cache,
+                (cfg, path) -> {
+                    compileCount.incrementAndGet();
+                    return freshOutcome;
+                });
+
+        DidSaveTextDocumentParams params = new DidSaveTextDocumentParams();
+        params.setTextDocument(new TextDocumentIdentifier(modelPath.toUri().toString()));
+
+        service.didSave(params);
+
+        assertEquals(1, compileCount.get(), "didSave should invoke the compiler even when cache is warm");
+        assertEquals(List.of("fresh log"), client.getLoggedTexts(),
+                "didSave should publish the fresh compiler log text");
+
+        Ili2cUtil.CompilationOutcome cachedAfter = cache.get(modelPath.toString());
+        assertSame(freshOutcome, cachedAfter,
+                "didSave should refresh the cache with the new compilation outcome");
     }
 
     @Test
@@ -296,6 +347,49 @@ class InterlisTextDocumentServiceTest {
         DocumentSymbol importSymbol = mainSymbol.getChildren().get(0);
         assertEquals("DirectImport", importSymbol.getName());
         assertEquals(0, importSymbol.getChildren().size());
+    }
+
+    private static final class TestClient implements InterlisLanguageClient {
+        private final List<String> loggedTexts = new ArrayList<>();
+
+        @Override
+        public void clearLog() {
+            loggedTexts.clear();
+        }
+
+        @Override
+        public void log(LogParams params) {
+            loggedTexts.add(params != null ? params.text : null);
+        }
+
+        List<String> getLoggedTexts() {
+            return List.copyOf(loggedTexts);
+        }
+
+        @Override
+        public void telemetryEvent(Object object) {
+            // no-op
+        }
+
+        @Override
+        public void publishDiagnostics(PublishDiagnosticsParams diagnostics) {
+            // no-op
+        }
+
+        @Override
+        public void showMessage(MessageParams messageParams) {
+            // no-op
+        }
+
+        @Override
+        public CompletableFuture<MessageActionItem> showMessageRequest(ShowMessageRequestParams requestParams) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public void logMessage(MessageParams message) {
+            // no-op
+        }
     }
 
     private static final class TestTable extends Table {

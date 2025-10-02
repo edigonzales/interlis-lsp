@@ -42,7 +42,7 @@ public class InterlisTextDocumentService implements TextDocumentService {
     public void didOpen(DidOpenTextDocumentParams params) {
         String uri = params.getTextDocument().getUri();
         documents.open(params.getTextDocument());
-        compileAndPublish(uri, "didOpen");
+        compileAndPublish(uri, "didOpen", false);
     }
 
     @Override
@@ -57,7 +57,7 @@ public class InterlisTextDocumentService implements TextDocumentService {
     public void didSave(DidSaveTextDocumentParams params) {
         String uri = params.getTextDocument().getUri();
         // Often a good moment to do an authoritative compile based on on-disk state
-        compileAndPublish(uri, "didSave");
+        compileAndPublish(uri, "didSave", true);
     }
 
     @Override
@@ -159,15 +159,19 @@ public class InterlisTextDocumentService implements TextDocumentService {
         });
     }
 
-    private void compileAndPublish(String documentUri, String source) {
+    private void compileAndPublish(String documentUri, String source, boolean forceRecompile) {
         try {
             String pathOrUri = toFilesystemPathIfPossible(documentUri);
             ClientSettings cfg = server.getClientSettings();
             LOG.debug("Validating [{}] via {} with modelRepositories={}", pathOrUri, source,
                     cfg.getModelRepositoriesList());
 
-            Ili2cUtil.CompilationOutcome outcome = compilationCache.get(pathOrUri);
-            if (outcome == null || outcome.getTransferDescription() == null) {
+            if (forceRecompile) {
+                compilationCache.invalidate(pathOrUri);
+            }
+
+            Ili2cUtil.CompilationOutcome outcome = forceRecompile ? null : compilationCache.get(pathOrUri);
+            if (forceRecompile || outcome == null || outcome.getTransferDescription() == null) {
                 outcome = compiler.apply(cfg, pathOrUri);
                 compilationCache.put(pathOrUri, outcome);
             }
