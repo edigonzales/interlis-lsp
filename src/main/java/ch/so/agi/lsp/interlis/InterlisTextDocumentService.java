@@ -23,6 +23,8 @@ public class InterlisTextDocumentService implements TextDocumentService {
     private final DocumentTracker documents = new DocumentTracker();
     private final CompilationCache compilationCache;
     private final InterlisDefinitionFinder definitionFinder;
+    private final ModelDiscoveryService modelDiscoveryService;
+    private final InterlisCompletionProvider completionProvider;
     private final BiFunction<ClientSettings, String, Ili2cUtil.CompilationOutcome> compiler;
 
     public InterlisTextDocumentService(InterlisLanguageServer server) {
@@ -36,6 +38,16 @@ public class InterlisTextDocumentService implements TextDocumentService {
         this.compilationCache = cache != null ? cache : new CompilationCache();
         this.compiler = compiler != null ? compiler : Ili2cUtil::compile;
         this.definitionFinder = new InterlisDefinitionFinder(server, documents, this.compilationCache);
+        this.modelDiscoveryService = new ModelDiscoveryService();
+        this.completionProvider = new InterlisCompletionProvider(server, documents, this.compilationCache, this.compiler, this.modelDiscoveryService);
+    }
+
+    void onClientSettingsUpdated(ClientSettings settings) {
+        try {
+            modelDiscoveryService.ensureInitialized(settings);
+        } catch (Exception ex) {
+            LOG.warn("Model discovery refresh failed", ex);
+        }
     }
 
     @Override
@@ -86,6 +98,11 @@ public class InterlisTextDocumentService implements TextDocumentService {
             LOG.error("Formatting failed", ex);
         }
         return CompletableFuture.completedFuture(edits);
+    }
+
+    @Override
+    public CompletableFuture<Either<List<CompletionItem>, CompletionList>> completion(CompletionParams params) {
+        return CompletableFuture.supplyAsync(() -> completionProvider.complete(params));
     }
 
     @Override
