@@ -39,6 +39,10 @@
       {
         "command": "interlis.uml.show",
         "title": "INTERLIS: Show UML class diagram"
+      },
+      {
+        "command": "interlis.docx.export",
+        "title": "INTERLIS: Export documentation as DOCX"
       }
     ],
     "configuration": {

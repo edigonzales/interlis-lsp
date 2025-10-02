@@ -1,13 +1,14 @@
 package ch.so.agi.lsp.interlis;
 
+import ch.interlis.ili2c.metamodel.TransferDescription;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Base64;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.MessageParams;
 import org.eclipse.lsp4j.MessageType;
-
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
-
-import ch.interlis.ili2c.metamodel.TransferDescription;
 
 /** Central place for workspace/executeCommand handlers. */
 public class CommandHandlers {
@@ -60,5 +61,52 @@ public class CommandHandlers {
         } catch (Exception e) {
             return CompletableFuture.failedFuture(e);
         }
+    }
+
+    public CompletableFuture<String> exportDocx(String fileUriOrPath, String titleOverride) {
+        if (server.getClient() != null) {
+            server.getClient().logMessage(new MessageParams(
+                MessageType.Log, "exportDocx called for " + fileUriOrPath));
+        }
+
+        ClientSettings cfg = server.getClientSettings();
+        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(cfg, fileUriOrPath);
+        List<Diagnostic> diagnostics = DiagnosticsMapper.toDiagnostics(outcome.getMessages());
+        server.publishDiagnostics(fileUriOrPath, diagnostics);
+        server.clearOutput();
+        server.logToClient(outcome.getLogText());
+
+        TransferDescription td = outcome.getTransferDescription();
+        if (td == null) {
+            return CompletableFuture.failedFuture(
+                new IllegalStateException("ili2c did not return a TransferDescription"));
+        }
+
+        try {
+            String title = (titleOverride != null && !titleOverride.isBlank())
+                    ? titleOverride
+                    : deriveDocumentTitle(fileUriOrPath);
+            byte[] bytes = InterlisDocxExporter.renderDocx(td, title);
+            String base64 = Base64.getEncoder().encodeToString(bytes);
+            return CompletableFuture.completedFuture(base64);
+        } catch (Exception e) {
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+
+    private static String deriveDocumentTitle(String fileUriOrPath) {
+        if (fileUriOrPath == null || fileUriOrPath.isBlank()) {
+            return "INTERLIS";
+        }
+        try {
+            Path p = Paths.get(fileUriOrPath);
+            Path name = p.getFileName();
+            if (name != null) {
+                return name.toString();
+            }
+        } catch (Exception ignore) {
+            // fall back to raw input
+        }
+        return fileUriOrPath;
     }
 }
