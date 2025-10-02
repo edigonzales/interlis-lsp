@@ -13,6 +13,9 @@ public class ClientSettings {
     /** Comma-separated string as received from the client (raw). */
     private String modelRepositories = "";
 
+    /** Whether repository discovery should silence ili2c stdout logging. */
+    private boolean suppressRepositoryLogs = true;
+
     /** Parsed, trimmed list (derived from modelRepositories). */
     public List<String> getModelRepositoriesList() {
         if (modelRepositories == null || modelRepositories.isBlank()) return List.of();
@@ -30,8 +33,16 @@ public class ClientSettings {
         this.modelRepositories = v != null ? v : "";
     }
 
+    public boolean isSuppressRepositoryLogs() {
+        return suppressRepositoryLogs;
+    }
+
+    public void setSuppressRepositoryLogs(boolean suppressRepositoryLogs) {
+        this.suppressRepositoryLogs = suppressRepositoryLogs;
+    }
+
     @Override public String toString() {
-        return "ClientSettings{modelRepositories='" + modelRepositories + "'}";
+        return "ClientSettings{modelRepositories='" + modelRepositories + "', suppressRepositoryLogs=" + suppressRepositoryLogs + "}";
     }
 
     /** Build from initOptions or didChangeConfiguration payloads. */
@@ -50,6 +61,13 @@ public class ClientSettings {
                 } else if (mr != null) {
                     s.setModelRepositories(String.valueOf(mr));
                 }
+
+                Object suppress = sec.get("suppressRepositoryLogs");
+                if (suppress instanceof Boolean bool) {
+                    s.setSuppressRepositoryLogs(bool);
+                } else if (suppress instanceof String str) {
+                    s.setSuppressRepositoryLogs(Boolean.parseBoolean(str));
+                }
             }
             return s;
         }
@@ -66,6 +84,17 @@ public class ClientSettings {
 
                 if (sec.has("modelRepositories") && sec.get("modelRepositories").isJsonPrimitive()) {
                     s.setModelRepositories(sec.getAsJsonPrimitive("modelRepositories").getAsString());
+                }
+                if (sec.has("suppressRepositoryLogs")) {
+                    JsonElement el = sec.get("suppressRepositoryLogs");
+                    if (el.isJsonPrimitive()) {
+                        JsonPrimitive prim = el.getAsJsonPrimitive();
+                        if (prim.isBoolean()) {
+                            s.setSuppressRepositoryLogs(prim.getAsBoolean());
+                        } else if (prim.isString()) {
+                            s.setSuppressRepositoryLogs(Boolean.parseBoolean(prim.getAsString()));
+                        }
+                    }
                 }
             }
         } catch (Exception ignore) { /* leave defaults */ }

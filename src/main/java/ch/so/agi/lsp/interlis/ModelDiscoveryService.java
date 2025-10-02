@@ -1,5 +1,7 @@
 package ch.so.agi.lsp.interlis;
 
+import ch.ehi.basics.logging.EhiLogger;
+import ch.ehi.basics.logging.StdListener;
 import ch.interlis.ili2c.Ili2cSettings;
 import ch.interlis.ilirepository.impl.ModelLister;
 import ch.interlis.ilirepository.impl.ModelMetadata;
@@ -25,6 +27,8 @@ import java.util.stream.Collectors;
 final class ModelDiscoveryService {
     private static final Logger LOG = LoggerFactory.getLogger(ModelDiscoveryService.class);
 
+    private static final Object LOG_LOCK = new Object();
+
     private final Map<String, ModelMetadata> modelCache = new ConcurrentHashMap<>();
     private volatile boolean initialized = false;
     private volatile String lastRepositoryKey = "";
@@ -44,8 +48,10 @@ final class ModelDiscoveryService {
             List<String> repositories = parseRepositories(settings);
             modelCache.clear();
 
+            boolean suppressLogs = settings != null && settings.isSuppressRepositoryLogs();
+
             for (String repository : repositories) {
-                discoverModelsFromRepository(repository);
+                discoverModelsFromRepository(repository, suppressLogs);
             }
 
             initialized = true;
@@ -80,30 +86,56 @@ final class ModelDiscoveryService {
         return result;
     }
 
-    private void discoverModelsFromRepository(String repositoryUrl) {
+    private void discoverModelsFromRepository(String repositoryUrl, boolean suppressLogs) {
         if (repositoryUrl == null || repositoryUrl.isBlank()) {
             return;
         }
 
-        RepositoryAccess repoAccess = new RepositoryAccess();
-        ModelLister modelLister = new ModelLister();
-        modelLister.setIgnoreDuplicates(true);
+        Runnable task = () -> {
+            RepositoryAccess repoAccess = new RepositoryAccess();
+            ModelLister modelLister = new ModelLister();
+            modelLister.setIgnoreDuplicates(true);
 
-        try {
-            RepositoryVisitor visitor = new RepositoryVisitor(repoAccess, modelLister);
-            visitor.setRepositories(new String[]{repositoryUrl});
-            visitor.visitRepositories();
+            try {
+                RepositoryVisitor visitor = new RepositoryVisitor(repoAccess, modelLister);
+                visitor.setRepositories(new String[]{repositoryUrl});
+                visitor.visitRepositories();
 
-            List<ModelMetadata> merged = modelLister.getResult2();
-            List<ModelMetadata> latest = RepositoryAccess.getLatestVersions2(merged);
+                List<ModelMetadata> merged = modelLister.getResult2();
+                List<ModelMetadata> latest = RepositoryAccess.getLatestVersions2(merged);
 
-            for (ModelMetadata metadata : latest) {
-                if (metadata != null && metadata.getName() != null) {
-                    modelCache.put(metadata.getName(), metadata);
+                for (ModelMetadata metadata : latest) {
+                    if (metadata != null && metadata.getName() != null) {
+                        modelCache.put(metadata.getName(), metadata);
+                    }
                 }
+            } catch (RepositoryAccessException ex) {
+                LOG.warn("Failed to fetch repository {}: {}", repositoryUrl, ex.getMessage());
             }
-        } catch (RepositoryAccessException ex) {
-            LOG.warn("Failed to fetch repository {}: {}", repositoryUrl, ex.getMessage());
+        };
+
+        if (suppressLogs) {
+            runWithSuppressedLogs(task);
+        } else {
+            task.run();
+        }
+    }
+
+    private static void runWithSuppressedLogs(Runnable action) {
+        if (action == null) {
+            return;
+        }
+
+        synchronized (LOG_LOCK) {
+            StdListener std = StdListener.getInstance();
+            try {
+                std.skipInfo(true);
+                EhiLogger.getInstance().removeListener(std);
+                action.run();
+            } finally {
+                EhiLogger.getInstance().addListener(std);
+                std.skipInfo(false);
+            }
         }
     }
 

@@ -30,7 +30,8 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
 
     @Override
     public CompletableFuture<InitializeResult> initialize(InitializeParams params) {
-        setClientSettings(ClientSettings.from(params.getInitializationOptions()));
+        ClientSettings settings = ClientSettings.from(params.getInitializationOptions());
+        setClientSettings(settings);
         
         ServerCapabilities caps = new ServerCapabilities();
 
@@ -110,7 +111,9 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
     }
 
     public void setClientSettings(ClientSettings s) {
-        clientSettings.set(s != null ? s : new ClientSettings());
+        ClientSettings sanitized = s != null ? s : new ClientSettings();
+        clientSettings.set(sanitized);
+        textDocumentService.onClientSettingsUpdated(sanitized);
     }
     
     public void clearOutput() {

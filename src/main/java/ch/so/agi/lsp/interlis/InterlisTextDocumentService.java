@@ -42,6 +42,14 @@ public class InterlisTextDocumentService implements TextDocumentService {
         this.completionProvider = new InterlisCompletionProvider(server, documents, this.compilationCache, this.compiler, this.modelDiscoveryService);
     }
 
+    void onClientSettingsUpdated(ClientSettings settings) {
+        try {
+            modelDiscoveryService.ensureInitialized(settings);
+        } catch (Exception ex) {
+            LOG.warn("Model discovery refresh failed", ex);
+        }
+    }
+
     @Override
     public void didOpen(DidOpenTextDocumentParams params) {
         String uri = params.getTextDocument().getUri();
