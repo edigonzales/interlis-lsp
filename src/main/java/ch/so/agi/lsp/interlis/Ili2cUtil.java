@@ -11,6 +11,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.locks.ReentrantLock;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,6 +32,20 @@ import ch.interlis.iox_j.logging.FileLogger;
  */
 public class Ili2cUtil {
     private static final Logger LOG = LoggerFactory.getLogger(Ili2cUtil.class);
+
+    private static final ReentrantLock COMPILE_LOCK = new ReentrantLock();
+
+    private static volatile CompilationMonitor compilationMonitor;
+
+    interface CompilationMonitor {
+        void onStart(Thread thread);
+
+        void onFinish(Thread thread);
+    }
+
+    static void setCompilationMonitor(CompilationMonitor monitor) {
+        compilationMonitor = monitor;
+    }
 
 //    private final ClientSettings settings;
 
@@ -127,10 +142,13 @@ public class Ili2cUtil {
 
     /** Validate an .ili file by calling ili2c's Java API (no external process!). */
     public static CompilationOutcome compile(ClientSettings settings, String fileUriOrPath) {
+        COMPILE_LOCK.lock();
+        CompilationMonitor monitor = compilationMonitor;
+        boolean notifiedStart = false;
         settings = settings != null ? settings : new ClientSettings();
-        
+
         List<Message> messages = new ArrayList<>();
-        
+
         LOG.info("fileUriOrPath: " + fileUriOrPath);
         LOG.info("settings.getModelRepositories(): " + settings.getModelRepositories());
                
@@ -139,6 +157,11 @@ public class Ili2cUtil {
         TransferDescription td = null;
         String logText = "";
         try {
+            if (monitor != null) {
+                monitor.onStart(Thread.currentThread());
+                notifiedStart = true;
+            }
+
             logFile = Files.createTempFile("ili2c_", ".log");
             flog = new FileLogger(logFile.toFile(), false);
             
@@ -178,22 +201,34 @@ public class Ili2cUtil {
         } catch (Exception e) {
             return new CompilationOutcome(null, "[ili2c] failed: " + e.getMessage(), messages);
         } finally {
-            EhiLogger.getInstance().addListener(StdListener.getInstance());
-
-            if (flog != null) {
-                try { flog.close(); } catch (Exception ignore) {}
-                EhiLogger.getInstance().removeListener(flog);
-            }
-        }
-
-        try {
-            logText = Files.exists(logFile) ? Files.readString(logFile, StandardCharsets.UTF_8) : "[ili2c] log file not found: " + logFile;
-        } catch (IOException io) {
-            logText = "[ili2c] failed to read log file: " + io.getMessage();
-        } finally {
             try {
-                Files.deleteIfExists(logFile);
-            } catch (IOException ignore) {
+                StdListener.getInstance().skipInfo(false);
+                EhiLogger.getInstance().addListener(StdListener.getInstance());
+
+                if (flog != null) {
+                    try { flog.close(); } catch (Exception ignore) {}
+                    EhiLogger.getInstance().removeListener(flog);
+                }
+
+                if (logFile != null) {
+                    try {
+                        logText = Files.exists(logFile)
+                                ? Files.readString(logFile, StandardCharsets.UTF_8)
+                                : "[ili2c] log file not found: " + logFile;
+                    } catch (IOException io) {
+                        logText = "[ili2c] failed to read log file: " + io.getMessage();
+                    } finally {
+                        try {
+                            Files.deleteIfExists(logFile);
+                        } catch (IOException ignore) {
+                        }
+                    }
+                }
+            } finally {
+                if (monitor != null && notifiedStart) {
+                    monitor.onFinish(Thread.currentThread());
+                }
+                COMPILE_LOCK.unlock();
             }
         }
 
