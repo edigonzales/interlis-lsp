@@ -1,6 +1,7 @@
 package ch.so.agi.lsp.interlis;
 
 import ch.ehi.basics.logging.EhiLogger;
+import ch.ehi.basics.logging.LogListener;
 import ch.ehi.basics.logging.StdListener;
 import ch.interlis.ili2c.Ili2cSettings;
 import ch.interlis.ilirepository.impl.ModelLister;
@@ -121,6 +122,8 @@ final class ModelDiscoveryService {
         }
     }
 
+    private static final LogListener NULL_LOG_LISTENER = event -> { };
+
     private static void runWithSuppressedLogs(Runnable action) {
         if (action == null) {
             return;
@@ -128,13 +131,30 @@ final class ModelDiscoveryService {
 
         synchronized (LOG_LOCK) {
             StdListener std = StdListener.getInstance();
+            var logger = EhiLogger.getInstance();
             try {
                 std.skipInfo(true);
-                EhiLogger.getInstance().removeListener(std);
+                std.skipState(true);
+                std.skipStateTrace(true);
+                std.skipUnusualStateTrace(true);
+                std.skipAdaption(true);
+                std.skipBackendCmd(true);
+                std.skipDebugTrace(true);
+
+                logger.addListener(NULL_LOG_LISTENER);
+                logger.removeListener(std);
                 action.run();
             } finally {
-                EhiLogger.getInstance().addListener(std);
+                logger.addListener(std);
+                logger.removeListener(NULL_LOG_LISTENER);
+
                 std.skipInfo(false);
+                std.skipState(false);
+                std.skipStateTrace(false);
+                std.skipUnusualStateTrace(false);
+                std.skipAdaption(false);
+                std.skipBackendCmd(false);
+                std.skipDebugTrace(false);
             }
         }
     }
