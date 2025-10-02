@@ -17,6 +17,31 @@ import java.util.regex.Pattern;
 final class InterlisCompletionProvider {
     private static final Logger LOG = LoggerFactory.getLogger(InterlisCompletionProvider.class);
     private static final Pattern IMPORTS_PATTERN = Pattern.compile("(?i)\\bIMPORTS\\b");
+    private static final Set<String> TYPE_REFERENCE_KEYWORDS = Set.of(
+            "OF",
+            "FROM",
+            "EXTENDS",
+            "REF",
+            "REFS",
+            "REFERS",
+            "REFERENCE",
+            "BASE",
+            "BASED",
+            "OID",
+            "AS"
+    );
+    private static final Set<String> TYPE_REFERENCE_SKIP_TOKENS = Set.of(
+            "MANDATORY",
+            "OPTIONAL",
+            "SET",
+            "LIST",
+            "BAG",
+            "ARRAY",
+            "ORDERED",
+            "SORTED",
+            "ANYCLASS",
+            "ANYSTRUCTURE"
+    );
 
     private final InterlisLanguageServer server;
     private final DocumentTracker documents;
@@ -128,6 +153,11 @@ final class InterlisCompletionProvider {
             return Collections.emptyList();
         }
 
+        int pathStartOffset = Math.max(caretOffset - path.length(), 0);
+        if (!isTypeReferenceContext(text, pathStartOffset)) {
+            return Collections.emptyList();
+        }
+
         String prefix = parts[parts.length - 1];
         Object parent = resolveChain(td, parts, parts.length - 1);
         if (parent == null) {
@@ -168,6 +198,11 @@ final class InterlisCompletionProvider {
     private List<CompletionItem> completeModelWord(String text, int caretOffset, String lineText, TransferDescription td) {
         String word = currentWord(lineText);
         if (word.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        int wordStartOffset = Math.max(caretOffset - word.length(), 0);
+        if (!isTypeReferenceContext(text, wordStartOffset)) {
             return Collections.emptyList();
         }
 
@@ -261,6 +296,50 @@ final class InterlisCompletionProvider {
             }
         }
         return lineText.substring(i + 1);
+    }
+
+    private static boolean isTypeReferenceContext(String text, int tokenStart) {
+        if (text == null || text.isEmpty()) {
+            return false;
+        }
+        int index = Math.min(Math.max(tokenStart, 0), text.length());
+        int i = index - 1;
+        while (i >= 0) {
+            char ch = text.charAt(i);
+            if (Character.isWhitespace(ch)) {
+                i--;
+                continue;
+            }
+            if (ch == ':') {
+                return true;
+            }
+            if (ch == ';' || ch == ',' || ch == '=' || ch == '(' || ch == ')' || ch == '{' || ch == '}') {
+                return false;
+            }
+            if (Character.isLetterOrDigit(ch) || ch == '_') {
+                int end = i;
+                while (i >= 0) {
+                    char c = text.charAt(i);
+                    if (Character.isLetterOrDigit(c) || c == '_') {
+                        i--;
+                    } else {
+                        break;
+                    }
+                }
+                String token = text.substring(i + 1, end + 1);
+                String upper = token.toUpperCase(Locale.ROOT);
+                if (TYPE_REFERENCE_KEYWORDS.contains(upper)) {
+                    return true;
+                }
+                if (TYPE_REFERENCE_SKIP_TOKENS.contains(upper) || upper.equals("TO")) {
+                    // Continue scanning to find the actual trigger (e.g. REFERENCE TO, BAG OF)
+                    continue;
+                }
+                return false;
+            }
+            return false;
+        }
+        return false;
     }
 
     private static Object resolveChain(TransferDescription td, String[] parts, int stop) {
