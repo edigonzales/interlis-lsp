@@ -65,7 +65,8 @@ public class InterlisWorkspaceService implements WorkspaceService {
     }
 
     @JsonRequest(InterlisLanguageServer.REQ_EXPORT_DOCX)
-    public CompletableFuture<String> exportDocx(ExportDocxParams params) {
+    public CompletableFuture<String> exportDocx(Object rawParams) {
+        ExportDocxParams params = coerceExportParams(rawParams);
         if (params == null) {
             return invalidParams("Expected parameters with uri or path");
         }
@@ -78,6 +79,35 @@ public class InterlisWorkspaceService implements WorkspaceService {
 
         LOG.info("docx export called with: {}", normalized);
         return handlers.exportDocx(normalized, params.getTitle());
+    }
+
+    private ExportDocxParams coerceExportParams(Object rawParams) {
+        if (rawParams == null) {
+            return null;
+        }
+
+        if (rawParams instanceof ExportDocxParams typed) {
+            return typed;
+        }
+
+        ExportDocxParams params = new ExportDocxParams();
+
+        if (rawParams instanceof java.util.Map<?, ?> map) {
+            params.setUri(coerceArgToString(map.get("uri")));
+            params.setPath(coerceArgToString(map.get("path")));
+            params.setTitle(coerceArgToString(map.get("title")));
+            if (params.getUri() != null || params.getPath() != null || params.getTitle() != null) {
+                return params;
+            }
+        }
+
+        String fallback = coerceArgToString(rawParams);
+        if (fallback != null && !fallback.isBlank()) {
+            params.setPath(fallback);
+            return params;
+        }
+
+        return null;
     }
 
     private String extractPath(List<Object> args) {
