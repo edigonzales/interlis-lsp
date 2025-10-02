@@ -48,3 +48,20 @@ Real “fold by AST” works best via your LSP (foldingRangeProvider) so blocks 
 - Sequence Diagramme für verschiedene Features
 - Autocomplete / Suggestions
  
+ 
+ ## Develop
+ 
+ ```
+ git fetch origin pull/9/head:codex/update-interlistextdocumentservice-to-bypass-cache
+ ```
+ 
+ ```
+ git checkout codex/update-interlistextdocumentservice-to-bypass-cache
+ ```
+ 
+ ```
+ git checkout main
+ ```
+ 
+
+ 
