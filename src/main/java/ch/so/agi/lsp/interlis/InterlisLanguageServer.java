@@ -51,6 +51,11 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
         caps.setDefinitionProvider(true);
         caps.setDocumentSymbolProvider(true);
 
+        CompletionOptions completion = new CompletionOptions();
+        completion.setResolveProvider(false);
+        completion.setTriggerCharacters(Arrays.asList(".", ":"));
+        caps.setCompletionProvider(completion);
+
         DocumentOnTypeFormattingOptions onType = new DocumentOnTypeFormattingOptions("=");
         caps.setDocumentOnTypeFormattingProvider(onType);
 
