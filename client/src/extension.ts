@@ -255,6 +255,54 @@ export async function activate(context: vscode.ExtensionContext) {
       }
     })
   );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("interlis.docx.export", async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) { vscode.window.showWarningMessage("Open an .ili file first."); return; }
+
+      const documentUri = editor.document.uri;
+      const fileUri = documentUri.toString();
+
+      let defaultUri: vscode.Uri | undefined;
+      if (documentUri.scheme === "file") {
+        const folder = path.dirname(documentUri.fsPath);
+        const base = path.basename(documentUri.fsPath, path.extname(documentUri.fsPath));
+        defaultUri = vscode.Uri.file(path.join(folder, `${base}.docx`));
+      }
+
+      const saveOptions: vscode.SaveDialogOptions = {
+        saveLabel: "Export INTERLIS documentation",
+        filters: { "Word Document": ["docx"] }
+      };
+      if (defaultUri) {
+        saveOptions.defaultUri = defaultUri;
+      }
+
+      const target = await vscode.window.showSaveDialog(saveOptions);
+      if (!target) {
+        return;
+      }
+
+      try {
+        const base64 = await client!.sendRequest<string>("interlis/exportDocx", { uri: fileUri });
+        if (!base64) {
+          throw new Error("Server returned an empty document");
+        }
+
+        const bytes = Buffer.from(base64, "base64");
+        await vscode.workspace.fs.writeFile(target, bytes);
+
+        if (target.scheme === "file") {
+          vscode.window.showInformationMessage(`Saved INTERLIS documentation to ${target.fsPath}`);
+        } else {
+          vscode.window.showInformationMessage("Saved INTERLIS documentation.");
+        }
+      } catch (err: any) {
+        vscode.window.showErrorMessage(`Failed to export INTERLIS documentation: ${err?.message ?? err}`);
+      }
+    })
+  );
 }
 
 async function ensurePanelVisible(preserveEditorFocus = true) {

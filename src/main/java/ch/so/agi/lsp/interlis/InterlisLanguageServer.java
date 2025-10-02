@@ -20,6 +20,7 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
 
     public static final String CMD_COMPILE = "interlis.compile"; // workspace/executeCommand
     public static final String CMD_GENERATE_UML = "interlis.uml";
+    public static final String REQ_EXPORT_DOCX = "interlis/exportDocx";
 
     public InterlisLanguageServer() {
         this.textDocumentService = new InterlisTextDocumentService(this);

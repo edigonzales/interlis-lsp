@@ -4,6 +4,7 @@ import org.eclipse.lsp4j.ExecuteCommandParams;
 import org.eclipse.lsp4j.jsonrpc.ResponseErrorException;
 import org.eclipse.lsp4j.jsonrpc.messages.ResponseError;
 import org.eclipse.lsp4j.jsonrpc.messages.ResponseErrorCode;
+import org.eclipse.lsp4j.jsonrpc.services.JsonRequest;
 import org.eclipse.lsp4j.services.WorkspaceService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -63,22 +64,59 @@ public class InterlisWorkspaceService implements WorkspaceService {
         return CompletableFuture.completedFuture(null);
     }
 
+    @JsonRequest(InterlisLanguageServer.REQ_EXPORT_DOCX)
+    public CompletableFuture<String> exportDocx(Object rawParams) {
+        ExportDocxParams params = coerceExportParams(rawParams);
+        if (params == null) {
+            return invalidParams("Expected parameters with uri or path");
+        }
+
+        String candidate = firstNonBlank(params.getPath(), params.getUri());
+        String normalized = normalizePath(candidate);
+        if (normalized == null) {
+            return invalidParams("Expected uri or path to be provided");
+        }
+
+        LOG.info("docx export called with: {}", normalized);
+        return handlers.exportDocx(normalized, params.getTitle());
+    }
+
+    private ExportDocxParams coerceExportParams(Object rawParams) {
+        if (rawParams == null) {
+            return null;
+        }
+
+        if (rawParams instanceof ExportDocxParams typed) {
+            return typed;
+        }
+
+        ExportDocxParams params = new ExportDocxParams();
+
+        if (rawParams instanceof java.util.Map<?, ?> map) {
+            params.setUri(coerceArgToString(map.get("uri")));
+            params.setPath(coerceArgToString(map.get("path")));
+            params.setTitle(coerceArgToString(map.get("title")));
+            if (params.getUri() != null || params.getPath() != null || params.getTitle() != null) {
+                return params;
+            }
+        }
+
+        String fallback = coerceArgToString(rawParams);
+        if (fallback != null && !fallback.isBlank()) {
+            params.setPath(fallback);
+            return params;
+        }
+
+        return null;
+    }
+
     private String extractPath(List<Object> args) {
         String fileUriOrPath = coerceArgToString(args != null && !args.isEmpty() ? args.get(0) : null);
         if (fileUriOrPath == null || fileUriOrPath.isBlank()) {
             return null;
         }
 
-        String pathOrUri = fileUriOrPath;
-        if (pathOrUri.startsWith("file:")) {
-            try {
-                Path p = Paths.get(URI.create(pathOrUri));
-                pathOrUri = p.toString();
-            } catch (Exception e) {
-                LOG.warn("Could not convert URI to path: {}", pathOrUri, e);
-            }
-        }
-        return pathOrUri;
+        return normalizePath(fileUriOrPath);
     }
 
     private static String coerceArgToString(Object arg) {
@@ -94,5 +132,73 @@ public class InterlisWorkspaceService implements WorkspaceService {
         }
         // Fallback: last resort
         return String.valueOf(arg);
+    }
+
+    private String normalizePath(String pathOrUri) {
+        if (pathOrUri == null || pathOrUri.isBlank()) {
+            return null;
+        }
+
+        String normalized = pathOrUri;
+        if (normalized.startsWith("file:")) {
+            try {
+                Path p = Paths.get(URI.create(normalized));
+                normalized = p.toString();
+            } catch (Exception e) {
+                LOG.warn("Could not convert URI to path: {}", normalized, e);
+            }
+        }
+        return normalized;
+    }
+
+    private CompletableFuture<String> invalidParams(String message) {
+        ResponseError err = new ResponseError(ResponseErrorCode.InvalidParams, message, null);
+        CompletableFuture<String> failed = new CompletableFuture<>();
+        failed.completeExceptionally(new ResponseErrorException(err));
+        return failed;
+    }
+
+    private static String firstNonBlank(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    public static class ExportDocxParams {
+        private String uri;
+        private String path;
+        private String title;
+
+        public ExportDocxParams() {}
+
+        public String getUri() {
+            return uri;
+        }
+
+        public void setUri(String uri) {
+            this.uri = uri;
+        }
+
+        public String getPath() {
+            return path;
+        }
+
+        public void setPath(String path) {
+            this.path = path;
+        }
+
+        public String getTitle() {
+            return title;
+        }
+
+        public void setTitle(String title) {
+            this.title = title;
+        }
     }
 }
