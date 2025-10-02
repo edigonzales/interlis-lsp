@@ -8,6 +8,8 @@ import org.eclipse.lsp4j.services.WorkspaceService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 
 import java.net.URI;
@@ -85,14 +87,35 @@ public class InterlisWorkspaceService implements WorkspaceService {
         if (arg == null) return null;
         if (arg instanceof String s) return s;
         if (arg instanceof JsonPrimitive jp && jp.isString()) return jp.getAsString();
+        if (arg instanceof JsonObject jo) {
+            String uri = getStringMember(jo, "uri");
+            if (uri != null) return uri;
+            String path = getStringMember(jo, "path");
+            if (path != null) return path;
+            String title = getStringMember(jo, "title");
+            if (title != null) return title;
+        }
         if (arg instanceof java.util.Map<?, ?> map) {
             // Some clients send objects; try common shapes
             Object uri = map.get("uri");
             if (uri instanceof String s) return s;
             Object path = map.get("path");
             if (path instanceof String s) return s;
+            Object title = map.get("title");
+            if (title instanceof String s) return s;
         }
         // Fallback: last resort
         return String.valueOf(arg);
+    }
+
+    private static String getStringMember(JsonObject obj, String memberName) {
+        if (!obj.has(memberName)) return null;
+        JsonElement el = obj.get(memberName);
+        if (el == null) return null;
+        JsonPrimitive primitive = el.isJsonPrimitive() ? el.getAsJsonPrimitive() : null;
+        if (primitive != null && primitive.isString()) {
+            return primitive.getAsString();
+        }
+        return null;
     }
 }
