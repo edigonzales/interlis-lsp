@@ -6,9 +6,13 @@ import java.nio.file.Paths;
 import java.util.Base64;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.Optional;
 import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.MessageParams;
 import org.eclipse.lsp4j.MessageType;
+import org.eclipse.lsp4j.jsonrpc.ResponseErrorException;
+import org.eclipse.lsp4j.jsonrpc.messages.ResponseError;
+import org.eclipse.lsp4j.jsonrpc.messages.ResponseErrorCode;
 
 /** Central place for workspace/executeCommand handlers. */
 public class CommandHandlers {
@@ -50,8 +54,7 @@ public class CommandHandlers {
 
         TransferDescription td = outcome.getTransferDescription();
         if (td == null) {
-            return CompletableFuture.failedFuture(
-                new IllegalStateException("ili2c did not return a TransferDescription"));
+            return CompletableFuture.failedFuture(compilerFailure(fileUriOrPath, outcome));
         }
 
         try {
@@ -78,8 +81,7 @@ public class CommandHandlers {
 
         TransferDescription td = outcome.getTransferDescription();
         if (td == null) {
-            return CompletableFuture.failedFuture(
-                new IllegalStateException("ili2c did not return a TransferDescription"));
+            return CompletableFuture.failedFuture(compilerFailure(fileUriOrPath, outcome));
         }
 
         try {
@@ -108,5 +110,32 @@ public class CommandHandlers {
             // fall back to raw input
         }
         return fileUriOrPath;
+    }
+
+    static ResponseErrorException compilerFailure(String fileUriOrPath, Ili2cUtil.CompilationOutcome outcome) {
+        String message = "ili2c did not return a TransferDescription";
+        if (outcome != null) {
+            message = bestErrorMessage(outcome).orElse(message);
+        }
+
+        String details = outcome != null ? outcome.getLogText() : null;
+        if (fileUriOrPath != null && !fileUriOrPath.isBlank()) {
+            message = message + " (" + fileUriOrPath + ")";
+        }
+
+        ResponseError error = new ResponseError(ResponseErrorCode.InternalError, message, details);
+        return new ResponseErrorException(error);
+    }
+
+    private static Optional<String> bestErrorMessage(Ili2cUtil.CompilationOutcome outcome) {
+        if (outcome == null || outcome.getMessages() == null) {
+            return Optional.empty();
+        }
+
+        return outcome.getMessages().stream()
+                .filter(msg -> msg != null && msg.getSeverity() == Ili2cUtil.Message.Severity.ERROR)
+                .map(Ili2cUtil.Message::getText)
+                .filter(text -> text != null && !text.isBlank())
+                .findFirst();
     }
 }

@@ -1,16 +1,21 @@
 package ch.so.agi.lsp.interlis;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.eclipse.lsp4j.jsonrpc.ResponseErrorException;
+import org.eclipse.lsp4j.jsonrpc.messages.ResponseErrorCode;
 
 class CommandHandlersTest {
 
@@ -42,5 +47,20 @@ class CommandHandlersTest {
 
         assertTrue(html.contains("classDiagram"));
         assertTrue(html.contains("Person"));
+    }
+
+    @Test
+    void exportDocxFailsWithResponseErrorWhenCompilationFails() {
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        CommandHandlers handlers = new CommandHandlers(server);
+
+        Path nonexistent = tempDir.resolve("Missing.ili");
+        CompletableFuture<String> future = handlers.exportDocx(nonexistent.toString(), null);
+
+        ExecutionException exec = assertThrows(ExecutionException.class, () -> future.get(30, TimeUnit.SECONDS));
+        Throwable cause = exec.getCause();
+        ResponseErrorException ree = assertInstanceOf(ResponseErrorException.class, cause);
+        assertEquals(ResponseErrorCode.InternalError.getValue(), ree.getResponseError().getCode());
+        assertTrue(ree.getMessage().contains(nonexistent.getFileName().toString()));
     }
 }
