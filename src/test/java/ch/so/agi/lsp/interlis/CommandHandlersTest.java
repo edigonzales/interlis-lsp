@@ -55,7 +55,7 @@ class CommandHandlersTest {
         CommandHandlers handlers = new CommandHandlers(server);
 
         Path nonexistent = tempDir.resolve("Missing.ili");
-        CompletableFuture<String> future = handlers.exportDocx(nonexistent.toString(), null);
+        CompletableFuture<String> future = handlers.exportDocx(nonexistent.toUri().toString(), null);
 
         ExecutionException exec = assertThrows(ExecutionException.class, () -> future.get(30, TimeUnit.SECONDS));
         Throwable cause = exec.getCause();
