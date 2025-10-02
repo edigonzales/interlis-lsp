@@ -11,6 +11,7 @@ import org.eclipse.lsp4j.DocumentSymbol;
 import org.eclipse.lsp4j.DocumentSymbolParams;
 import org.eclipse.lsp4j.SymbolKind;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
+import org.eclipse.lsp4j.DidSaveTextDocumentParams;
 import org.eclipse.lsp4j.SymbolInformation;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.TextDocumentItem;
@@ -296,6 +297,71 @@ class InterlisTextDocumentServiceTest {
         DocumentSymbol importSymbol = mainSymbol.getChildren().get(0);
         assertEquals("DirectImport", importSymbol.getName());
         assertEquals(0, importSymbol.getChildren().size());
+    }
+
+    @Test
+    void didSaveForcesRecompileAndPublishesFreshLog(@TempDir Path tempDir) throws Exception {
+        Path modelPath = Files.createTempFile(tempDir, "ModelSave", ".ili");
+        String content = "MODEL ModelSave; END ModelSave.";
+        Files.writeString(modelPath, content);
+
+        CompilationCache cache = new CompilationCache();
+
+        RecordingServer server = new RecordingServer();
+        server.setClientSettings(new ClientSettings());
+
+        AtomicInteger compileCount = new AtomicInteger();
+        InterlisTextDocumentService service = new InterlisTextDocumentService(
+                server,
+                cache,
+                (cfg, path) -> {
+                    int count = compileCount.incrementAndGet();
+                    TransferDescription td = new TransferDescription() {
+                        @Override
+                        public Model[] getModelsFromLastFile() {
+                            return new Model[0];
+                        }
+                    };
+                    return new Ili2cUtil.CompilationOutcome(td, "LOG-" + count, Collections.emptyList());
+                });
+
+        TextDocumentItem item = new TextDocumentItem(modelPath.toUri().toString(), "interlis", 1, content);
+        service.didOpen(new DidOpenTextDocumentParams(item));
+
+        assertEquals(1, compileCount.get(), "Expected initial compile during didOpen");
+        assertEquals("LOG-1", server.getLogText(), "Expected didOpen to publish first compile log");
+
+        DidSaveTextDocumentParams saveParams = new DidSaveTextDocumentParams();
+        saveParams.setTextDocument(new TextDocumentIdentifier(item.getUri()));
+        service.didSave(saveParams);
+
+        assertEquals(2, compileCount.get(), "Expected didSave to force recompilation");
+        assertEquals("LOG-2", server.getLogText(), "Expected didSave to publish fresh compile log");
+
+        Ili2cUtil.CompilationOutcome cached = cache.get(modelPath.toString());
+        assertNotNull(cached, "Expected compilation outcome to be cached after save");
+        assertEquals("LOG-2", cached.getLogText(), "Expected cache to hold the latest compilation outcome");
+    }
+
+    private static class RecordingServer extends InterlisLanguageServer {
+        private final StringBuilder logBuffer = new StringBuilder();
+
+        @Override
+        public void clearOutput() {
+            logBuffer.setLength(0);
+        }
+
+        @Override
+        public void logToClient(String text) {
+            if (text == null) {
+                return;
+            }
+            logBuffer.append(text);
+        }
+
+        String getLogText() {
+            return logBuffer.toString();
+        }
     }
 
     private static final class TestTable extends Table {
