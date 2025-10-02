@@ -202,13 +202,87 @@ final class InterlisDocumentSymbolCollector {
         Range lineRange = lineRange(element);
         Range selection = selectionRange(element, lineRange);
 
+        Range adjustedRange = ensureContains(lineRange, selection);
+        Range adjustedSelection = selection;
+        if (!contains(adjustedRange, selection)) {
+            // Fall back to the enclosing range if selection cannot be kept inside.
+            adjustedSelection = adjustedRange;
+        }
+
         DocumentSymbol symbol = new DocumentSymbol();
         symbol.setName(name);
         symbol.setDetail(detail);
         symbol.setKind(kind);
-        symbol.setRange(lineRange);
-        symbol.setSelectionRange(selection);
+        symbol.setRange(adjustedRange);
+        symbol.setSelectionRange(adjustedSelection);
         return symbol;
+    }
+
+    private static Range ensureContains(Range outer, Range inner) {
+        if (outer == null) {
+            return inner;
+        }
+        if (inner == null) {
+            return outer;
+        }
+        if (contains(outer, inner)) {
+            return outer;
+        }
+
+        Position start = min(outer.getStart(), inner.getStart());
+        Position end = max(outer.getEnd(), inner.getEnd());
+        return new Range(start, end);
+    }
+
+    private static boolean contains(Range outer, Range inner) {
+        if (outer == null || inner == null) {
+            return false;
+        }
+        return comparePositions(outer.getStart(), inner.getStart()) <= 0
+                && comparePositions(inner.getEnd(), outer.getEnd()) <= 0;
+    }
+
+    private static Position min(Position a, Position b) {
+        if (a == null) {
+            return copyPosition(b);
+        }
+        if (b == null) {
+            return copyPosition(a);
+        }
+        if (comparePositions(a, b) <= 0) {
+            return copyPosition(a);
+        }
+        return copyPosition(b);
+    }
+
+    private static Position max(Position a, Position b) {
+        if (a == null) {
+            return copyPosition(b);
+        }
+        if (b == null) {
+            return copyPosition(a);
+        }
+        if (comparePositions(a, b) >= 0) {
+            return copyPosition(a);
+        }
+        return copyPosition(b);
+    }
+
+    private static int comparePositions(Position a, Position b) {
+        if (a == b) {
+            return 0;
+        }
+        if (a == null) {
+            return -1;
+        }
+        if (b == null) {
+            return 1;
+        }
+        int lineDiff = Integer.compare(a.getLine(), b.getLine());
+        if (lineDiff != 0) {
+            return lineDiff;
+        }
+        return Integer.compare(a.getCharacter(), b.getCharacter());
     }
 
     private Range lineRange(Element element) {

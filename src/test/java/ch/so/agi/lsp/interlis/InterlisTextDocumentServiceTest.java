@@ -10,6 +10,8 @@ import ch.interlis.ili2c.metamodel.ViewableTransferElement;
 import org.eclipse.lsp4j.DocumentSymbol;
 import org.eclipse.lsp4j.DocumentSymbolParams;
 import org.eclipse.lsp4j.SymbolKind;
+import org.eclipse.lsp4j.Position;
+import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
 import org.eclipse.lsp4j.DidSaveTextDocumentParams;
 import org.eclipse.lsp4j.SymbolInformation;
@@ -300,6 +302,40 @@ class InterlisTextDocumentServiceTest {
     }
 
     @Test
+    void documentSymbolsExpandRangesWhenSourceLineExceedsDocument(@TempDir Path tempDir) throws Exception {
+        Path modelPath = Files.createTempFile(tempDir, "ModelRange", ".ili");
+        String content = String.join("\n",
+                "MODEL ModelRange;",
+                "END ModelRange.",
+                "");
+        Files.writeString(modelPath, content);
+
+        ModelStub root = new ModelStub("ModelRange", modelPath.toString(), 200);
+
+        TransferDescription td = new TransferDescription() {
+            @Override
+            public Model[] getModelsFromLastFile() {
+                return new Model[]{root};
+            }
+        };
+
+        InterlisDocumentSymbolCollector collector = new InterlisDocumentSymbolCollector(content);
+        List<DocumentSymbol> symbols = collector.collect(td);
+
+        assertEquals(1, symbols.size());
+        DocumentSymbol modelSymbol = symbols.get(0);
+
+        Range range = modelSymbol.getRange();
+        Range selection = modelSymbol.getSelectionRange();
+
+        assertNotNull(range);
+        assertNotNull(selection);
+        assertTrue(rangeContains(range, selection), "Expected selection range to be within the document symbol range");
+        assertEquals(0, selection.getStart().getLine(), "Selection should be anchored to the model declaration");
+        assertEquals(0, range.getStart().getLine(), "Range should expand to include the selection");
+    }
+
+    @Test
     void didSaveForcesRecompileAndPublishesFreshLog(@TempDir Path tempDir) throws Exception {
         Path modelPath = Files.createTempFile(tempDir, "ModelSave", ".ili");
         String content = "MODEL ModelSave; END ModelSave.";
@@ -420,5 +456,30 @@ class InterlisTextDocumentServiceTest {
         public ch.interlis.ili2c.metamodel.Model[] getImporting() {
             return imports;
         }
+    }
+
+    private static boolean rangeContains(Range outer, Range inner) {
+        if (outer == null || inner == null) {
+            return false;
+        }
+        return comparePositions(outer.getStart(), inner.getStart()) <= 0
+                && comparePositions(inner.getEnd(), outer.getEnd()) <= 0;
+    }
+
+    private static int comparePositions(Position a, Position b) {
+        if (a == b) {
+            return 0;
+        }
+        if (a == null) {
+            return -1;
+        }
+        if (b == null) {
+            return 1;
+        }
+        int lineDiff = Integer.compare(a.getLine(), b.getLine());
+        if (lineDiff != 0) {
+            return lineDiff;
+        }
+        return Integer.compare(a.getCharacter(), b.getCharacter());
     }
 }
