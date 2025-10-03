@@ -15,7 +15,9 @@ import java.util.zip.Deflater;
 public final class PlantUmlHtmlRenderer {
     private static final String TEMPLATE_PATH = "/plantuml_template.html";
     private static final String SOURCE_PLACEHOLDER = "${plantUmlSource}";
-    private static final String URL_PLACEHOLDER = "${plantUmlUrl}";
+    private static final String PNG_URL_PLACEHOLDER = "${plantUmlPngUrl}";
+    private static final String SVG_URL_PLACEHOLDER = "${plantUmlSvgUrl}";
+    private static final String PDF_URL_PLACEHOLDER = "${plantUmlPdfUrl}";
     private static final String TEMPLATE = loadTemplate();
 
     private PlantUmlHtmlRenderer() {
@@ -24,8 +26,19 @@ public final class PlantUmlHtmlRenderer {
     public static String render(String plantUmlSource) {
         Objects.requireNonNull(plantUmlSource, "plantUmlSource must not be null");
         String escapedSource = escapeHtml(plantUmlSource);
-        String url = "https://www.plantuml.com/plantuml/png/" + encodeForPlantUmlServer(plantUmlSource);
-        return TEMPLATE.replace(SOURCE_PLACEHOLDER, escapedSource).replace(URL_PLACEHOLDER, url);
+        String encoded = encodeForPlantUmlServer(plantUmlSource);
+        String pngUrl = buildPlantUmlUrl("png", encoded);
+        String svgUrl = buildPlantUmlUrl("svg", encoded);
+        String pdfUrl = buildPlantUmlUrl("pdf", encoded);
+        return TEMPLATE
+                .replace(SOURCE_PLACEHOLDER, escapedSource)
+                .replace(PNG_URL_PLACEHOLDER, pngUrl)
+                .replace(SVG_URL_PLACEHOLDER, svgUrl)
+                .replace(PDF_URL_PLACEHOLDER, pdfUrl);
+    }
+
+    private static String buildPlantUmlUrl(String format, String encoded) {
+        return "https://www.plantuml.com/plantuml/" + format + "/" + encoded;
     }
 
     private static String loadTemplate() {

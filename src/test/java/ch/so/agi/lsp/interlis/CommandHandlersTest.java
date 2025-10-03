@@ -74,6 +74,8 @@ class CommandHandlersTest {
 
         assertTrue(html.contains("@startuml"));
         assertTrue(html.contains("plantuml/png"));
+        assertTrue(html.contains("plantuml/svg"));
+        assertTrue(html.contains("plantuml/pdf"));
     }
 
     @Test
