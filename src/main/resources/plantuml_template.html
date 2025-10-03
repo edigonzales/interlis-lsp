@@ -1,0 +1,143 @@
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>PlantUML class diagram</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    html, body { height: 100%; margin: 0; }
+    body { background: #ffffff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #333; }
+    .page {
+      height: 100%;
+      padding: 16px;
+      box-sizing: border-box;
+      display: grid;
+      grid-template-columns: minmax(0, 2.5fr) minmax(280px, 1fr);
+      gap: 16px;
+    }
+    .diagram-pane, .source-pane {
+      border: 1px solid #e5e5e5;
+      border-radius: 10px;
+      background: #fafafa;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .diagram-wrap {
+      position: relative;
+      flex: 1 1 auto;
+      overflow: hidden;
+    }
+    .diagram-toolbar {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      z-index: 2;
+      display: flex;
+      gap: 6px;
+    }
+    .diagram-toolbar button,
+    .diagram-toolbar a {
+      padding: 6px 10px;
+      border: 1px solid #d0d0d0;
+      background: #fff;
+      border-radius: 8px;
+      cursor: pointer;
+      text-decoration: none;
+      color: inherit;
+    }
+    .diagram-scroll {
+      position: absolute;
+      inset: 0;
+      overflow: auto;
+    }
+    .diagram-content {
+      transform-origin: top left;
+      display: inline-block;
+    }
+    .diagram-content img {
+      display: block;
+      max-width: 100%;
+    }
+    .source-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid #e5e5e5;
+      background: rgba(255, 255, 255, 0.8);
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      font-size: 12px;
+      color: #5a5a5a;
+    }
+    .source-content {
+      flex: 1 1 auto;
+      overflow: auto;
+      padding: 16px;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      background: #ffffff;
+      color: #333;
+      white-space: pre;
+    }
+  </style>
+</head>
+<body>
+
+<div class="page">
+  <div class="diagram-pane">
+    <div class="diagram-wrap">
+      <div class="diagram-toolbar">
+        <button type="button" data-a="zin">+</button>
+        <button type="button" data-a="zout">−</button>
+        <button type="button" data-a="fit">Fit</button>
+        <a href="${plantUmlUrl}" target="_blank" rel="noreferrer">Open PNG</a>
+      </div>
+      <div class="diagram-scroll">
+        <div class="diagram-content" id="diagramContent">
+          <img id="plantImage" src="${plantUmlUrl}" alt="PlantUML diagram" />
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="source-pane">
+    <div class="source-header">PlantUML source</div>
+    <pre class="source-content">${plantUmlSource}</pre>
+  </div>
+</div>
+
+<script>
+(function() {
+  const content = document.getElementById('diagramContent');
+  const image = document.getElementById('plantImage');
+  let scale = 1;
+  const STEP = 0.2;
+
+  function applyScale() {
+    content.style.transform = `scale(${scale})`;
+  }
+
+  document.querySelector('.diagram-toolbar').addEventListener('click', function (e) {
+    const action = e.target && e.target.getAttribute('data-a');
+    if (!action) { return; }
+    e.preventDefault();
+    if (action === 'zin') {
+      scale = Math.min(4, scale * (1 + STEP));
+      applyScale();
+    } else if (action === 'zout') {
+      scale = Math.max(0.25, scale / (1 + STEP));
+      applyScale();
+    } else if (action === 'fit') {
+      scale = 1;
+      applyScale();
+    }
+  });
+
+  image.addEventListener('load', function () {
+    scale = 1;
+    applyScale();
+  });
+})();
+</script>
+</body>
+</html>
