@@ -54,6 +54,7 @@ import org.apache.poi.xwpf.usermodel.XWPFTableCell;
 import org.apache.poi.xwpf.usermodel.XWPFTableRow;
 import org.apache.xmlbeans.XmlBeans;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTAbstractNum;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTBorder;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTDecimalNumber;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTHpsMeasure;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTLvl;
@@ -62,13 +63,20 @@ import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTNumPr;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTP;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTPPr;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTPPrGeneral;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTSpacing;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTStyle;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTStyles;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTTbl;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTTblBorders;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTTblGrid;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTTblPr;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTTblWidth;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTTcPr;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.STLevelSuffix;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.STNumberFormat;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.STTblWidth;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.STBorder;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.STStyleType;
 
 /**
@@ -76,6 +84,14 @@ import org.openxmlformats.schemas.wordprocessingml.x2006.main.STStyleType;
  */
 public final class IliDocxRenderer {
     private static final String FONT_FAMILY = "Arial";
+    private static final BigInteger DEFAULT_SPACING_AFTER = BigInteger.valueOf(144L);
+    private static final BigInteger TABLE_WIDTH = BigInteger.valueOf(9000L);
+    private static final BigInteger[] TABLE_COLUMN_WIDTHS = new BigInteger[] {
+            BigInteger.valueOf(2250L),
+            BigInteger.valueOf(1500L),
+            BigInteger.valueOf(2250L),
+            BigInteger.valueOf(3000L)
+    };
 
     private IliDocxRenderer() {}
 
@@ -107,12 +123,12 @@ public final class IliDocxRenderer {
         XWPFStyles styles = doc.createStyles();
 
         if (!styles.styleExist("Title")) {
-            styles.addStyle(buildParagraphStyle("Title", "Title", null, true, 28));
+            styles.addStyle(buildParagraphStyle("Title", "Title", null, true, 18));
         } else {
             XWPFStyle style = styles.getStyle("Title");
             if (style != null) {
                 CTRPr rpr = style.getCTStyle().isSetRPr() ? style.getCTStyle().getRPr() : style.getCTStyle().addNewRPr();
-                BigInteger halfPts = BigInteger.valueOf(28L * 2L);
+                BigInteger halfPts = BigInteger.valueOf(18L * 2L);
                 CTHpsMeasure sz = rpr.sizeOfSzArray() > 0 ? rpr.getSzArray(0) : rpr.addNewSz();
                 sz.setVal(halfPts);
                 CTHpsMeasure szCs = rpr.sizeOfSzCsArray() > 0 ? rpr.getSzCsArray(0) : rpr.addNewSzCs();
@@ -125,21 +141,31 @@ public final class IliDocxRenderer {
         }
 
         if (!styles.styleExist("Heading1")) {
-            styles.addStyle(buildParagraphStyle("Heading1", "Heading 1", BigInteger.ZERO, true, null));
+            styles.addStyle(buildParagraphStyle("Heading1", "Heading 1", BigInteger.ZERO, true, 11));
         } else {
             XWPFStyle style = styles.getStyle("Heading1");
             if (style != null) {
                 CTRPr rpr = style.getCTStyle().isSetRPr() ? style.getCTStyle().getRPr() : style.getCTStyle().addNewRPr();
                 ensureArialFonts(rpr);
+                BigInteger halfPts = BigInteger.valueOf(22L);
+                CTHpsMeasure sz = rpr.sizeOfSzArray() > 0 ? rpr.getSzArray(0) : rpr.addNewSz();
+                sz.setVal(halfPts);
+                CTHpsMeasure szCs = rpr.sizeOfSzCsArray() > 0 ? rpr.getSzCsArray(0) : rpr.addNewSzCs();
+                szCs.setVal(halfPts);
             }
         }
         if (!styles.styleExist("Heading2")) {
-            styles.addStyle(buildParagraphStyle("Heading2", "Heading 2", BigInteger.ONE, true, null));
+            styles.addStyle(buildParagraphStyle("Heading2", "Heading 2", BigInteger.ONE, true, 11));
         } else {
             XWPFStyle style = styles.getStyle("Heading2");
             if (style != null) {
                 CTRPr rpr = style.getCTStyle().isSetRPr() ? style.getCTStyle().getRPr() : style.getCTStyle().addNewRPr();
                 ensureArialFonts(rpr);
+                BigInteger halfPts = BigInteger.valueOf(22L);
+                CTHpsMeasure sz = rpr.sizeOfSzArray() > 0 ? rpr.getSzArray(0) : rpr.addNewSz();
+                sz.setVal(halfPts);
+                CTHpsMeasure szCs = rpr.sizeOfSzCsArray() > 0 ? rpr.getSzCsArray(0) : rpr.addNewSzCs();
+                szCs.setVal(halfPts);
             }
         }
     }
@@ -238,6 +264,7 @@ public final class IliDocxRenderer {
         XWPFParagraph paragraph = doc.createParagraph();
         paragraph.setStyle(level <= 0 ? "Heading1" : "Heading2");
         applyNumbering(paragraph, level <= 0 ? 0 : 1);
+        applyParagraphSpacing(paragraph);
         XWPFRun run = paragraph.createRun();
         applyRunFont(run);
         run.setText(text != null ? text : "");
@@ -247,6 +274,7 @@ public final class IliDocxRenderer {
         XWPFParagraph paragraph = doc.createParagraph();
         paragraph.setStyle(level <= 0 ? "Heading1" : "Heading2");
         applyNumbering(paragraph, level <= 0 ? 0 : 1);
+        applyParagraphSpacing(paragraph);
         XWPFRun run = paragraph.createRun();
         applyRunFont(run);
         run.setText(viewableTitle(viewable));
@@ -341,11 +369,12 @@ public final class IliDocxRenderer {
     private static void writeAttributeTable(XWPFDocument doc, List<Row> rows) {
         XWPFTable table = doc.createTable();
         CTTbl ctTable = table.getCTTbl();
+        configureTable(ctTable);
 
         final int cols = 4;
         CTTblGrid grid = ctTable.addNewTblGrid();
         for (int i = 0; i < cols; i++) {
-            grid.addNewGridCol();
+            grid.addNewGridCol().setW(TABLE_COLUMN_WIDTHS[i]);
         }
 
         XWPFTableRow header = table.getRow(0);
@@ -353,23 +382,24 @@ public final class IliDocxRenderer {
             header = table.createRow();
         }
         ensureCellCount(header, cols);
-        setCellText(header.getCell(0), "Attributname", true);
-        setCellText(header.getCell(1), "Kardinalität", true);
-        setCellText(header.getCell(2), "Typ", true);
-        setCellText(header.getCell(3), "Beschreibung", true);
+        setCellText(header.getCell(0), "Attributname", true, 0);
+        setCellText(header.getCell(1), "Kardinalität", true, 1);
+        setCellText(header.getCell(2), "Typ", true, 2);
+        setCellText(header.getCell(3), "Beschreibung", true, 3);
 
         if (rows != null) {
             for (Row row : rows) {
                 XWPFTableRow tr = table.createRow();
                 ensureCellCount(tr, cols);
-                setCellText(tr.getCell(0), nz(row.name), false);
-                setCellText(tr.getCell(1), nz(row.card), false);
-                setCellText(tr.getCell(2), nz(row.type), false);
-                setCellText(tr.getCell(3), nz(row.descr), false);
+                setCellText(tr.getCell(0), nz(row.name), false, 0);
+                setCellText(tr.getCell(1), nz(row.card), false, 1);
+                setCellText(tr.getCell(2), nz(row.type), false, 2);
+                setCellText(tr.getCell(3), nz(row.descr), false, 3);
             }
         }
 
-        doc.createParagraph();
+        XWPFParagraph spacer = doc.createParagraph();
+        applyParagraphSpacing(spacer);
     }
 
     private static void ensureCellCount(XWPFTableRow row, int cols) {
@@ -378,18 +408,65 @@ public final class IliDocxRenderer {
         }
     }
 
-    private static void setCellText(XWPFTableCell cell, String text, boolean bold) {
+    private static void setCellText(XWPFTableCell cell, String text, boolean bold, int columnIndex) {
         if (cell == null) {
             return;
         }
         if (cell.getParagraphs().size() > 0) {
             cell.removeParagraph(0);
         }
+        if (columnIndex >= 0 && columnIndex < TABLE_COLUMN_WIDTHS.length) {
+            CTTcPr tcPr = cell.getCTTc().getTcPr();
+            if (tcPr == null) {
+                tcPr = cell.getCTTc().addNewTcPr();
+            }
+            CTTblWidth cellWidth = tcPr.getTcW();
+            if (cellWidth == null) {
+                cellWidth = tcPr.addNewTcW();
+            }
+            cellWidth.setW(TABLE_COLUMN_WIDTHS[columnIndex]);
+            cellWidth.setType(STTblWidth.DXA);
+        }
         XWPFParagraph paragraph = cell.addParagraph();
         XWPFRun run = paragraph.createRun();
         applyRunFont(run);
         run.setBold(bold);
         run.setText(text != null ? text : "");
+    }
+
+    private static void configureTable(CTTbl ctTable) {
+        if (ctTable == null) {
+            return;
+        }
+        CTTblPr tblPr = ctTable.getTblPr();
+        if (tblPr == null) {
+            tblPr = ctTable.addNewTblPr();
+        }
+        CTTblWidth width = tblPr.getTblW();
+        if (width == null) {
+            width = tblPr.addNewTblW();
+        }
+        width.setW(TABLE_WIDTH);
+        width.setType(STTblWidth.DXA);
+
+        CTTblBorders borders = tblPr.getTblBorders();
+        if (borders == null) {
+            borders = tblPr.addNewTblBorders();
+        }
+        configureBorder(borders.getTop() != null ? borders.getTop() : borders.addNewTop());
+        configureBorder(borders.getBottom() != null ? borders.getBottom() : borders.addNewBottom());
+        configureBorder(borders.getLeft() != null ? borders.getLeft() : borders.addNewLeft());
+        configureBorder(borders.getRight() != null ? borders.getRight() : borders.addNewRight());
+        configureBorder(borders.getInsideH() != null ? borders.getInsideH() : borders.addNewInsideH());
+        configureBorder(borders.getInsideV() != null ? borders.getInsideV() : borders.addNewInsideV());
+    }
+
+    private static void configureBorder(CTBorder border) {
+        if (border == null) {
+            return;
+        }
+        border.setVal(STBorder.SINGLE);
+        border.setSz(BigInteger.valueOf(4L));
     }
 
     private static List<AssociationDef> collectAssociations(Model model, Container scope) {
@@ -509,11 +586,11 @@ public final class IliDocxRenderer {
         }
         String title = nz(model.getMetaValue("title"));
         if (!title.isBlank()) {
-            writeMetadataParagraph(doc, "Title: " + title);
+            writeMetadataParagraph(doc, "Titel: " + title);
         }
         String shortDescr = nz(model.getMetaValue("shortDescription"));
         if (!shortDescr.isBlank()) {
-            writeMetadataParagraph(doc, "Short description: " + shortDescr);
+            writeMetadataParagraph(doc, "Beschreibung: " + shortDescr);
         }
     }
 
@@ -522,6 +599,7 @@ public final class IliDocxRenderer {
             return;
         }
         XWPFParagraph paragraph = doc.createParagraph();
+        applyParagraphSpacing(paragraph);
         XWPFRun run = paragraph.createRun();
         applyRunFont(run);
         run.setText(text);
@@ -532,6 +610,7 @@ public final class IliDocxRenderer {
             return;
         }
         XWPFParagraph paragraph = doc.createParagraph();
+        applyParagraphSpacing(paragraph);
         String[] lines = documentation.split("\r?\n");
         for (int i = 0; i < lines.length; i++) {
             XWPFRun run = paragraph.createRun();
@@ -585,6 +664,16 @@ public final class IliDocxRenderer {
 
     private static String nz(String value) {
         return value == null ? "" : value;
+    }
+
+    private static void applyParagraphSpacing(XWPFParagraph paragraph) {
+        if (paragraph == null) {
+            return;
+        }
+        CTP ctP = paragraph.getCTP();
+        CTPPr ppr = ctP.isSetPPr() ? ctP.getPPr() : ctP.addNewPPr();
+        CTSpacing spacing = ppr.isSetSpacing() ? ppr.getSpacing() : ppr.addNewSpacing();
+        spacing.setAfter(DEFAULT_SPACING_AFTER);
     }
 
     private record Row(String name, String card, String type, String descr) {}

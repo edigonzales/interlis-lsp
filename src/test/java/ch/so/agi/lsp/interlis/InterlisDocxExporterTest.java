@@ -12,6 +12,7 @@ import ch.interlis.ili2c.metamodel.View;
 import ch.interlis.ili2c.metamodel.Viewable;
 import ch.interlis.ili2c.metamodel.Table;
 import java.io.ByteArrayInputStream;
+import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -98,13 +99,18 @@ class InterlisDocxExporterTest {
             XWPFStyle titleStyle = document.getStyles().getStyle("Title");
             assertNotNull(titleStyle, "Expected title style to exist");
             assertEquals("Arial", titleStyle.getCTStyle().getRPr().getRFontsArray(0).getAscii());
+            assertEquals(BigInteger.valueOf(36), titleStyle.getCTStyle().getRPr().getSzArray(0).getVal());
+
+            XWPFStyle heading1 = document.getStyles().getStyle("Heading1");
+            assertNotNull(heading1, "Expected heading1 style to exist");
+            assertEquals(BigInteger.valueOf(22), heading1.getCTStyle().getRPr().getSzArray(0).getVal());
 
             List<String> paragraphs = extractNonEmptyParagraphTexts(document);
             int modelIndex = indexContaining(paragraphs, "DocTest");
             assertTrue(modelIndex >= 0, "Model heading not found");
-            assertTrue(paragraphs.get(modelIndex + 1).contains("Title: Model Title"),
+            assertTrue(paragraphs.get(modelIndex + 1).contains("Titel: Model Title"),
                     "Expected model title metadata after heading");
-            assertTrue(paragraphs.get(modelIndex + 2).contains("Short description: Model short description"),
+            assertTrue(paragraphs.get(modelIndex + 2).contains("Beschreibung: Model short description"),
                     "Expected model short description metadata after title");
 
             int topicIndex = indexContaining(paragraphs, "DocTopic");
@@ -133,6 +139,14 @@ class InterlisDocxExporterTest {
             XWPFRun headerRun = headerRow.getCell(0).getParagraphs().get(0).getRuns().get(0);
             assertTrue(headerRun.isBold(), "Expected header text to be bold");
             assertEquals("Arial", headerRun.getFontFamily());
+
+            assertEquals(BigInteger.valueOf(9000), table.getCTTbl().getTblPr().getTblW().getW());
+            assertEquals(BigInteger.valueOf(2250), table.getCTTbl().getTblGrid().getGridColArray(0).getW());
+            assertEquals(BigInteger.valueOf(1500), table.getCTTbl().getTblGrid().getGridColArray(1).getW());
+            assertEquals(BigInteger.valueOf(3000), table.getCTTbl().getTblGrid().getGridColArray(3).getW());
+
+            assertEquals(BigInteger.valueOf(4), table.getCTTbl().getTblPr().getTblBorders().getTop().getSz());
+            assertEquals(BigInteger.valueOf(4), table.getCTTbl().getTblPr().getTblBorders().getInsideV().getSz());
         }
     }
 
