@@ -40,7 +40,9 @@ public final class InterlisDocxExporter {
             if (title != null && !title.isBlank()) {
                 XWPFParagraph titleParagraph = doc.createParagraph();
                 titleParagraph.setStyle("Title");
-                titleParagraph.createRun().setText(title);
+                var titleRun = titleParagraph.createRun();
+                titleRun.setFontFamily("Arial");
+                titleRun.setText(title);
             }
 
             IliDocxRenderer.renderTransferDescription(doc, td);
