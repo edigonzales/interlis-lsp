@@ -42,4 +42,11 @@ class InterlisWorkspaceServiceTest {
 
         assertEquals("file:///tmp/example.ili", coerce(params));
     }
+
+    @Test
+    void coerceParsesJsonStringPayload() {
+        String raw = "{\"uri\":\"file:///tmp/example.ili\"}";
+
+        assertEquals("file:///tmp/example.ili", coerce(raw));
+    }
 }

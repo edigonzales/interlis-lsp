@@ -9,7 +9,12 @@ import org.eclipse.lsp4j.services.WorkspaceService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
+import com.google.gson.JsonSyntaxException;
 
 import java.net.URI;
 import java.nio.file.Path;
@@ -87,13 +92,15 @@ public class InterlisWorkspaceService implements WorkspaceService {
             return null;
         }
 
-        if (rawParams instanceof ExportDocxParams typed) {
+        Object normalized = decodePotentialJson(rawParams);
+
+        if (normalized instanceof ExportDocxParams typed) {
             return typed;
         }
 
         ExportDocxParams params = new ExportDocxParams();
 
-        if (rawParams instanceof java.util.Map<?, ?> map) {
+        if (normalized instanceof java.util.Map<?, ?> map) {
             params.setUri(coerceArgToString(map.get("uri")));
             params.setPath(coerceArgToString(map.get("path")));
             params.setTitle(coerceArgToString(map.get("title")));
@@ -102,7 +109,16 @@ public class InterlisWorkspaceService implements WorkspaceService {
             }
         }
 
-        String fallback = coerceArgToString(rawParams);
+        if (normalized instanceof JsonObject jsonObject) {
+            params.setUri(coerceArgToString(jsonObject.get("uri")));
+            params.setPath(coerceArgToString(jsonObject.get("path")));
+            params.setTitle(coerceArgToString(jsonObject.get("title")));
+            if (params.getUri() != null || params.getPath() != null || params.getTitle() != null) {
+                return params;
+            }
+        }
+
+        String fallback = coerceArgToString(normalized);
         if (fallback != null && !fallback.isBlank()) {
             params.setPath(fallback);
             return params;
@@ -129,8 +145,17 @@ public class InterlisWorkspaceService implements WorkspaceService {
     @SuppressWarnings("unchecked")
     private static String coerceArgToString(Object arg, int depth) {
         if (arg == null) return null;
-        if (arg instanceof String s) return s;
+        if (arg instanceof String s) {
+            Object decoded = decodePotentialJson(s);
+            if (decoded != s) {
+                return coerceArgToString(decoded, depth + 1);
+            }
+            return s;
+        }
         if (arg instanceof JsonPrimitive jp && jp.isString()) return jp.getAsString();
+        if (arg instanceof JsonElement jsonElement) {
+            return coerceJsonElement(jsonElement, depth);
+        }
         if (depth >= MAX_COERCE_DEPTH) {
             return String.valueOf(arg);
         }
@@ -178,6 +203,119 @@ public class InterlisWorkspaceService implements WorkspaceService {
         }
         // Fallback: last resort
         return String.valueOf(arg);
+    }
+
+    private static Object decodePotentialJson(Object raw) {
+        if (!(raw instanceof String str)) {
+            return raw;
+        }
+
+        String trimmed = str.trim();
+        if (trimmed.isEmpty()) {
+            return str;
+        }
+
+        char first = trimmed.charAt(0);
+        if (first != '{' && first != '[' && first != '"') {
+            return str;
+        }
+
+        try {
+            JsonElement element = JsonParser.parseString(trimmed);
+            if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isString()) {
+                return element.getAsString();
+            }
+            return element;
+        } catch (JsonSyntaxException ex) {
+            return str;
+        }
+    }
+
+    private static String coerceJsonElement(JsonElement element, int depth) {
+        if (element == null || element.isJsonNull()) {
+            return null;
+        }
+
+        if (element.isJsonPrimitive()) {
+            JsonPrimitive primitive = element.getAsJsonPrimitive();
+            if (primitive.isString()) {
+                return primitive.getAsString();
+            }
+            if (primitive.isBoolean()) {
+                return String.valueOf(primitive.getAsBoolean());
+            }
+            if (primitive.isNumber()) {
+                return primitive.getAsNumber().toString();
+            }
+        }
+
+        if (depth >= MAX_COERCE_DEPTH) {
+            return element.toString();
+        }
+
+        if (element.isJsonArray()) {
+            JsonArray array = element.getAsJsonArray();
+            for (JsonElement child : array) {
+                String candidate = coerceArgToString(child, depth + 1);
+                if (candidate != null && !candidate.isBlank()) {
+                    return candidate;
+                }
+            }
+            return null;
+        }
+
+        if (element.isJsonObject()) {
+            JsonObject obj = element.getAsJsonObject();
+            String direct = coerceFromJsonObject(obj, depth, "uri", "fsPath", "path", "href");
+            if (direct != null) {
+                return direct;
+            }
+
+            String nested = coerceFromJsonObject(obj, depth, "textDocument", "documentUri", "source");
+            if (nested != null) {
+                return nested;
+            }
+
+            JsonElement scheme = obj.get("scheme");
+            JsonElement authority = obj.get("authority");
+            JsonElement path = obj.get("path");
+            String schemeStr = coerceArgToString(scheme, depth + 1);
+            if (schemeStr != null && !schemeStr.isBlank()) {
+                String pathStr = coerceArgToString(path, depth + 1);
+                if (pathStr != null && !pathStr.isBlank()) {
+                    String authorityStr = coerceArgToString(authority, depth + 1);
+                    try {
+                        URI uri = authorityStr != null && !authorityStr.isBlank()
+                                ? new URI(schemeStr, authorityStr, pathStr, null, null)
+                                : new URI(schemeStr, null, pathStr, null);
+                        return uri.toString();
+                    } catch (Exception ignore) {
+                        // Fall through to final fallback
+                    }
+                }
+            }
+
+            return element.toString();
+        }
+
+        return element.toString();
+    }
+
+    private static String coerceFromJsonObject(JsonObject obj, int depth, String... keys) {
+        for (String key : keys) {
+            if (!obj.has(key)) {
+                continue;
+            }
+            JsonElement value = obj.get(key);
+            if (value == obj) {
+                continue;
+            }
+            String candidate = coerceArgToString(value, depth + 1);
+            if (candidate != null && !candidate.isBlank()) {
+                return candidate;
+            }
+        }
+        return null;
     }
 
     private static String coerceFromMapEntries(Map<Object, Object> map, int depth, String... keys) {
