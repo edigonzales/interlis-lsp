@@ -75,7 +75,11 @@ public final class Ili2PlantUml {
 
         private void printNode(StringBuilder sb, Node n, String indent) {
             String keyword = keywordFor(n);
-            sb.append(indent).append(keyword).append(" \"").append(escape(n.displayName)).append("\" as ")
+            String name = n.displayName;
+            if (n.stereotypes.contains("Abstract")) {
+                name = name + " <<abstract>>";
+            }
+            sb.append(indent).append(keyword).append(" \"").append(escape(name)).append("\" as ")
                     .append(id(n.fqn)).append(" {").append("\n");
 
             for (String stereo : stereotypesFor(n)) {
@@ -93,14 +97,11 @@ public final class Ili2PlantUml {
         private List<String> stereotypesFor(Node n) {
             List<String> filtered = new ArrayList<>();
             for (String stereo : n.stereotypes) {
-                if ("Structure".equalsIgnoreCase(stereo) || "Enumeration".equalsIgnoreCase(stereo)) {
+                if ("Structure".equalsIgnoreCase(stereo) || "Enumeration".equalsIgnoreCase(stereo)
+                        || "Abstract".equalsIgnoreCase(stereo)) {
                     continue; // handled via keyword
                 }
-                if ("Abstract".equalsIgnoreCase(stereo)) {
-                    filtered.add("abstract");
-                } else {
-                    filtered.add(stereo);
-                }
+                filtered.add(stereo);
             }
             return filtered;
         }
