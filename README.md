@@ -14,6 +14,30 @@ This is a minimal Language Server for INTERLIS using lsp4j. It exposes a command
 
 The server uses stdio transport. Your editor/extension should spawn it and connect via stdio.
 
+### Bundling with the VS Code extension
+
+The VS Code client located in `client/` can ship a self-contained runtime. The
+extension looks for the following layout relative to the extension root when no
+custom paths are configured:
+
+```
+client/
+  server/
+    interlis-lsp-<version>-all.jar  # fat jar produced by `./gradlew shadowJar`
+    jre/
+      darwin-arm64/
+      darwin-x64/
+      linux-x64/
+      linux-arm64/
+      win32-x64/
+        bin/java(.exe)
+```
+
+Use your existing GitHub Actions artifacts to populate the platform-specific
+JRE folders before packaging the extension (`vsce package`). Users can still
+override both paths with the `interlisLsp.server.jarPath` and
+`interlisLsp.javaPath` settings if they need to point to custom locations.
+
 ## Project layout
 
 - `InterlisLanguageServer` implements `LanguageServer` and `LanguageClientAware`.
