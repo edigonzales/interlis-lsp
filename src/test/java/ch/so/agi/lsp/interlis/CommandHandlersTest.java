@@ -73,9 +73,9 @@ class CommandHandlersTest {
         String html = assertInstanceOf(String.class, htmlObj);
 
         assertTrue(html.contains("@startuml"));
-        assertTrue(html.contains("plantuml/png"));
-        assertTrue(html.contains("plantuml/svg"));
-        assertTrue(html.contains("plantuml/pdf"));
+        assertTrue(html.contains("data:image/png;base64,"));
+        assertTrue(html.contains("data:image/svg+xml;base64,"));
+        assertTrue(html.contains("data:application/pdf;base64,"));
     }
 
     @Test

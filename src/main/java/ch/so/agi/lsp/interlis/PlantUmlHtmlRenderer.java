@@ -6,8 +6,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.Objects;
-import java.util.zip.Deflater;
+
+import net.sourceforge.plantuml.FileFormat;
+import net.sourceforge.plantuml.FileFormatOption;
+import net.sourceforge.plantuml.SourceStringReader;
 
 /**
  * Loads the PlantUML HTML template and injects the generated diagram text.
@@ -26,19 +30,12 @@ public final class PlantUmlHtmlRenderer {
     public static String render(String plantUmlSource) {
         Objects.requireNonNull(plantUmlSource, "plantUmlSource must not be null");
         String escapedSource = escapeHtml(plantUmlSource);
-        String encoded = encodeForPlantUmlServer(plantUmlSource);
-        String pngUrl = buildPlantUmlUrl("png", encoded);
-        String svgUrl = buildPlantUmlUrl("svg", encoded);
-        String pdfUrl = buildPlantUmlUrl("pdf", encoded);
+        DiagramAssets assets = renderAssets(plantUmlSource);
         return TEMPLATE
                 .replace(SOURCE_PLACEHOLDER, escapedSource)
-                .replace(PNG_URL_PLACEHOLDER, pngUrl)
-                .replace(SVG_URL_PLACEHOLDER, svgUrl)
-                .replace(PDF_URL_PLACEHOLDER, pdfUrl);
-    }
-
-    private static String buildPlantUmlUrl(String format, String encoded) {
-        return "https://www.plantuml.com/plantuml/" + format + "/" + encoded;
+                .replace(PNG_URL_PLACEHOLDER, assets.pngDataUri())
+                .replace(SVG_URL_PLACEHOLDER, assets.svgDataUri())
+                .replace(PDF_URL_PLACEHOLDER, assets.pdfDataUri());
     }
 
     private static String loadTemplate() {
@@ -72,58 +69,34 @@ public final class PlantUmlHtmlRenderer {
         return sb.toString();
     }
 
-    private static String encodeForPlantUmlServer(String source) {
-        byte[] data = source.getBytes(StandardCharsets.UTF_8);
-        Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION, true);
-        deflater.setInput(data);
-        deflater.finish();
-        byte[] buffer = new byte[1024];
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        while (!deflater.finished()) {
-            int count = deflater.deflate(buffer);
-            baos.write(buffer, 0, count);
-        }
-        deflater.end();
-        byte[] compressed = baos.toByteArray();
-        return encode64(compressed);
+    private static DiagramAssets renderAssets(String source) {
+        byte[] png = renderDiagram(source, FileFormat.PNG);
+        byte[] svg = renderDiagram(source, FileFormat.SVG);
+        byte[] pdf = renderDiagram(source, FileFormat.PDF);
+        return new DiagramAssets(
+                toDataUri(png, "image/png"),
+                toDataUri(svg, "image/svg+xml"),
+                toDataUri(pdf, "application/pdf"));
     }
 
-    private static String encode64(byte[] data) {
-        StringBuilder sb = new StringBuilder((data.length * 4 + 2) / 3);
-        int len = data.length;
-        for (int i = 0; i < len; i += 3) {
-            int b1 = data[i] & 0xFF;
-            int b2 = (i + 1) < len ? data[i + 1] & 0xFF : 0;
-            int b3 = (i + 2) < len ? data[i + 2] & 0xFF : 0;
-
-            sb.append(encode6bit(b1 >> 2));
-            sb.append(encode6bit(((b1 & 0x3) << 4) | (b2 >> 4)));
-            sb.append(encode6bit(((b2 & 0xF) << 2) | (b3 >> 6)));
-            sb.append(encode6bit(b3 & 0x3F));
+    private static byte[] renderDiagram(String source, FileFormat format) {
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            SourceStringReader reader = new SourceStringReader(source);
+            Object description = reader.generateImage(baos, new FileFormatOption(format));
+            if (description == null) {
+                throw new IllegalStateException("PlantUML rendering produced no diagram for format " + format);
+            }
+            return baos.toByteArray();
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to render PlantUML diagram", e);
         }
-        return sb.toString();
     }
 
-    private static char encode6bit(int b) {
-        int value = b & 0x3F;
-        if (value < 10) {
-            return (char) ('0' + value);
-        }
-        value -= 10;
-        if (value < 26) {
-            return (char) ('A' + value);
-        }
-        value -= 26;
-        if (value < 26) {
-            return (char) ('a' + value);
-        }
-        value -= 26;
-        if (value == 0) {
-            return '-';
-        }
-        if (value == 1) {
-            return '_';
-        }
-        return '?';
+    private static String toDataUri(byte[] data, String mimeType) {
+        String base64 = Base64.getEncoder().encodeToString(data);
+        return "data:" + mimeType + ";base64," + base64;
+    }
+
+    private record DiagramAssets(String pngDataUri, String svgDataUri, String pdfDataUri) {
     }
 }
