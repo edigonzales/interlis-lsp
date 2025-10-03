@@ -23,6 +23,12 @@
       flex-direction: column;
       min-height: 0;
     }
+    .page.source-collapsed {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .page.source-collapsed .source-pane {
+      display: none;
+    }
     .diagram-wrap {
       position: relative;
       flex: 1 1 auto;
@@ -122,6 +128,7 @@
         <button type="button" data-a="fit">Fit</button>
         <a href="${plantUmlPngUrl}" target="_blank" rel="noreferrer">Open PNG</a>
         <a href="${plantUmlSvgUrl}" target="_blank" rel="noreferrer" download>Download SVG</a>
+        <button type="button" data-a="toggle-source" aria-expanded="true">Hide code</button>
       </div>
       <div class="diagram-scroll">
         <div class="diagram-content" id="diagramContent">
@@ -138,9 +145,12 @@
 
 <script>
 (function() {
+  const page = document.querySelector('.page');
   const content = document.getElementById('diagramContent');
   const image = document.getElementById('plantImage');
   const scroll = document.querySelector('.diagram-scroll');
+  const sourcePane = document.querySelector('.source-pane');
+  const toolbar = document.querySelector('.diagram-toolbar');
   let scale = 1;
   const STEP = 0.2;
   let isDragging = false;
@@ -153,21 +163,43 @@
     content.style.transform = `scale(${scale})`;
   }
 
-  document.querySelector('.diagram-toolbar').addEventListener('click', function (e) {
-    const action = e.target && e.target.getAttribute('data-a');
-    if (!action) { return; }
-    e.preventDefault();
-    if (action === 'zin') {
-      scale = Math.min(4, scale * (1 + STEP));
-      applyScale();
-    } else if (action === 'zout') {
-      scale = Math.max(0.25, scale / (1 + STEP));
-      applyScale();
-    } else if (action === 'fit') {
-      scale = 1;
-      applyScale();
+  function setSourceCollapsed(collapsed) {
+    if (page) {
+      page.classList.toggle('source-collapsed', collapsed);
     }
-  });
+    if (sourcePane) {
+      sourcePane.classList.toggle('collapsed', collapsed);
+    }
+    if (toolbar) {
+      const toggle = toolbar.querySelector('[data-a="toggle-source"]');
+      if (toggle) {
+        toggle.textContent = collapsed ? 'Show code' : 'Hide code';
+        toggle.setAttribute('aria-expanded', (!collapsed).toString());
+      }
+    }
+  }
+
+  setSourceCollapsed(false);
+
+  if (toolbar) {
+    toolbar.addEventListener('click', function (e) {
+      const action = e.target && e.target.getAttribute('data-a');
+      if (!action) { return; }
+      e.preventDefault();
+      if (action === 'zin') {
+        scale = Math.min(4, scale * (1 + STEP));
+        applyScale();
+      } else if (action === 'zout') {
+        scale = Math.max(0.25, scale / (1 + STEP));
+        applyScale();
+      } else if (action === 'fit') {
+        scale = 1;
+        applyScale();
+      } else if (action === 'toggle-source') {
+        setSourceCollapsed(!page.classList.contains('source-collapsed'));
+      }
+    });
+  }
 
   image.addEventListener('load', function () {
     scale = 1;

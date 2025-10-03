@@ -24,6 +24,12 @@
       flex-direction: column;
       min-height: 0;
     }
+    .page.source-collapsed {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .page.source-collapsed .source-pane {
+      display: none;
+    }
     .diagram-wrap {
       position: relative;
       flex: 1 1 auto;
@@ -142,7 +148,8 @@ ${mermaidString}
         '<button type="button" data-a="zin">+</button>' +
         '<button type="button" data-a="zout">−</button>' +
         '<button type="button" data-a="fit">Fit</button>' +
-        '<button type="button" data-a="download">Download SVG</button>';
+        '<button type="button" data-a="download">Download SVG</button>' +
+        '<button type="button" data-a="toggle-source" aria-expanded="true">Hide code</button>';
       wrap.appendChild(toolbar);
 
       wrap.insertAdjacentHTML('beforeend', out.svg);
@@ -163,6 +170,18 @@ ${mermaidString}
 
       page.appendChild(diagramPane);
       page.appendChild(sourcePane);
+
+      function setSourceCollapsed(collapsed) {
+        page.classList.toggle('source-collapsed', collapsed);
+        sourcePane.classList.toggle('collapsed', collapsed);
+        var toggle = toolbar.querySelector('[data-a="toggle-source"]');
+        if (toggle) {
+          toggle.textContent = collapsed ? 'Show code' : 'Hide code';
+          toggle.setAttribute('aria-expanded', (!collapsed).toString());
+        }
+      }
+
+      setSourceCollapsed(false);
 
       // 3) Normalize the rendered <svg> just in case
       var svgEl = wrap.querySelector('svg');
@@ -191,10 +210,13 @@ ${mermaidString}
       var STEP = 0.2;
       toolbar.addEventListener('click', function (e) {
         var a = e.target && e.target.getAttribute('data-a');
+        if (!a) { return; }
+        e.preventDefault();
         if (a === 'zin')  pz.zoomBy(1 + STEP);
         if (a === 'zout') pz.zoomBy(1 / (1 + STEP));
         if (a === 'fit')  { pz.resize(); pz.fit(); pz.center(); }
         if (a === 'download') downloadSVG(svgEl, 'diagram.svg');
+        if (a === 'toggle-source') setSourceCollapsed(!page.classList.contains('source-collapsed'));
       });
 
       var copyButton = sourcePane.querySelector('.copy-button');
