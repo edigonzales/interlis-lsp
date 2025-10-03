@@ -186,3 +186,127 @@ jobs:
           name: jre-runtime-${{ matrix.os }}
           path: runtime-${{ matrix.os }}
           if-no-files-found: error
+
+  package-extension:
+    name: Bundle VS Code extension
+    needs:
+      - runtimes
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download fat JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: app-fatjar
+          path: client/server
+
+      - name: Download packaged runtimes
+        uses: actions/download-artifact@v4
+        with:
+          pattern: jre-runtime-*
+          path: tmp/runtimes
+          merge-multiple: false
+
+      - name: Stage server assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s dotglob
+
+          declare -A PLATFORM_MAP=(
+            ["ubuntu-24.04"]="linux-x64"
+            ["ubuntu-24.04-arm"]="linux-arm64"
+            ["macos-13"]="darwin-x64"
+            ["macos-14"]="darwin-arm64"
+            ["windows-2022"]="win32-x64"
+          )
+
+          for src in "${!PLATFORM_MAP[@]}"; do
+            dest="${PLATFORM_MAP[$src]}"
+            base="tmp/runtimes/jre-runtime-${src}"
+            if [ ! -d "$base" ]; then
+              echo "::error::Missing runtime artifact directory $base"
+              exit 1
+            fi
+
+            src_dir=""
+            explicit_dir="${base}/runtime-${src}"
+            if [ -d "$explicit_dir" ]; then
+              src_dir="$explicit_dir"
+            fi
+
+            if [ -z "$src_dir" ] && [ -d "${base}/bin" ]; then
+              src_dir="$base"
+            fi
+
+            if [ -z "$src_dir" ]; then
+              while IFS= read -r java_bin; do
+                candidate_dir="$(dirname "$(dirname "$java_bin")")"
+                if [ -d "$candidate_dir/bin" ]; then
+                  src_dir="$candidate_dir"
+                  echo "Found runtime by java binary at $java_bin"
+                  break
+                fi
+              done < <(find "$base" -mindepth 2 -maxdepth 6 -type f \( -name java -o -name java.exe \))
+            fi
+
+            if [ -z "$src_dir" ]; then
+              echo "::error::Unable to locate runtime folder inside $base"
+              echo "Contents:"
+              find "$base" -maxdepth 2 -print
+              exit 1
+            fi
+
+            dest_dir="client/server/jre/${dest}"
+            mkdir -p "$dest_dir"
+            rm -rf "${dest_dir:?}/"*
+            cp -a "$src_dir"/. "$dest_dir"/
+            echo "Staged runtime for $src -> $dest"
+          done
+
+          jar_source=$(find client/server -maxdepth 2 -type f -name "*-all.jar" | head -n1)
+          if [ -z "$jar_source" ]; then
+            echo "::error::Fat JAR not found after download"
+            exit 1
+          fi
+
+          jar_target_dir="client/server"
+          mkdir -p "$jar_target_dir"
+          jar_target="$jar_target_dir/$(basename "$jar_source")"
+          if [ "$jar_source" != "$jar_target" ]; then
+            mv "$jar_source" "$jar_target"
+          fi
+
+          # Clean up any empty artifact directories created during download
+          find client/server -mindepth 1 -type d -empty -delete
+
+          echo "Fat JAR staged at $jar_target"
+          echo "Bundled assets:"
+          find client/server -maxdepth 2 -mindepth 1 -type d | sort
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Build extension
+        working-directory: client
+        run: npm run build
+
+      - name: Package VS Code extension
+        working-directory: client
+        run: npx --yes @vscode/vsce package --no-dependencies --out interlis-lsp.vsix
+
+      - name: Upload extension artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: interlis-lsp-extension
+          path: client/interlis-lsp.vsix
+          if-no-files-found: error
