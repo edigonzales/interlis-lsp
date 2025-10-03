@@ -232,9 +232,27 @@ jobs:
               exit 1
             fi
 
-            src_dir=$(find "$base" -maxdepth 1 -type d -name "runtime-*" | head -n1)
+            src_dir=""
+            explicit_dir="${base}/runtime-${src}"
+            if [ -d "$explicit_dir" ]; then
+              src_dir="$explicit_dir"
+            else
+              while IFS= read -r candidate; do
+                if [ -d "${candidate}/bin" ]; then
+                  src_dir="$candidate"
+                  break
+                fi
+              done < <(find "$base" -mindepth 1 -maxdepth 1 -type d)
+
+              if [ -z "$src_dir" ] && [ -d "${base}/bin" ]; then
+                src_dir="$base"
+              fi
+            fi
+
             if [ -z "$src_dir" ]; then
               echo "::error::Unable to locate runtime folder inside $base"
+              echo "Contents:"
+              find "$base" -maxdepth 2 -print
               exit 1
             fi
 
