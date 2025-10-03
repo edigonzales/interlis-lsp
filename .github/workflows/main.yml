@@ -236,17 +236,21 @@ jobs:
             explicit_dir="${base}/runtime-${src}"
             if [ -d "$explicit_dir" ]; then
               src_dir="$explicit_dir"
-            else
-              while IFS= read -r candidate; do
-                if [ -d "${candidate}/bin" ]; then
-                  src_dir="$candidate"
+            fi
+
+            if [ -z "$src_dir" ] && [ -d "${base}/bin" ]; then
+              src_dir="$base"
+            fi
+
+            if [ -z "$src_dir" ]; then
+              while IFS= read -r java_bin; do
+                candidate_dir="$(dirname "$(dirname "$java_bin")")"
+                if [ -d "$candidate_dir/bin" ]; then
+                  src_dir="$candidate_dir"
+                  echo "Found runtime by java binary at $java_bin"
                   break
                 fi
-              done < <(find "$base" -mindepth 1 -maxdepth 1 -type d)
-
-              if [ -z "$src_dir" ] && [ -d "${base}/bin" ]; then
-                src_dir="$base"
-              fi
+              done < <(find "$base" -mindepth 2 -maxdepth 6 -type f \( -name java -o -name java.exe \))
             fi
 
             if [ -z "$src_dir" ]; then
