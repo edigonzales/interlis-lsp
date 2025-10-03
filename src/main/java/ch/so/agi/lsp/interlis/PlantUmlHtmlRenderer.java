@@ -6,12 +6,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.util.Objects;
-
-import net.sourceforge.plantuml.FileFormat;
-import net.sourceforge.plantuml.FileFormatOption;
-import net.sourceforge.plantuml.SourceStringReader;
+import java.util.zip.Deflater;
+import java.util.zip.DeflaterOutputStream;
 
 /**
  * Loads the PlantUML HTML template and injects the generated diagram text.
@@ -21,7 +18,7 @@ public final class PlantUmlHtmlRenderer {
     private static final String SOURCE_PLACEHOLDER = "${plantUmlSource}";
     private static final String PNG_URL_PLACEHOLDER = "${plantUmlPngUrl}";
     private static final String SVG_URL_PLACEHOLDER = "${plantUmlSvgUrl}";
-    private static final String PDF_URL_PLACEHOLDER = "${plantUmlPdfUrl}";
+    private static final String PLANTUML_SERVER_BASE = "https://www.plantuml.com/plantuml";
     private static final String TEMPLATE = loadTemplate();
 
     private PlantUmlHtmlRenderer() {
@@ -30,12 +27,13 @@ public final class PlantUmlHtmlRenderer {
     public static String render(String plantUmlSource) {
         Objects.requireNonNull(plantUmlSource, "plantUmlSource must not be null");
         String escapedSource = escapeHtml(plantUmlSource);
-        DiagramAssets assets = renderAssets(plantUmlSource);
+        String encoded = encodeForServer(plantUmlSource);
+        String pngUrl = PLANTUML_SERVER_BASE + "/png/" + encoded;
+        String svgUrl = PLANTUML_SERVER_BASE + "/svg/" + encoded;
         return TEMPLATE
                 .replace(SOURCE_PLACEHOLDER, escapedSource)
-                .replace(PNG_URL_PLACEHOLDER, assets.pngDataUri())
-                .replace(SVG_URL_PLACEHOLDER, assets.svgDataUri())
-                .replace(PDF_URL_PLACEHOLDER, assets.pdfDataUri());
+                .replace(PNG_URL_PLACEHOLDER, pngUrl)
+                .replace(SVG_URL_PLACEHOLDER, svgUrl);
     }
 
     private static String loadTemplate() {
@@ -69,34 +67,57 @@ public final class PlantUmlHtmlRenderer {
         return sb.toString();
     }
 
-    private static DiagramAssets renderAssets(String source) {
-        byte[] png = renderDiagram(source, FileFormat.PNG);
-        byte[] svg = renderDiagram(source, FileFormat.SVG);
-        byte[] pdf = renderDiagram(source, FileFormat.PDF);
-        return new DiagramAssets(
-                toDataUri(png, "image/png"),
-                toDataUri(svg, "image/svg+xml"),
-                toDataUri(pdf, "application/pdf"));
+    private static String encodeForServer(String source) {
+        byte[] data = source.getBytes(StandardCharsets.UTF_8);
+        byte[] compressed = deflate(data);
+        return encode64(compressed);
     }
 
-    private static byte[] renderDiagram(String source, FileFormat format) {
-        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
-            SourceStringReader reader = new SourceStringReader(source);
-            Object description = reader.generateImage(baos, new FileFormatOption(format));
-            if (description == null) {
-                throw new IllegalStateException("PlantUML rendering produced no diagram for format " + format);
-            }
+    private static byte[] deflate(byte[] data) {
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                DeflaterOutputStream dos = new DeflaterOutputStream(baos, new Deflater(9, true))) {
+            dos.write(data);
+            dos.finish();
             return baos.toByteArray();
         } catch (IOException e) {
-            throw new IllegalStateException("Failed to render PlantUML diagram", e);
+            throw new IllegalStateException("Failed to deflate PlantUML source", e);
         }
     }
 
-    private static String toDataUri(byte[] data, String mimeType) {
-        String base64 = Base64.getEncoder().encodeToString(data);
-        return "data:" + mimeType + ";base64," + base64;
+    private static String encode64(byte[] data) {
+        StringBuilder sb = new StringBuilder(((data.length + 2) / 3) * 4);
+        for (int i = 0; i < data.length; i += 3) {
+            int b1 = data[i] & 0xFF;
+            int b2 = i + 1 < data.length ? data[i + 1] & 0xFF : 0;
+            int b3 = i + 2 < data.length ? data[i + 2] & 0xFF : 0;
+
+            sb.append(encode6bit(b1 >> 2));
+            sb.append(encode6bit(((b1 & 0x3) << 4) | (b2 >> 4)));
+            sb.append(encode6bit(((b2 & 0xF) << 2) | (b3 >> 6)));
+            sb.append(encode6bit(b3 & 0x3F));
+        }
+        return sb.toString();
     }
 
-    private record DiagramAssets(String pngDataUri, String svgDataUri, String pdfDataUri) {
+    private static char encode6bit(int b) {
+        if (b < 10) {
+            return (char) ('0' + b);
+        }
+        b -= 10;
+        if (b < 26) {
+            return (char) ('A' + b);
+        }
+        b -= 26;
+        if (b < 26) {
+            return (char) ('a' + b);
+        }
+        b -= 26;
+        if (b == 0) {
+            return '-';
+        }
+        if (b == 1) {
+            return '_';
+        }
+        return '?';
     }
 }
