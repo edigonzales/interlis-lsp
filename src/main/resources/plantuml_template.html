@@ -84,6 +84,20 @@
       font-size: 11px;
       text-transform: none;
     }
+    .copy-status {
+      font-size: 11px;
+      color: #2f7a2f;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      min-width: 70px;
+      text-align: right;
+    }
+    .copy-status.visible {
+      opacity: 1;
+    }
+    .copy-status.error {
+      color: #b00020;
+    }
     .source-content {
       flex: 1 1 auto;
       overflow: auto;
@@ -116,7 +130,7 @@
     </div>
   </div>
   <div class="source-pane">
-    <div class="source-header">PlantUML source <button type="button" id="copyButton">Copy</button></div>
+    <div class="source-header"><span>PlantUML source</span><span class="copy-status" aria-live="polite" role="status"></span><button type="button" id="copyButton">Copy</button></div>
     <pre class="source-content" id="sourceContent">${plantUmlSource}</pre>
   </div>
 </div>
@@ -197,19 +211,23 @@
   const sourceContent = document.getElementById('sourceContent');
   if (copyButton && sourceContent) {
     copyButton.addEventListener('click', function () {
-      copyTextToClipboard(sourceContent.textContent || '');
+      copyTextToClipboard(sourceContent.textContent || '').then(function (success) {
+        showCopyFeedback(copyButton, success);
+      });
     });
   }
 })();
 
 function copyTextToClipboard(text) {
-  if (!text) { return; }
+  if (!text) { return Promise.resolve(false); }
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).catch(function () {
-      legacyCopy(text);
+    return navigator.clipboard.writeText(text).then(function () {
+      return true;
+    }).catch(function () {
+      return legacyCopy(text);
     });
   } else {
-    legacyCopy(text);
+    return Promise.resolve(legacyCopy(text));
   }
 }
 
@@ -221,12 +239,34 @@ function legacyCopy(text) {
   textarea.style.left = '-9999px';
   document.body.appendChild(textarea);
   textarea.select();
+  let success = false;
   try {
-    document.execCommand('copy');
+    success = document.execCommand('copy');
   } catch (err) {
     console.error('Failed to copy text', err);
+    success = false;
   }
   document.body.removeChild(textarea);
+  return success;
+}
+
+function showCopyFeedback(button, success) {
+  if (!button) { return; }
+  const header = button.closest('.source-header');
+  if (!header) { return; }
+  const status = header.querySelector('.copy-status');
+  if (!status) { return; }
+
+  status.textContent = success ? 'Copied!' : 'Copy failed';
+  status.classList.toggle('error', !success);
+  status.classList.add('visible');
+
+  if (status._copyTimeout) {
+    clearTimeout(status._copyTimeout);
+  }
+  status._copyTimeout = setTimeout(function () {
+    status.classList.remove('visible');
+  }, 2000);
 }
 </script>
 </body>

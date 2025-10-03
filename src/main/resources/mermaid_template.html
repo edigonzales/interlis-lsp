@@ -70,6 +70,20 @@
       font-size: 11px;
       text-transform: none;
     }
+    .copy-status {
+      font-size: 11px;
+      color: #2f7a2f;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      min-width: 70px;
+      text-align: right;
+    }
+    .copy-status.visible {
+      opacity: 1;
+    }
+    .copy-status.error {
+      color: #b00020;
+    }
     .source-content {
       flex: 1 1 auto;
       overflow: auto;
@@ -141,7 +155,7 @@ ${mermaidString}
 
       var sourcePane = document.createElement('div');
       sourcePane.className = 'source-pane';
-      sourcePane.innerHTML = '<div class="source-header">Mermaid source <button type="button" class="copy-button">Copy</button></div>';
+      sourcePane.innerHTML = '<div class="source-header"><span>Mermaid source</span><span class="copy-status" aria-live="polite" role="status"></span><button type="button" class="copy-button">Copy</button></div>';
       var sourceContent = document.createElement('pre');
       sourceContent.className = 'source-content';
       sourceContent.textContent = graphText.trim();
@@ -186,7 +200,9 @@ ${mermaidString}
       var copyButton = sourcePane.querySelector('.copy-button');
       if (copyButton) {
         copyButton.addEventListener('click', function () {
-          copyTextToClipboard(sourceContent.textContent || '');
+          copyTextToClipboard(sourceContent.textContent || '').then(function (success) {
+            showCopyFeedback(copyButton, success);
+          });
         });
       }
 
@@ -228,14 +244,15 @@ function downloadSVG(svgEl, filename) {
 }
 
 function copyTextToClipboard(text) {
-  if (!text) { return; }
+  if (!text) { return Promise.resolve(false); }
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).catch(function () {
-      legacyCopy(text);
+    return navigator.clipboard.writeText(text).then(function () {
+      return true;
+    }).catch(function () {
+      return legacyCopy(text);
     });
-  } else {
-    legacyCopy(text);
   }
+  return Promise.resolve(legacyCopy(text));
 }
 
 function legacyCopy(text) {
@@ -246,12 +263,34 @@ function legacyCopy(text) {
   textarea.style.left = '-9999px';
   document.body.appendChild(textarea);
   textarea.select();
+  var success = false;
   try {
-    document.execCommand('copy');
+    success = document.execCommand('copy');
   } catch (err) {
     console.error('Failed to copy text', err);
+    success = false;
   }
   document.body.removeChild(textarea);
+  return success;
+}
+
+function showCopyFeedback(button, success) {
+  if (!button) { return; }
+  var header = button.closest('.source-header');
+  if (!header) { return; }
+  var status = header.querySelector('.copy-status');
+  if (!status) { return; }
+
+  status.textContent = success ? 'Copied!' : 'Copy failed';
+  status.classList.toggle('error', !success);
+  status.classList.add('visible');
+
+  if (status._copyTimeout) {
+    clearTimeout(status._copyTimeout);
+  }
+  status._copyTimeout = setTimeout(function () {
+    status.classList.remove('visible');
+  }, 2000);
 }
 
 
