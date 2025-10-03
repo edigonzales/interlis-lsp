@@ -20,6 +20,7 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
 
     public static final String CMD_COMPILE = "interlis.compile"; // workspace/executeCommand
     public static final String CMD_GENERATE_UML = "interlis.uml";
+    public static final String CMD_GENERATE_PLANTUML = "interlis.uml.plant";
     public static final String REQ_EXPORT_DOCX = "interlis/exportDocx";
     public static final String REQ_EXPORT_HTML = "interlis/exportHtml";
 
@@ -46,7 +47,8 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
         SaveOptions save = new SaveOptions(); save.setIncludeText(false); 
         sync.setSave(save);
         
-        ExecuteCommandOptions exec = new ExecuteCommandOptions(Arrays.asList(CMD_COMPILE, CMD_GENERATE_UML));
+        ExecuteCommandOptions exec = new ExecuteCommandOptions(Arrays.asList(CMD_COMPILE, CMD_GENERATE_UML,
+                CMD_GENERATE_PLANTUML));
         caps.setExecuteCommandProvider(exec);
 
         caps.setPositionEncoding(org.eclipse.lsp4j.PositionEncodingKind.UTF16);

@@ -72,6 +72,38 @@ public class CommandHandlers {
         }
     }
 
+    /** Compile an .ili file and return an HTML page with the generated PlantUML diagram. */
+    public CompletableFuture<Object> generatePlantUml(String fileUriOrPath) {
+        if (server.getClient() != null) {
+            server.getClient().logMessage(new MessageParams(
+                MessageType.Log, "generatePlantUml called for " + fileUriOrPath));
+        }
+
+        String filesystemPath = InterlisTextDocumentService.toFilesystemPathIfPossible(fileUriOrPath);
+
+        ClientSettings cfg = server.getClientSettings();
+        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(cfg, filesystemPath);
+        List<Diagnostic> diagnostics = DiagnosticsMapper.toDiagnostics(outcome.getMessages());
+        server.publishDiagnostics(fileUriOrPath, diagnostics);
+        server.clearOutput();
+        server.logToClient(outcome.getLogText());
+
+        String displayPath = firstNonBlank(filesystemPath, fileUriOrPath);
+
+        TransferDescription td = outcome.getTransferDescription();
+        if (td == null) {
+            return CompletableFuture.failedFuture(compilerFailure(displayPath, outcome));
+        }
+
+        try {
+            String plant = Ili2PlantUml.renderSource(td);
+            String html = PlantUmlHtmlRenderer.render(plant);
+            return CompletableFuture.completedFuture(html);
+        } catch (Exception e) {
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+
     public CompletableFuture<String> exportDocx(String fileUriOrPath, String titleOverride) {
         if (server.getClient() != null) {
             server.getClient().logMessage(new MessageParams(

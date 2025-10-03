@@ -41,6 +41,10 @@
         "title": "INTERLIS: Show UML class diagram"
       },
       {
+        "command": "interlis.uml.plant.show",
+        "title": "INTERLIS: Show PlantUML class diagram"
+      },
+      {
         "command": "interlis.html.show",
         "title": "INTERLIS: Show documentation as HTML"
       },

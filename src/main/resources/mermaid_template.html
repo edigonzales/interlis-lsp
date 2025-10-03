@@ -24,6 +24,12 @@
       flex-direction: column;
       min-height: 0;
     }
+    .page.source-collapsed {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .page.source-collapsed .source-pane {
+      display: none;
+    }
     .diagram-wrap {
       position: relative;
       flex: 1 1 auto;
@@ -44,6 +50,8 @@
       border-radius: 8px;
       cursor: pointer;
     }
+    .diagram-wrap .svg-pan-zoom_viewport { cursor: grab; }
+    .diagram-wrap .svg-pan-zoom_viewport:active { cursor: grabbing; }
     .diagram-wrap svg { width: 100% !important; height: 100% !important; max-width: none !important; }
     .source-header {
       padding: 12px 16px;
@@ -54,6 +62,33 @@
       text-transform: uppercase;
       font-size: 12px;
       color: #5a5a5a;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .source-header button {
+      padding: 6px 10px;
+      border: 1px solid #d0d0d0;
+      background: #fff;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 11px;
+      text-transform: none;
+    }
+    .copy-status {
+      font-size: 11px;
+      color: #2f7a2f;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      min-width: 70px;
+      text-align: right;
+    }
+    .copy-status.visible {
+      opacity: 1;
+    }
+    .copy-status.error {
+      color: #b00020;
     }
     .source-content {
       flex: 1 1 auto;
@@ -113,7 +148,8 @@ ${mermaidString}
         '<button type="button" data-a="zin">+</button>' +
         '<button type="button" data-a="zout">−</button>' +
         '<button type="button" data-a="fit">Fit</button>' +
-        '<button type="button" data-a="download">Download SVG</button>';
+        '<button type="button" data-a="download">Download SVG</button>' +
+        '<button type="button" data-a="toggle-source" aria-expanded="true">Hide code</button>';
       wrap.appendChild(toolbar);
 
       wrap.insertAdjacentHTML('beforeend', out.svg);
@@ -126,7 +162,7 @@ ${mermaidString}
 
       var sourcePane = document.createElement('div');
       sourcePane.className = 'source-pane';
-      sourcePane.innerHTML = '<div class="source-header">Mermaid source</div>';
+      sourcePane.innerHTML = '<div class="source-header"><span>Mermaid source</span><span class="copy-status" aria-live="polite" role="status"></span><button type="button" class="copy-button">Copy</button></div>';
       var sourceContent = document.createElement('pre');
       sourceContent.className = 'source-content';
       sourceContent.textContent = graphText.trim();
@@ -134,6 +170,18 @@ ${mermaidString}
 
       page.appendChild(diagramPane);
       page.appendChild(sourcePane);
+
+      function setSourceCollapsed(collapsed) {
+        page.classList.toggle('source-collapsed', collapsed);
+        sourcePane.classList.toggle('collapsed', collapsed);
+        var toggle = toolbar.querySelector('[data-a="toggle-source"]');
+        if (toggle) {
+          toggle.textContent = collapsed ? 'Show code' : 'Hide code';
+          toggle.setAttribute('aria-expanded', (!collapsed).toString());
+        }
+      }
+
+      setSourceCollapsed(false);
 
       // 3) Normalize the rendered <svg> just in case
       var svgEl = wrap.querySelector('svg');
@@ -148,21 +196,37 @@ ${mermaidString}
 
       var pz = svgPanZoom(svgEl, {
         zoomEnabled: true,
+        panEnabled: true,
         mouseWheelZoomEnabled: true,
         controlIconsEnabled: false,
         fit: true, center: true,
         minZoom: 0.2, maxZoom: 10,
+        contain: false,
         preventMouseEventsDefault: true
       });
+
+      pz.enablePan();
 
       var STEP = 0.2;
       toolbar.addEventListener('click', function (e) {
         var a = e.target && e.target.getAttribute('data-a');
+        if (!a) { return; }
+        e.preventDefault();
         if (a === 'zin')  pz.zoomBy(1 + STEP);
         if (a === 'zout') pz.zoomBy(1 / (1 + STEP));
         if (a === 'fit')  { pz.resize(); pz.fit(); pz.center(); }
         if (a === 'download') downloadSVG(svgEl, 'diagram.svg');
+        if (a === 'toggle-source') setSourceCollapsed(!page.classList.contains('source-collapsed'));
       });
+
+      var copyButton = sourcePane.querySelector('.copy-button');
+      if (copyButton) {
+        copyButton.addEventListener('click', function () {
+          copyTextToClipboard(sourceContent.textContent || '').then(function (success) {
+            showCopyFeedback(copyButton, success);
+          });
+        });
+      }
 
       window.addEventListener('resize', function () {
         pz.resize(); pz.fit(); pz.center();
@@ -199,6 +263,56 @@ function downloadSVG(svgEl, filename) {
   // Serialize and hand off to the extension for saving
   var xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
   vscode.postMessage({ type: 'downloadSvg', filename: filename || 'diagram.svg', svg: xml });
+}
+
+function copyTextToClipboard(text) {
+  if (!text) { return Promise.resolve(false); }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(text).then(function () {
+      return true;
+    }).catch(function () {
+      return legacyCopy(text);
+    });
+  }
+  return Promise.resolve(legacyCopy(text));
+}
+
+function legacyCopy(text) {
+  var textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'absolute';
+  textarea.style.left = '-9999px';
+  document.body.appendChild(textarea);
+  textarea.select();
+  var success = false;
+  try {
+    success = document.execCommand('copy');
+  } catch (err) {
+    console.error('Failed to copy text', err);
+    success = false;
+  }
+  document.body.removeChild(textarea);
+  return success;
+}
+
+function showCopyFeedback(button, success) {
+  if (!button) { return; }
+  var header = button.closest('.source-header');
+  if (!header) { return; }
+  var status = header.querySelector('.copy-status');
+  if (!status) { return; }
+
+  status.textContent = success ? 'Copied!' : 'Copy failed';
+  status.classList.toggle('error', !success);
+  status.classList.add('visible');
+
+  if (status._copyTimeout) {
+    clearTimeout(status._copyTimeout);
+  }
+  status._copyTimeout = setTimeout(function () {
+    status.classList.remove('visible');
+  }, 2000);
 }
 
 

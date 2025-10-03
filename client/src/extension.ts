@@ -158,6 +158,65 @@ export async function activate(context: vscode.ExtensionContext) {
   registerHandlersOnce(); // ensure handlers exist now
   client.onDidChangeState(e => { if (e.newState === State.Running) registerHandlersOnce(); });
 
+  async function showUmlHtml(html: string, title: string) {
+    const column = vscode.ViewColumn.Beside;
+    if (!umlPanel) {
+      umlPanel = vscode.window.createWebviewPanel(
+        "interlisUmlDiagram",
+        "INTERLIS UML Diagram",
+        column,
+        { enableScripts: true, retainContextWhenHidden: true }
+      );
+      umlPanel.onDidDispose(() => { umlPanel = undefined; }, undefined, context.subscriptions);
+      umlPanel.webview.onDidReceiveMessage(async message => {
+        if (!message || message.type !== "downloadSvg" || typeof message.svg !== "string") {
+          return;
+        }
+
+        const filename = typeof message.filename === "string" && message.filename.trim().length > 0
+          ? message.filename.trim()
+          : "diagram.svg";
+
+        let defaultUri: vscode.Uri | undefined;
+        if (lastDiagramSource && lastDiagramSource.scheme === "file") {
+          const folder = path.dirname(lastDiagramSource.fsPath);
+          defaultUri = vscode.Uri.file(path.join(folder, filename));
+        }
+
+        try {
+          const options: vscode.SaveDialogOptions = {
+            saveLabel: "Save UML diagram",
+            filters: { SVG: ["svg"] }
+          };
+          if (defaultUri) {
+            options.defaultUri = defaultUri;
+          }
+
+          const target = await vscode.window.showSaveDialog(options);
+          if (!target) {
+            return;
+          }
+
+          const encoder = new TextEncoder();
+          await vscode.workspace.fs.writeFile(target, encoder.encode(message.svg));
+
+          if (target.scheme === "file") {
+            vscode.window.showInformationMessage(`Saved UML diagram to ${target.fsPath}`);
+          } else {
+            vscode.window.showInformationMessage("Saved UML diagram.");
+          }
+        } catch (err: any) {
+          vscode.window.showErrorMessage(`Failed to save UML diagram: ${err?.message ?? err}`);
+        }
+      }, undefined, context.subscriptions);
+    } else {
+      umlPanel.reveal(umlPanel.viewColumn ?? vscode.ViewColumn.Beside, true);
+    }
+
+    umlPanel.title = title;
+    umlPanel.webview.html = html;
+  }
+
   // Manual compile command — rely ONLY on notifications for output
   context.subscriptions.push(
     vscode.commands.registerCommand("interlis.compile.run", async () => {
@@ -196,63 +255,31 @@ export async function activate(context: vscode.ExtensionContext) {
 
         lastDiagramSource = editor.document.uri;
 
-        const column = vscode.ViewColumn.Beside;
-        if (!umlPanel) {
-          umlPanel = vscode.window.createWebviewPanel(
-            "interlisUmlDiagram",
-            "INTERLIS UML Diagram",
-            column,
-            { enableScripts: true, retainContextWhenHidden: true }
-          );
-          umlPanel.onDidDispose(() => { umlPanel = undefined; }, undefined, context.subscriptions);
-          umlPanel.webview.onDidReceiveMessage(async message => {
-            if (!message || message.type !== "downloadSvg" || typeof message.svg !== "string") {
-              return;
-            }
-
-            const filename = typeof message.filename === "string" && message.filename.trim().length > 0
-              ? message.filename.trim()
-              : "diagram.svg";
-
-            let defaultUri: vscode.Uri | undefined;
-            if (lastDiagramSource && lastDiagramSource.scheme === "file") {
-              const folder = path.dirname(lastDiagramSource.fsPath);
-              defaultUri = vscode.Uri.file(path.join(folder, filename));
-            }
-
-            try {
-              const options: vscode.SaveDialogOptions = {
-                saveLabel: "Save UML diagram",
-                filters: { SVG: ["svg"] }
-              };
-              if (defaultUri) {
-                options.defaultUri = defaultUri;
-              }
-
-              const target = await vscode.window.showSaveDialog(options);
-              if (!target) {
-                return;
-              }
-
-              const encoder = new TextEncoder();
-              await vscode.workspace.fs.writeFile(target, encoder.encode(message.svg));
-
-              if (target.scheme === "file") {
-                vscode.window.showInformationMessage(`Saved UML diagram to ${target.fsPath}`);
-              } else {
-                vscode.window.showInformationMessage("Saved UML diagram.");
-              }
-            } catch (err: any) {
-              vscode.window.showErrorMessage(`Failed to save UML diagram: ${err?.message ?? err}`);
-            }
-          }, undefined, context.subscriptions);
-        } else {
-          umlPanel.reveal(umlPanel.viewColumn ?? vscode.ViewColumn.Beside, true);
-        }
-
-        umlPanel.webview.html = html;
+        await showUmlHtml(html, "INTERLIS UML Diagram (Mermaid)");
       } catch (e: any) {
         vscode.window.showErrorMessage(`UML generation failed: ${e?.message ?? e}`);
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("interlis.uml.plant.show", async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) { vscode.window.showWarningMessage("Open an .ili file first."); return; }
+
+      const fileUri = editor.document.uri.toString();
+
+      try {
+        const html = await client!.sendRequest("workspace/executeCommand", {
+          command: "interlis.uml.plant",
+          arguments: [fileUri]
+        }) as string;
+
+        lastDiagramSource = editor.document.uri;
+
+        await showUmlHtml(html, "INTERLIS UML Diagram (PlantUML)");
+      } catch (e: any) {
+        vscode.window.showErrorMessage(`PlantUML generation failed: ${e?.message ?? e}`);
       }
     })
   );

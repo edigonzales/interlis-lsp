@@ -50,6 +50,34 @@ class CommandHandlersTest {
     }
 
     @Test
+    void generatePlantUmlReturnsHtmlFromModel() throws Exception {
+        Path iliFile = tempDir.resolve("SimpleModelPlant.ili");
+        Files.writeString(iliFile, "INTERLIS 2.3;\n" +
+                "MODEL SimpleModelPlant (en)\n" +
+                "AT \"http://example.com/SimpleModelPlant.ili\"\n" +
+                "VERSION \"2024-01-01\" =\n" +
+                "  TOPIC SimpleTopic =\n" +
+                "    CLASS Thing =\n" +
+                "    END Thing;\n" +
+                "  END SimpleTopic;\n" +
+                "END SimpleModelPlant.\n");
+
+        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(new ClientSettings(), iliFile.toString());
+        assertNotNull(outcome.getTransferDescription(), outcome.getLogText());
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        CommandHandlers handlers = new CommandHandlers(server);
+
+        CompletableFuture<Object> future = handlers.generatePlantUml(iliFile.toString());
+        Object htmlObj = future.get(30, TimeUnit.SECONDS);
+        String html = assertInstanceOf(String.class, htmlObj);
+
+        assertTrue(html.contains("@startuml"));
+        assertTrue(html.contains("https://www.plantuml.com/plantuml/png/"));
+        assertTrue(html.contains("https://www.plantuml.com/plantuml/svg/"));
+    }
+
+    @Test
     void exportDocxFailsWithResponseErrorWhenCompilationFails() {
         InterlisLanguageServer server = new InterlisLanguageServer();
         CommandHandlers handlers = new CommandHandlers(server);

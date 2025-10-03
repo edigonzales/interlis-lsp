@@ -49,7 +49,8 @@ public class InterlisWorkspaceService implements WorkspaceService {
     @Override
     public CompletableFuture<Object> executeCommand(ExecuteCommandParams params) {
         if (InterlisLanguageServer.CMD_COMPILE.equals(params.getCommand())
-                || InterlisLanguageServer.CMD_GENERATE_UML.equals(params.getCommand())) {
+                || InterlisLanguageServer.CMD_GENERATE_UML.equals(params.getCommand())
+                || InterlisLanguageServer.CMD_GENERATE_PLANTUML.equals(params.getCommand())) {
             String pathOrUri = extractPath(params.getArguments());
             if (pathOrUri == null) {
                 ResponseError err = new ResponseError(ResponseErrorCode.InvalidParams,
@@ -64,8 +65,13 @@ public class InterlisWorkspaceService implements WorkspaceService {
                 return handlers.compile(pathOrUri);
             }
 
-            LOG.info("uml generation called with: {}", pathOrUri);
-            return handlers.generateUml(pathOrUri);
+            if (InterlisLanguageServer.CMD_GENERATE_UML.equals(params.getCommand())) {
+                LOG.info("uml generation called with: {}", pathOrUri);
+                return handlers.generateUml(pathOrUri);
+            }
+
+            LOG.info("plantuml generation called with: {}", pathOrUri);
+            return handlers.generatePlantUml(pathOrUri);
         }
         return CompletableFuture.completedFuture(null);
     }

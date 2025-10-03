@@ -1,0 +1,306 @@
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>PlantUML class diagram</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    html, body { height: 100%; margin: 0; }
+    body { background: #ffffff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #333; }
+    .page {
+      height: 100%;
+      padding: 16px;
+      box-sizing: border-box;
+      display: grid;
+      grid-template-columns: minmax(0, 2.5fr) minmax(280px, 1fr);
+      gap: 16px;
+    }
+    .diagram-pane, .source-pane {
+      border: 1px solid #e5e5e5;
+      border-radius: 10px;
+      background: #fafafa;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .page.source-collapsed {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .page.source-collapsed .source-pane {
+      display: none;
+    }
+    .diagram-wrap {
+      position: relative;
+      flex: 1 1 auto;
+      overflow: hidden;
+    }
+    .diagram-toolbar {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      z-index: 2;
+      display: flex;
+      gap: 6px;
+    }
+    .diagram-toolbar button,
+    .diagram-toolbar a {
+      padding: 6px 10px;
+      border: 1px solid #d0d0d0;
+      background: #fff;
+      border-radius: 8px;
+      cursor: pointer;
+      text-decoration: none;
+      color: inherit;
+    }
+    .diagram-scroll {
+      position: absolute;
+      inset: 0;
+      overflow: auto;
+      cursor: grab;
+    }
+    .diagram-scroll.dragging { cursor: grabbing; }
+    .diagram-content {
+      transform-origin: top left;
+      display: inline-block;
+    }
+    .diagram-content img {
+      display: block;
+      max-width: 100%;
+    }
+    .source-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid #e5e5e5;
+      background: rgba(255, 255, 255, 0.8);
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      font-size: 12px;
+      color: #5a5a5a;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .source-header button {
+      padding: 6px 10px;
+      border: 1px solid #d0d0d0;
+      background: #fff;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 11px;
+      text-transform: none;
+    }
+    .copy-status {
+      font-size: 11px;
+      color: #2f7a2f;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      min-width: 70px;
+      text-align: right;
+    }
+    .copy-status.visible {
+      opacity: 1;
+    }
+    .copy-status.error {
+      color: #b00020;
+    }
+    .source-content {
+      flex: 1 1 auto;
+      overflow: auto;
+      padding: 16px;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      background: #ffffff;
+      color: #333;
+      white-space: pre;
+    }
+  </style>
+</head>
+<body>
+
+<div class="page">
+  <div class="diagram-pane">
+    <div class="diagram-wrap">
+      <div class="diagram-toolbar">
+        <button type="button" data-a="zin">+</button>
+        <button type="button" data-a="zout">−</button>
+        <button type="button" data-a="fit">Fit</button>
+        <a href="${plantUmlPngUrl}" target="_blank" rel="noreferrer">Open PNG</a>
+        <a href="${plantUmlSvgUrl}" target="_blank" rel="noreferrer" download>Download SVG</a>
+        <button type="button" data-a="toggle-source" aria-expanded="true">Hide code</button>
+      </div>
+      <div class="diagram-scroll">
+        <div class="diagram-content" id="diagramContent">
+          <img id="plantImage" src="${plantUmlPngUrl}" alt="PlantUML diagram" />
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="source-pane">
+    <div class="source-header"><span>PlantUML source</span><span class="copy-status" aria-live="polite" role="status"></span><button type="button" id="copyButton">Copy</button></div>
+    <pre class="source-content" id="sourceContent">${plantUmlSource}</pre>
+  </div>
+</div>
+
+<script>
+(function() {
+  const page = document.querySelector('.page');
+  const content = document.getElementById('diagramContent');
+  const image = document.getElementById('plantImage');
+  const scroll = document.querySelector('.diagram-scroll');
+  const sourcePane = document.querySelector('.source-pane');
+  const toolbar = document.querySelector('.diagram-toolbar');
+  let scale = 1;
+  const STEP = 0.2;
+  let isDragging = false;
+  let startX = 0;
+  let startY = 0;
+  let scrollLeft = 0;
+  let scrollTop = 0;
+
+  function applyScale() {
+    content.style.transform = `scale(${scale})`;
+  }
+
+  function setSourceCollapsed(collapsed) {
+    if (page) {
+      page.classList.toggle('source-collapsed', collapsed);
+    }
+    if (sourcePane) {
+      sourcePane.classList.toggle('collapsed', collapsed);
+    }
+    if (toolbar) {
+      const toggle = toolbar.querySelector('[data-a="toggle-source"]');
+      if (toggle) {
+        toggle.textContent = collapsed ? 'Show code' : 'Hide code';
+        toggle.setAttribute('aria-expanded', (!collapsed).toString());
+      }
+    }
+  }
+
+  setSourceCollapsed(false);
+
+  if (toolbar) {
+    toolbar.addEventListener('click', function (e) {
+      const action = e.target && e.target.getAttribute('data-a');
+      if (!action) { return; }
+      e.preventDefault();
+      if (action === 'zin') {
+        scale = Math.min(4, scale * (1 + STEP));
+        applyScale();
+      } else if (action === 'zout') {
+        scale = Math.max(0.25, scale / (1 + STEP));
+        applyScale();
+      } else if (action === 'fit') {
+        scale = 1;
+        applyScale();
+      } else if (action === 'toggle-source') {
+        setSourceCollapsed(!page.classList.contains('source-collapsed'));
+      }
+    });
+  }
+
+  image.addEventListener('load', function () {
+    scale = 1;
+    applyScale();
+  });
+
+  if (scroll) {
+      scroll.addEventListener('pointerdown', function (e) {
+        if (e.button !== 0) { return; }
+        isDragging = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        scrollLeft = scroll.scrollLeft;
+        scrollTop = scroll.scrollTop;
+        scroll.classList.add('dragging');
+        if (scroll.setPointerCapture) {
+          scroll.setPointerCapture(e.pointerId);
+        }
+      });
+
+    scroll.addEventListener('pointermove', function (e) {
+      if (!isDragging) { return; }
+      scroll.scrollLeft = scrollLeft - (e.clientX - startX);
+      scroll.scrollTop = scrollTop - (e.clientY - startY);
+    });
+
+    function stopDrag(e) {
+      if (!isDragging) { return; }
+      isDragging = false;
+      scroll.classList.remove('dragging');
+      if (scroll.hasPointerCapture && scroll.hasPointerCapture(e.pointerId)) {
+        scroll.releasePointerCapture(e.pointerId);
+      }
+    }
+
+    scroll.addEventListener('pointerup', stopDrag);
+    scroll.addEventListener('pointercancel', stopDrag);
+    scroll.addEventListener('pointerleave', stopDrag);
+  }
+
+  const copyButton = document.getElementById('copyButton');
+  const sourceContent = document.getElementById('sourceContent');
+  if (copyButton && sourceContent) {
+    copyButton.addEventListener('click', function () {
+      copyTextToClipboard(sourceContent.textContent || '').then(function (success) {
+        showCopyFeedback(copyButton, success);
+      });
+    });
+  }
+})();
+
+function copyTextToClipboard(text) {
+  if (!text) { return Promise.resolve(false); }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(text).then(function () {
+      return true;
+    }).catch(function () {
+      return legacyCopy(text);
+    });
+  } else {
+    return Promise.resolve(legacyCopy(text));
+  }
+}
+
+function legacyCopy(text) {
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'absolute';
+  textarea.style.left = '-9999px';
+  document.body.appendChild(textarea);
+  textarea.select();
+  let success = false;
+  try {
+    success = document.execCommand('copy');
+  } catch (err) {
+    console.error('Failed to copy text', err);
+    success = false;
+  }
+  document.body.removeChild(textarea);
+  return success;
+}
+
+function showCopyFeedback(button, success) {
+  if (!button) { return; }
+  const header = button.closest('.source-header');
+  if (!header) { return; }
+  const status = header.querySelector('.copy-status');
+  if (!status) { return; }
+
+  status.textContent = success ? 'Copied!' : 'Copy failed';
+  status.classList.toggle('error', !success);
+  status.classList.add('visible');
+
+  if (status._copyTimeout) {
+    clearTimeout(status._copyTimeout);
+  }
+  status._copyTimeout = setTimeout(function () {
+    status.classList.remove('visible');
+  }, 2000);
+}
+</script>
+</body>
+</html>
