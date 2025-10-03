@@ -58,13 +58,13 @@
       "properties": {
         "interlisLsp.server.jarPath": {
           "type": "string",
-          "default": "/Users/stefan/sources/interlis-lsp/build/libs/interlis-lsp-0.0.LOCALBUILD-all.jar",
-          "description": "Path to the INTERLIS LSP fat JAR"
+          "default": "",
+          "markdownDescription": "Path to the INTERLIS LSP fat JAR. Leave empty to use the jar bundled with the extension."
         },
         "interlisLsp.javaPath": {
           "type": "string",
-          "default": "java",
-          "description": "Java executable to run the server"
+          "default": "",
+          "markdownDescription": "Path to the Java executable. Leave empty to use the platform-specific runtime bundled with the extension."
         },
         "interlisLsp.modelRepositories": {
           "type": "string",
