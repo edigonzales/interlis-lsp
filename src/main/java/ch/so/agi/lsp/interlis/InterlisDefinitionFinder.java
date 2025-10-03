@@ -196,6 +196,9 @@ final class InterlisDefinitionFinder {
             String targetUri = path.toUri().toString();
             return new Location(targetUri, range);
         } catch (Exception ex) {
+            if (CancellationUtil.isCancellation(ex)) {
+                throw CancellationUtil.propagateCancellation(ex);
+            }
             LOG.warn("Failed to build element definition location for {}", token, ex);
             return null;
         }
@@ -328,6 +331,9 @@ final class InterlisDefinitionFinder {
             String targetUri = path.toUri().toString();
             return new Location(targetUri, range);
         } catch (Exception ex) {
+            if (CancellationUtil.isCancellation(ex)) {
+                throw CancellationUtil.propagateCancellation(ex);
+            }
             LOG.warn("Failed to build definition location for {}", pathOrUri, ex);
             return null;
         }

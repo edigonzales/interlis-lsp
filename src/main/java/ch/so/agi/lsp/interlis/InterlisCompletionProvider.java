@@ -111,6 +111,9 @@ final class InterlisCompletionProvider {
 
             return Either.forLeft(Collections.emptyList());
         } catch (Exception ex) {
+            if (CancellationUtil.isCancellation(ex)) {
+                throw CancellationUtil.propagateCancellation(ex);
+            }
             LOG.warn("Completion failed", ex);
             return Either.forLeft(Collections.emptyList());
         }
@@ -252,6 +255,9 @@ final class InterlisCompletionProvider {
             }
             return outcome != null ? outcome.getTransferDescription() : null;
         } catch (Exception ex) {
+            if (CancellationUtil.isCancellation(ex)) {
+                throw CancellationUtil.propagateCancellation(ex);
+            }
             LOG.warn("Failed to obtain transfer description for completion", ex);
             return null;
         }

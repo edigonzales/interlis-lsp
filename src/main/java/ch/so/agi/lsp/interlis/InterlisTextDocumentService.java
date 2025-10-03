@@ -2,6 +2,7 @@ package ch.so.agi.lsp.interlis;
 
 import org.eclipse.lsp4j.*;
 import org.eclipse.lsp4j.services.TextDocumentService;
+import org.eclipse.lsp4j.jsonrpc.CompletableFutures;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -86,7 +87,7 @@ public class InterlisTextDocumentService implements TextDocumentService {
             String uri = params.getTextDocument().getUri();
             String pathOrUri = toFilesystemPathIfPossible(uri);
             String originalText = readDocument(uri);
-            
+
             ClientSettings cfg = server.getClientSettings();
             String formattedText = Ili2cUtil.prettyPrint(cfg, pathOrUri);
 
@@ -95,14 +96,29 @@ public class InterlisTextDocumentService implements TextDocumentService {
                 edits = Collections.singletonList(edit);
             }
         } catch (Exception ex) {
-            LOG.error("Formatting failed", ex);
+            if (CancellationUtil.isCancellation(ex)) {
+                LOG.debug("Formatting cancelled for {}", params.getTextDocument() != null
+                        ? params.getTextDocument().getUri() : "<unknown>");
+            } else {
+                LOG.error("Formatting failed", ex);
+            }
         }
         return CompletableFuture.completedFuture(edits);
     }
 
     @Override
     public CompletableFuture<Either<List<CompletionItem>, CompletionList>> completion(CompletionParams params) {
-        return CompletableFuture.supplyAsync(() -> completionProvider.complete(params));
+        return CompletableFutures.computeAsync(cancelChecker -> {
+            cancelChecker.checkCanceled();
+            try {
+                return completionProvider.complete(params);
+            } catch (RuntimeException ex) {
+                if (CancellationUtil.isCancellation(ex)) {
+                    throw CancellationUtil.propagateCancellation(ex);
+                }
+                throw ex;
+            }
+        });
     }
 
     @Override
@@ -116,10 +132,14 @@ public class InterlisTextDocumentService implements TextDocumentService {
 
     @Override
     public CompletableFuture<Either<List<? extends Location>, List<? extends LocationLink>>> definition(DefinitionParams params) {
-        return CompletableFuture.supplyAsync(() -> {
+        return CompletableFutures.computeAsync(cancelChecker -> {
+            cancelChecker.checkCanceled();
             try {
                 return definitionFinder.findDefinition(params);
             } catch (Exception ex) {
+                if (CancellationUtil.isCancellation(ex)) {
+                    throw CancellationUtil.propagateCancellation(ex);
+                }
                 LOG.error("Definition lookup failed", ex);
                 return Either.forLeft(Collections.emptyList());
             }
@@ -128,7 +148,8 @@ public class InterlisTextDocumentService implements TextDocumentService {
 
     @Override
     public CompletableFuture<List<Either<SymbolInformation, DocumentSymbol>>> documentSymbol(DocumentSymbolParams params) {
-        return CompletableFuture.supplyAsync(() -> {
+        return CompletableFutures.computeAsync(cancelChecker -> {
+            cancelChecker.checkCanceled();
             try {
                 if (params == null || params.getTextDocument() == null) {
                     return Collections.emptyList();
@@ -170,6 +191,9 @@ public class InterlisTextDocumentService implements TextDocumentService {
                 }
                 return result;
             } catch (Exception ex) {
+                if (CancellationUtil.isCancellation(ex)) {
+                    throw CancellationUtil.propagateCancellation(ex);
+                }
                 LOG.error("Document symbol request failed", ex);
                 return Collections.emptyList();
             }
@@ -200,6 +224,10 @@ public class InterlisTextDocumentService implements TextDocumentService {
             server.clearOutput();
             server.logToClient(outcome.getLogText());
         } catch (Exception ex) {
+            if (CancellationUtil.isCancellation(ex)) {
+                LOG.debug("Validation cancelled for {} (source={})", documentUri, source);
+                throw CancellationUtil.propagateCancellation(ex);
+            }
             LOG.error("Validation failed for {} (source={})", documentUri, source, ex);
         }
     }
