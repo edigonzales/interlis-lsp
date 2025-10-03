@@ -15,6 +15,7 @@ import java.net.URI;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 public class InterlisWorkspaceService implements WorkspaceService {
@@ -119,19 +120,81 @@ public class InterlisWorkspaceService implements WorkspaceService {
         return normalizePath(fileUriOrPath);
     }
 
+    private static final int MAX_COERCE_DEPTH = 8;
+
     private static String coerceArgToString(Object arg) {
+        return coerceArgToString(arg, 0);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static String coerceArgToString(Object arg, int depth) {
         if (arg == null) return null;
         if (arg instanceof String s) return s;
         if (arg instanceof JsonPrimitive jp && jp.isString()) return jp.getAsString();
-        if (arg instanceof java.util.Map<?, ?> map) {
-            // Some clients send objects; try common shapes
-            Object uri = map.get("uri");
-            if (uri instanceof String s) return s;
+        if (depth >= MAX_COERCE_DEPTH) {
+            return String.valueOf(arg);
+        }
+        if (arg instanceof List<?> list) {
+            for (Object element : list) {
+                String candidate = coerceArgToString(element, depth + 1);
+                if (candidate != null && !candidate.isBlank()) {
+                    return candidate;
+                }
+            }
+            return null;
+        }
+        if (arg instanceof Map<?, ?> map) {
+            String direct = coerceFromMapEntries((Map<Object, Object>) map, depth,
+                    "uri", "fsPath", "path", "href");
+            if (direct != null) {
+                return direct;
+            }
+
+            String nested = coerceFromMapEntries((Map<Object, Object>) map, depth,
+                    "textDocument", "documentUri", "source");
+            if (nested != null) {
+                return nested;
+            }
+
+            Object scheme = map.get("scheme");
+            Object authority = map.get("authority");
             Object path = map.get("path");
-            if (path instanceof String s) return s;
+            if (scheme instanceof String schemeStr) {
+                String pathStr = coerceArgToString(path, depth + 1);
+                if (pathStr != null && !pathStr.isBlank()) {
+                    String authorityStr = coerceArgToString(authority, depth + 1);
+                    try {
+                        URI uri = authorityStr != null && !authorityStr.isBlank()
+                                ? new URI(schemeStr, authorityStr, pathStr, null, null)
+                                : new URI(schemeStr, null, pathStr, null);
+                        return uri.toString();
+                    } catch (Exception ignore) {
+                        // Fall through to final fallback
+                    }
+                }
+            }
+
+            return String.valueOf(arg);
         }
         // Fallback: last resort
         return String.valueOf(arg);
+    }
+
+    private static String coerceFromMapEntries(Map<Object, Object> map, int depth, String... keys) {
+        for (String key : keys) {
+            if (!map.containsKey(key)) {
+                continue;
+            }
+            Object value = map.get(key);
+            if (value == map) {
+                continue;
+            }
+            String candidate = coerceArgToString(value, depth + 1);
+            if (candidate != null && !candidate.isBlank()) {
+                return candidate;
+            }
+        }
+        return null;
     }
 
     private String normalizePath(String pathOrUri) {
