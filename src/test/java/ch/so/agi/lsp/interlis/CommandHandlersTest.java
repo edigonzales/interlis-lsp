@@ -63,4 +63,19 @@ class CommandHandlersTest {
         assertEquals(ResponseErrorCode.InternalError.getValue(), ree.getResponseError().getCode());
         assertTrue(ree.getMessage().contains(nonexistent.getFileName().toString()));
     }
+
+    @Test
+    void exportHtmlFailsWithResponseErrorWhenCompilationFails() {
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        CommandHandlers handlers = new CommandHandlers(server);
+
+        Path nonexistent = tempDir.resolve("MissingHtml.ili");
+        CompletableFuture<String> future = handlers.exportHtml(nonexistent.toUri().toString(), null);
+
+        ExecutionException exec = assertThrows(ExecutionException.class, () -> future.get(30, TimeUnit.SECONDS));
+        Throwable cause = exec.getCause();
+        ResponseErrorException ree = assertInstanceOf(ResponseErrorException.class, cause);
+        assertEquals(ResponseErrorCode.InternalError.getValue(), ree.getResponseError().getCode());
+        assertTrue(ree.getMessage().contains(nonexistent.getFileName().toString()));
+    }
 }

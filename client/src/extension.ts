@@ -6,6 +6,7 @@ let client: LanguageClient | undefined;
 let revealOutputOnNextLog = false;
 const CARET_SENTINEL = "__INTERLIS_AUTOCLOSE_CARET__";
 let umlPanel: vscode.WebviewPanel | undefined;
+let htmlPanel: vscode.WebviewPanel | undefined;
 let lastDiagramSource: vscode.Uri | undefined;
 
 type PendingCaret = { version: number; position: vscode.Position };
@@ -252,6 +253,39 @@ export async function activate(context: vscode.ExtensionContext) {
         umlPanel.webview.html = html;
       } catch (e: any) {
         vscode.window.showErrorMessage(`UML generation failed: ${e?.message ?? e}`);
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("interlis.html.show", async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) { vscode.window.showWarningMessage("Open an .ili file first."); return; }
+
+      const fileUri = editor.document.uri.toString();
+
+      try {
+        const html = await client!.sendRequest<string>("interlis/exportHtml", { uri: fileUri });
+        if (!html) {
+          throw new Error("Server returned an empty document");
+        }
+
+        const column = vscode.ViewColumn.Beside;
+        if (!htmlPanel) {
+          htmlPanel = vscode.window.createWebviewPanel(
+            "interlisModelDocumentation",
+            "INTERLIS Documentation",
+            column,
+            { enableScripts: false, retainContextWhenHidden: true }
+          );
+          htmlPanel.onDidDispose(() => { htmlPanel = undefined; }, undefined, context.subscriptions);
+        } else {
+          htmlPanel.reveal(htmlPanel.viewColumn ?? column, true);
+        }
+
+        htmlPanel.webview.html = html;
+      } catch (err: any) {
+        vscode.window.showErrorMessage(`Failed to render INTERLIS documentation: ${err?.message ?? err}`);
       }
     })
   );

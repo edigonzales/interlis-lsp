@@ -299,7 +299,7 @@ public final class IliDocxRenderer {
         return "(Class)";
     }
 
-    private static String viewableTitle(Viewable viewable) {
+    static String viewableTitle(Viewable viewable) {
         if (viewable == null) {
             return "";
         }
@@ -313,7 +313,7 @@ public final class IliDocxRenderer {
         return viewable.getName();
     }
 
-    private static String enumerationTitle(Domain domain) {
+    static String enumerationTitle(Domain domain) {
         if (domain == null) {
             return "";
         }
@@ -355,7 +355,7 @@ public final class IliDocxRenderer {
         writeAttributeTable(doc, collectRowsForViewable(model, scope, viewable));
     }
 
-    private static List<Row> collectRowsForViewable(Model model, Container scope, Viewable viewable) {
+    static List<Row> collectRowsForViewable(Model model, Container scope, Viewable viewable) {
         List<Row> rows = new ArrayList<>();
 
         for (AttributeDef attribute : getElements(viewable, AttributeDef.class)) {
@@ -465,7 +465,7 @@ public final class IliDocxRenderer {
         applyParagraphSpacing(spacer);
     }
 
-    private static List<EnumEntry> collectEnumerationEntries(EnumerationType enumType) {
+    static List<EnumEntry> collectEnumerationEntries(EnumerationType enumType) {
         List<EnumEntry> entries = new ArrayList<>();
         if (enumType == null) {
             return entries;
@@ -761,7 +761,7 @@ public final class IliDocxRenderer {
         rpr.getRFontsArray(0).setCs(FONT_FAMILY);
     }
 
-    private static <T extends Element> List<T> getElements(Container container, Class<T> type) {
+    static <T extends Element> List<T> getElements(Container container, Class<T> type) {
         List<T> out = new ArrayList<>();
         if (container == null) {
             return out;
@@ -776,7 +776,7 @@ public final class IliDocxRenderer {
         return out;
     }
 
-    private static <T extends Element> List<T> sortByName(T[] arr) {
+    static <T extends Element> List<T> sortByName(T[] arr) {
         if (arr == null) {
             return Collections.emptyList();
         }
@@ -785,7 +785,7 @@ public final class IliDocxRenderer {
         return list;
     }
 
-    private static String nz(String value) {
+    static String nz(String value) {
         return value == null ? "" : value;
     }
 
@@ -799,7 +799,7 @@ public final class IliDocxRenderer {
         spacing.setAfter(DEFAULT_SPACING_AFTER);
     }
 
-    private record EnumEntry(String value, String documentation) {}
+    static record EnumEntry(String value, String documentation) {}
 
-    private record Row(String name, String card, String type, String descr) {}
+    static record Row(String name, String card, String type, String descr) {}
 }

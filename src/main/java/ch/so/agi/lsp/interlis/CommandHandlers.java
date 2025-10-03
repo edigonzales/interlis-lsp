@@ -106,6 +106,39 @@ public class CommandHandlers {
         }
     }
 
+    public CompletableFuture<String> exportHtml(String fileUriOrPath, String titleOverride) {
+        if (server.getClient() != null) {
+            server.getClient().logMessage(new MessageParams(
+                MessageType.Log, "exportHtml called for " + fileUriOrPath));
+        }
+
+        String filesystemPath = InterlisTextDocumentService.toFilesystemPathIfPossible(fileUriOrPath);
+
+        ClientSettings cfg = server.getClientSettings();
+        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(cfg, filesystemPath);
+        List<Diagnostic> diagnostics = DiagnosticsMapper.toDiagnostics(outcome.getMessages());
+        server.publishDiagnostics(fileUriOrPath, diagnostics);
+        server.clearOutput();
+        server.logToClient(outcome.getLogText());
+
+        String displayPath = firstNonBlank(filesystemPath, fileUriOrPath);
+
+        TransferDescription td = outcome.getTransferDescription();
+        if (td == null) {
+            return CompletableFuture.failedFuture(compilerFailure(displayPath, outcome));
+        }
+
+        try {
+            String title = (titleOverride != null && !titleOverride.isBlank())
+                    ? titleOverride
+                    : deriveDocumentTitle(displayPath);
+            String html = InterlisHtmlExporter.renderHtml(td, title);
+            return CompletableFuture.completedFuture(html);
+        } catch (Exception e) {
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+
     private static String firstNonBlank(String a, String b) {
         if (a != null && !a.isBlank()) {
             return a;
