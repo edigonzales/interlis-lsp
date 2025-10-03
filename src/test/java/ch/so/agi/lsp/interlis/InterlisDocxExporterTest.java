@@ -5,12 +5,16 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import ch.interlis.ili2c.metamodel.AttributeDef;
+import ch.interlis.ili2c.metamodel.Domain;
+import ch.interlis.ili2c.metamodel.Enumeration;
+import ch.interlis.ili2c.metamodel.EnumerationType;
 import ch.interlis.ili2c.metamodel.Model;
-import ch.interlis.ili2c.metamodel.TransferDescription;
+import ch.interlis.ili2c.metamodel.Table;
 import ch.interlis.ili2c.metamodel.Topic;
+import ch.interlis.ili2c.metamodel.TransferDescription;
 import ch.interlis.ili2c.metamodel.View;
 import ch.interlis.ili2c.metamodel.Viewable;
-import ch.interlis.ili2c.metamodel.Table;
 import java.io.ByteArrayInputStream;
 import java.math.BigInteger;
 import java.nio.file.Files;
@@ -54,12 +58,15 @@ class InterlisDocxExporterTest {
                 "AT \"http://example.com/DocTest.ili\"",
                 "VERSION \"2024-01-01\" =",
                 "  TOPIC DocTopic =",
+                "    DOMAIN RoofColor = (rot (hell, dunkel), blau);",
                 "    STRUCTURE Address =",
                 "      Street : MANDATORY TEXT*50;",
                 "    END Address;",
                 "    CLASS Building =",
                 "      Name : MANDATORY TEXT*50;",
                 "      Address : Address;",
+                "      RoofColor : RoofColor;",
+                "      Status : (geplant, gebaut, abgerissen);",
                 "    END Building;",
                 "  END DocTopic;",
                 "END DocTest.",
@@ -84,10 +91,41 @@ class InterlisDocxExporterTest {
         Table structure = findTable(topic, "Address");
         assertNotNull(structure, "Expected structure Address");
         structure.setDocumentation("Structure documentation");
+        try {
+            structure.setAbstract(true);
+        } catch (java.beans.PropertyVetoException e) {
+            throw new IllegalStateException("Unable to mark structure abstract", e);
+        }
 
         Table clazz = findTable(topic, "Building");
         assertNotNull(clazz, "Expected class Building");
         clazz.setDocumentation("Class documentation");
+
+        AttributeDef statusAttribute = findAttribute(clazz, "Status");
+        assertNotNull(statusAttribute, "Expected Status attribute");
+        assertTrue(statusAttribute.getDomain() instanceof EnumerationType,
+                "Expected inline enumeration for Status attribute");
+
+        Domain enumDomain = findDomain(topic, "RoofColor");
+        assertNotNull(enumDomain, "Expected domain RoofColor");
+        enumDomain.setDocumentation("Roof color documentation");
+
+        EnumerationType enumerationType = (EnumerationType) enumDomain.getType();
+        assertNotNull(enumerationType, "Expected enumeration type for RoofColor");
+        Enumeration enumeration = enumerationType.getEnumeration();
+        assertNotNull(enumeration, "Expected enumeration tree");
+        Enumeration.Element rot = enumeration.getElement(0);
+        assertNotNull(rot, "Expected rot element");
+        rot.setDocumentation("Rot doc");
+        Enumeration subRot = rot.getSubEnumeration();
+        assertNotNull(subRot, "Expected rot sub enumeration");
+        Enumeration.Element hell = subRot.getElement(0);
+        hell.setDocumentation("Hell doc");
+        Enumeration.Element dunkel = subRot.getElement(1);
+        dunkel.setDocumentation("Dunkel doc");
+        Enumeration.Element blau = enumeration.getElement(1);
+        assertNotNull(blau, "Expected blau element");
+        blau.setDocumentation("Blau doc");
 
         Viewable view = addSyntheticView(topic, "BuildingView");
         view.setDocumentation("View documentation");
@@ -117,7 +155,7 @@ class InterlisDocxExporterTest {
             assertTrue(paragraphs.get(topicIndex + 1).contains("Topic documentation"),
                     "Expected topic documentation after heading");
 
-            int structureIndex = indexContaining(paragraphs, "Address (Structure)");
+            int structureIndex = indexContaining(paragraphs, "Address (Abstract Structure)");
             assertTrue(paragraphs.get(structureIndex + 1).contains("Structure documentation"),
                     "Expected structure documentation after heading");
 
@@ -128,6 +166,10 @@ class InterlisDocxExporterTest {
             int viewIndex = indexContaining(paragraphs, "BuildingView (View)");
             assertTrue(paragraphs.get(viewIndex + 1).contains("View documentation"),
                     "Expected view documentation after heading");
+
+            int enumIndex = indexContaining(paragraphs, "RoofColor (Enumeration)");
+            assertTrue(paragraphs.get(enumIndex + 1).contains("Roof color documentation"),
+                    "Expected enumeration documentation after heading");
 
             List<XWPFTable> tables = document.getTables();
             assertTrue(!tables.isEmpty(), "Expected at least one table");
@@ -147,6 +189,40 @@ class InterlisDocxExporterTest {
 
             assertEquals(BigInteger.valueOf(4), table.getCTTbl().getTblPr().getTblBorders().getTop().getSz());
             assertEquals(BigInteger.valueOf(4), table.getCTTbl().getTblPr().getTblBorders().getInsideV().getSz());
+
+            XWPFTable enumerationTable = tables.stream()
+                    .filter(t -> t.getRow(0) != null && t.getRow(0).getCell(0) != null
+                            && "Wert".equals(t.getRow(0).getCell(0).getText()))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("Expected enumeration table"));
+
+            assertEquals(BigInteger.valueOf(3000), enumerationTable.getCTTbl().getTblGrid().getGridColArray(0).getW());
+            assertEquals(BigInteger.valueOf(6000), enumerationTable.getCTTbl().getTblGrid().getGridColArray(1).getW());
+
+            assertEquals("rot", enumerationTable.getRow(1).getCell(0).getText());
+            assertEquals("Rot doc", enumerationTable.getRow(1).getCell(1).getText());
+            assertEquals("rot.hell", enumerationTable.getRow(2).getCell(0).getText());
+            assertEquals("Hell doc", enumerationTable.getRow(2).getCell(1).getText());
+            assertEquals("rot.dunkel", enumerationTable.getRow(3).getCell(0).getText());
+            assertEquals("Dunkel doc", enumerationTable.getRow(3).getCell(1).getText());
+            assertEquals("blau", enumerationTable.getRow(4).getCell(0).getText());
+            assertEquals("Blau doc", enumerationTable.getRow(4).getCell(1).getText());
+
+            boolean foundInlineEnum = false;
+            for (XWPFTable attrTable : tables) {
+                if (attrTable.getRow(0) == null || attrTable.getRow(0).getCell(0) == null
+                        || !"Attributname".equals(attrTable.getRow(0).getCell(0).getText())) {
+                    continue;
+                }
+                for (int i = 1; i < attrTable.getNumberOfRows(); i++) {
+                    XWPFTableRow row = attrTable.getRow(i);
+                    if (row.getCell(0) != null && "Status".equals(row.getCell(0).getText())) {
+                        assertEquals("geplant, gebaut, abgerissen", row.getCell(3).getText().trim());
+                        foundInlineEnum = true;
+                    }
+                }
+            }
+            assertTrue(foundInlineEnum, "Expected inline enumeration values in description column");
         }
     }
 
@@ -171,6 +247,32 @@ class InterlisDocxExporterTest {
             Object next = it.next();
             if (next instanceof Table table && name.equals(table.getName())) {
                 return table;
+            }
+        }
+        return null;
+    }
+
+    private static Domain findDomain(Topic topic, String name) {
+        if (topic == null || name == null) {
+            return null;
+        }
+        for (Iterator<?> it = topic.iterator(); it.hasNext();) {
+            Object next = it.next();
+            if (next instanceof Domain domain && name.equals(domain.getName())) {
+                return domain;
+            }
+        }
+        return null;
+    }
+
+    private static AttributeDef findAttribute(Table table, String name) {
+        if (table == null || name == null) {
+            return null;
+        }
+        for (Iterator<?> it = table.iterator(); it.hasNext();) {
+            Object next = it.next();
+            if (next instanceof AttributeDef attribute && name.equals(attribute.getName())) {
+                return attribute;
             }
         }
         return null;

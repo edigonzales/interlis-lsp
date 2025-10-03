@@ -11,6 +11,7 @@ import ch.interlis.ili2c.metamodel.CoordType;
 import ch.interlis.ili2c.metamodel.Domain;
 import ch.interlis.ili2c.metamodel.Element;
 import ch.interlis.ili2c.metamodel.EnumerationType;
+import ch.interlis.ili2c.metamodel.Enumeration;
 import ch.interlis.ili2c.metamodel.FormattedType;
 import ch.interlis.ili2c.metamodel.Model;
 import ch.interlis.ili2c.metamodel.MultiAreaType;
@@ -92,6 +93,10 @@ public final class IliDocxRenderer {
             BigInteger.valueOf(2250L),
             BigInteger.valueOf(3000L)
     };
+    private static final BigInteger[] ENUM_TABLE_COLUMN_WIDTHS = new BigInteger[] {
+            BigInteger.valueOf(3000L),
+            BigInteger.valueOf(6000L)
+    };
 
     private IliDocxRenderer() {}
 
@@ -110,11 +115,13 @@ public final class IliDocxRenderer {
             appendModelMetadata(doc, model);
 
             renderViewables(doc, model, model, 1);
+            renderEnumerations(doc, model, model, 1);
 
             for (Topic topic : getElements(model, Topic.class)) {
                 writeHeading(doc, topic.getName(), 0);
                 writeDocumentationParagraph(doc, topic.getDocumentation());
                 renderViewables(doc, model, topic, 1);
+                renderEnumerations(doc, model, topic, 1);
             }
         }
     }
@@ -284,7 +291,7 @@ public final class IliDocxRenderer {
         boolean structure = !table.isIdentifiable();
         boolean isAbstract = table.isAbstract();
         if (structure) {
-            return "(Structure)";
+            return isAbstract ? "(Abstract Structure)" : "(Structure)";
         }
         if (isAbstract) {
             return "(Abstract Class)";
@@ -306,6 +313,14 @@ public final class IliDocxRenderer {
         return viewable.getName();
     }
 
+    private static String enumerationTitle(Domain domain) {
+        if (domain == null) {
+            return "";
+        }
+        String name = domain.getName();
+        return (name != null && !name.isEmpty()) ? name + " (Enumeration)" : "(Enumeration)";
+    }
+
     private static void renderViewables(XWPFDocument doc, Model model, Container scope, int headingLevel) {
         for (Table table : getElements(scope, Table.class)) {
             writeViewableSection(doc, model, scope, table, headingLevel);
@@ -318,6 +333,18 @@ public final class IliDocxRenderer {
             if (viewable instanceof View) {
                 writeViewableSection(doc, model, scope, viewable, headingLevel);
             }
+        }
+    }
+
+    private static void renderEnumerations(XWPFDocument doc, Model model, Container scope, int headingLevel) {
+        for (Domain domain : getElements(scope, Domain.class)) {
+            Type type = domain.getType();
+            if (!(type instanceof EnumerationType enumType)) {
+                continue;
+            }
+            writeHeading(doc, enumerationTitle(domain), headingLevel);
+            writeDocumentationParagraph(doc, domain.getDocumentation());
+            writeEnumerationTable(doc, enumType);
         }
     }
 
@@ -336,7 +363,12 @@ public final class IliDocxRenderer {
             if ("ObjectType".equalsIgnoreCase(type)) {
                 continue;
             }
-            rows.add(new Row(attribute.getName(), formatCardinality(attribute.getCardinality()), type, docOf(attribute)));
+            String description = docOf(attribute);
+            Type domainType = attribute.getDomain();
+            if (domainType instanceof EnumerationType enumType && isInlineEnumeration(attribute, enumType)) {
+                description = inlineEnumerationValues(enumType);
+            }
+            rows.add(new Row(attribute.getName(), formatCardinality(attribute.getCardinality()), type, description));
         }
 
         if (viewable instanceof Table table) {
@@ -382,24 +414,108 @@ public final class IliDocxRenderer {
             header = table.createRow();
         }
         ensureCellCount(header, cols);
-        setCellText(header.getCell(0), "Attributname", true, 0);
-        setCellText(header.getCell(1), "Kardinalität", true, 1);
-        setCellText(header.getCell(2), "Typ", true, 2);
-        setCellText(header.getCell(3), "Beschreibung", true, 3);
+        setCellText(header.getCell(0), "Attributname", true, TABLE_COLUMN_WIDTHS[0]);
+        setCellText(header.getCell(1), "Kardinalität", true, TABLE_COLUMN_WIDTHS[1]);
+        setCellText(header.getCell(2), "Typ", true, TABLE_COLUMN_WIDTHS[2]);
+        setCellText(header.getCell(3), "Beschreibung", true, TABLE_COLUMN_WIDTHS[3]);
 
         if (rows != null) {
             for (Row row : rows) {
                 XWPFTableRow tr = table.createRow();
                 ensureCellCount(tr, cols);
-                setCellText(tr.getCell(0), nz(row.name), false, 0);
-                setCellText(tr.getCell(1), nz(row.card), false, 1);
-                setCellText(tr.getCell(2), nz(row.type), false, 2);
-                setCellText(tr.getCell(3), nz(row.descr), false, 3);
+                setCellText(tr.getCell(0), nz(row.name), false, TABLE_COLUMN_WIDTHS[0]);
+                setCellText(tr.getCell(1), nz(row.card), false, TABLE_COLUMN_WIDTHS[1]);
+                setCellText(tr.getCell(2), nz(row.type), false, TABLE_COLUMN_WIDTHS[2]);
+                setCellText(tr.getCell(3), nz(row.descr), false, TABLE_COLUMN_WIDTHS[3]);
             }
         }
 
         XWPFParagraph spacer = doc.createParagraph();
         applyParagraphSpacing(spacer);
+    }
+
+    private static void writeEnumerationTable(XWPFDocument doc, EnumerationType enumType) {
+        XWPFTable table = doc.createTable();
+        CTTbl ctTable = table.getCTTbl();
+        configureTable(ctTable);
+
+        final int cols = ENUM_TABLE_COLUMN_WIDTHS.length;
+        CTTblGrid grid = ctTable.addNewTblGrid();
+        for (int i = 0; i < cols; i++) {
+            grid.addNewGridCol().setW(ENUM_TABLE_COLUMN_WIDTHS[i]);
+        }
+
+        XWPFTableRow header = table.getRow(0);
+        if (header == null) {
+            header = table.createRow();
+        }
+        ensureCellCount(header, cols);
+        setCellText(header.getCell(0), "Wert", true, ENUM_TABLE_COLUMN_WIDTHS[0]);
+        setCellText(header.getCell(1), "Beschreibung", true, ENUM_TABLE_COLUMN_WIDTHS[1]);
+
+        List<EnumEntry> entries = collectEnumerationEntries(enumType);
+        for (EnumEntry entry : entries) {
+            XWPFTableRow tr = table.createRow();
+            ensureCellCount(tr, cols);
+            setCellText(tr.getCell(0), nz(entry.value()), false, ENUM_TABLE_COLUMN_WIDTHS[0]);
+            setCellText(tr.getCell(1), nz(entry.documentation()), false, ENUM_TABLE_COLUMN_WIDTHS[1]);
+        }
+
+        XWPFParagraph spacer = doc.createParagraph();
+        applyParagraphSpacing(spacer);
+    }
+
+    private static List<EnumEntry> collectEnumerationEntries(EnumerationType enumType) {
+        List<EnumEntry> entries = new ArrayList<>();
+        if (enumType == null) {
+            return entries;
+        }
+        Enumeration enumeration = enumType.getConsolidatedEnumeration();
+        if (enumeration != null) {
+            appendEnumerationEntries(entries, "", enumeration);
+        }
+        return entries;
+    }
+
+    private static void appendEnumerationEntries(List<EnumEntry> target, String prefix, Enumeration enumeration) {
+        if (enumeration == null) {
+            return;
+        }
+        for (Iterator<Enumeration.Element> it = enumeration.getElements(); it != null && it.hasNext();) {
+            Enumeration.Element element = it.next();
+            if (element == null) {
+                continue;
+            }
+            String name = element.getName();
+            if (name == null || name.isEmpty()) {
+                continue;
+            }
+            String value = prefix.isEmpty() ? name : prefix + "." + name;
+            target.add(new EnumEntry(value, nz(element.getDocumentation())));
+            Enumeration sub = element.getSubEnumeration();
+            if (sub != null && sub.size() > 0) {
+                appendEnumerationEntries(target, value, sub);
+            }
+        }
+    }
+
+    private static boolean isInlineEnumeration(AttributeDef attribute, EnumerationType enumType) {
+        if (attribute == null || enumType == null) {
+            return false;
+        }
+        Element container = enumType.getContainer();
+        return !(container instanceof Domain);
+    }
+
+    private static String inlineEnumerationValues(EnumerationType enumType) {
+        List<EnumEntry> entries = collectEnumerationEntries(enumType);
+        List<String> values = new ArrayList<>();
+        for (EnumEntry entry : entries) {
+            if (entry.value() != null && !entry.value().isEmpty()) {
+                values.add(entry.value());
+            }
+        }
+        return String.join(", ", values);
     }
 
     private static void ensureCellCount(XWPFTableRow row, int cols) {
@@ -408,14 +524,14 @@ public final class IliDocxRenderer {
         }
     }
 
-    private static void setCellText(XWPFTableCell cell, String text, boolean bold, int columnIndex) {
+    private static void setCellText(XWPFTableCell cell, String text, boolean bold, BigInteger width) {
         if (cell == null) {
             return;
         }
         if (cell.getParagraphs().size() > 0) {
             cell.removeParagraph(0);
         }
-        if (columnIndex >= 0 && columnIndex < TABLE_COLUMN_WIDTHS.length) {
+        if (width != null) {
             CTTcPr tcPr = cell.getCTTc().getTcPr();
             if (tcPr == null) {
                 tcPr = cell.getCTTc().addNewTcPr();
@@ -424,7 +540,7 @@ public final class IliDocxRenderer {
             if (cellWidth == null) {
                 cellWidth = tcPr.addNewTcW();
             }
-            cellWidth.setW(TABLE_COLUMN_WIDTHS[columnIndex]);
+            cellWidth.setW(width);
             cellWidth.setType(STTblWidth.DXA);
         }
         XWPFParagraph paragraph = cell.addParagraph();
@@ -498,8 +614,15 @@ public final class IliDocxRenderer {
             AbstractClassDef target = comp.getComponentType();
             return target != null ? target.getName() : "Composition";
         }
-        if (type instanceof EnumerationType) {
-            return attribute.isDomainBoolean() ? "Boolean" : attribute.getContainer().getName();
+        if (type instanceof EnumerationType enumType) {
+            if (attribute.isDomainBoolean()) {
+                return "Boolean";
+            }
+            Element container = enumType.getContainer();
+            if (container instanceof Domain domain) {
+                return domain.getName();
+            }
+            return "Enumeration";
         }
         if (type instanceof SurfaceType) {
             return "Surface";
@@ -675,6 +798,8 @@ public final class IliDocxRenderer {
         CTSpacing spacing = ppr.isSetSpacing() ? ppr.getSpacing() : ppr.addNewSpacing();
         spacing.setAfter(DEFAULT_SPACING_AFTER);
     }
+
+    private record EnumEntry(String value, String documentation) {}
 
     private record Row(String name, String card, String type, String descr) {}
 }
