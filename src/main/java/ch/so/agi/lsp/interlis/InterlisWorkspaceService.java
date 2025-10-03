@@ -72,7 +72,7 @@ public class InterlisWorkspaceService implements WorkspaceService {
 
     @JsonRequest(InterlisLanguageServer.REQ_EXPORT_DOCX)
     public CompletableFuture<String> exportDocx(Object rawParams) {
-        ExportDocxParams params = coerceExportParams(rawParams);
+        DocumentExportParams params = coerceExportParams(rawParams);
         if (params == null) {
             return invalidParams("Expected parameters with uri or path");
         }
@@ -87,18 +87,35 @@ public class InterlisWorkspaceService implements WorkspaceService {
         return handlers.exportDocx(normalized, params.getTitle());
     }
 
-    private ExportDocxParams coerceExportParams(Object rawParams) {
+    @JsonRequest(InterlisLanguageServer.REQ_EXPORT_HTML)
+    public CompletableFuture<String> exportHtml(Object rawParams) {
+        DocumentExportParams params = coerceExportParams(rawParams);
+        if (params == null) {
+            return invalidParams("Expected parameters with uri or path");
+        }
+
+        String candidate = firstNonBlank(params.getPath(), params.getUri());
+        String normalized = normalizePath(candidate);
+        if (normalized == null) {
+            return invalidParams("Expected uri or path to be provided");
+        }
+
+        LOG.info("html export called with: {}", normalized);
+        return handlers.exportHtml(normalized, params.getTitle());
+    }
+
+    private DocumentExportParams coerceExportParams(Object rawParams) {
         if (rawParams == null) {
             return null;
         }
 
         Object normalized = decodePotentialJson(rawParams);
 
-        if (normalized instanceof ExportDocxParams typed) {
+        if (normalized instanceof DocumentExportParams typed) {
             return typed;
         }
 
-        ExportDocxParams params = new ExportDocxParams();
+        DocumentExportParams params = new DocumentExportParams();
 
         if (normalized instanceof java.util.Map<?, ?> map) {
             params.setUri(coerceArgToString(map.get("uri")));
@@ -371,12 +388,12 @@ public class InterlisWorkspaceService implements WorkspaceService {
         return null;
     }
 
-    public static class ExportDocxParams {
+    public static class DocumentExportParams {
         private String uri;
         private String path;
         private String title;
 
-        public ExportDocxParams() {}
+        public DocumentExportParams() {}
 
         public String getUri() {
             return uri;
