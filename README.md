@@ -1,4 +1,4 @@
-# INTERLIS LSP (Java 21 + lsp4j) — Gradle Groovy
+# INTERLIS LSP 
 
 This is a minimal Language Server for INTERLIS using lsp4j. It exposes a command
 `interlis.validate` that validates a `.ili` file via the Java ili2c library
