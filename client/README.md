@@ -1,6 +1,6 @@
 # INTERLIS Editor
 
-![Placeholder for an INTERLIS Editor screenshot](./images/preview.gif)
+![preview gif](./images/preview.gif)
 
 ## Description
 🛠️ The INTERLIS Editor extension brings the full INTERLIS-focused language server directly into VS Code. It understands `.ili` models, validates them with [ili2c](https://github.com/claeis/ili2c), and augments the authoring experience with completions, code navigation, formatting, diagrams, and documentation exports. The extension bundles the Java server and runtime so teams can share a reproducible setup while still allowing power users to point to custom installations.
