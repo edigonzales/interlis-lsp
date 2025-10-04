@@ -310,3 +310,11 @@ jobs:
           name: interlis-lsp-extension
           path: client/interlis-lsp.vsix
           if-no-files-found: error
+
+      - name: Publish VS Code extension
+        if: ${{ secrets.VS_MARKETPLACE_TOKEN != '' }}
+        env:
+          VSCE_PAT: ${{ secrets.VS_MARKETPLACE_TOKEN }}
+        working-directory: client
+        run: |
+          npx --yes @vscode/vsce publish --packagePath interlis-lsp.vsix
