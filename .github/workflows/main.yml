@@ -192,6 +192,8 @@ jobs:
     needs:
       - runtimes
     runs-on: ubuntu-24.04
+    env:
+      VS_MARKETPLACE_TOKEN: ${{secrets.VS_MARKETPLACE_TOKEN}}
 
     steps:
       - name: Checkout
@@ -312,7 +314,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish VS Code extension
-        if: ${{ secrets.VS_MARKETPLACE_TOKEN != '' }}
+        if: ${{ env.VS_MARKETPLACE_TOKEN != '' }}
         env:
           VSCE_PAT: ${{ secrets.VS_MARKETPLACE_TOKEN }}
         working-directory: client
