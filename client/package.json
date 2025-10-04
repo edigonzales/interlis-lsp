@@ -1,8 +1,30 @@
 {
   "name": "interlis-editor",
   "displayName": "INTERLIS Editor",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/edigonzales/interlis-lsp.git"
+  },
+  "homepage": "https://github.com/edigonzales/interlis-lsp/blob/main/client/README.md",
+  "bugs": {
+    "url": "https://github.com/edigonzales/interlis-lsp/issues"
+  },
   "icon": "images/ililogo.png",
   "publisher": "edigonzales",
+  "categories": [
+    "Programming Languages",
+    "Data Science",
+    "Other"
+  ],
+  "keywords": [
+    "validation",
+    "compile",
+    "compiler",
+    "interlis",
+    "prettyprint",
+    "uml"
+  ],
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.90.0"
