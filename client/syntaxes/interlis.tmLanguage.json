@@ -40,7 +40,18 @@
       "patterns": [
         {
           "name": "comment.line.meta-attribute.interlis",
-          "match": "^\\s*!!@.*\\r?$"
+          "match": "^(\\s*!!@)(.*?)(\\r?)$",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.comment.interlis"
+            },
+            "2": {
+              "name": "entity.name.tag.meta-attribute.interlis"
+            },
+            "3": {
+              "name": "punctuation.definition.comment.interlis"
+            }
+          }
         },
         {
           "name": "comment.line.double-exclamation.ili",

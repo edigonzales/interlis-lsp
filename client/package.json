@@ -109,7 +109,7 @@
       "editor.tokenColorCustomizations": {
         "textMateRules": [
           {
-            "scope": "source.interlis comment.line.meta-attribute.interlis",
+            "scope": "entity.name.tag.meta-attribute.interlis",
             "settings": { "foreground": "#d19a66", "fontStyle": "" }
           }
         ]
