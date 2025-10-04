@@ -266,6 +266,9 @@ jobs:
             mkdir -p "$dest_dir"
             rm -rf "${dest_dir:?}/"*
             cp -a "$src_dir"/. "$dest_dir"/
+            if [[ "$dest" != win32-* && -d "$dest_dir/bin" ]]; then
+              find "$dest_dir/bin" -type f -exec chmod +x {} +
+            fi
             echo "Staged runtime for $src -> $dest"
           done
 
