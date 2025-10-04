@@ -194,6 +194,7 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       VS_MARKETPLACE_TOKEN: ${{secrets.VS_MARKETPLACE_TOKEN}}
+      OPEN_VSIX_MARKETPLACE_TOKEN: ${{secrets.OPEN_VSIX_MARKETPLACE_TOKEN}}
 
     steps:
       - name: Checkout
@@ -316,10 +317,18 @@ jobs:
           path: client/interlis-lsp.vsix
           if-no-files-found: error
 
-      - name: Publish VS Code extension
+      - name: Publish VS Code extension to VS Marketplace
         if: ${{ (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && env.VS_MARKETPLACE_TOKEN != '' }}
         env:
           VSCE_PAT: ${{ secrets.VS_MARKETPLACE_TOKEN }}
         working-directory: client
         run: |
           npx --yes @vscode/vsce publish --packagePath interlis-lsp.vsix
+
+      - name: Publish VS Code extension to open-vsx.org
+        if: ${{ (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && env.OPEN_VSIX_MARKETPLACE_TOKEN != '' }}
+        env:
+          VSCE_PAT: ${{ secrets.OPEN_VSIX_MARKETPLACE_TOKEN }}
+        working-directory: client
+        run: |
+         npx ovsx publish ./interlis-lsp.vsix
