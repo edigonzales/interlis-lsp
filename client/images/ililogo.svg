@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="256"
+   height="256"
+   viewBox="0 0 256 256"
+   version="1.1"
+   id="svg3"
+   sodipodi:docname="ililogo.svg"
+   inkscape:version="1.3.2 (091e20e, 2023-11-25)"
+   inkscape:export-filename="ililogo.png"
+   inkscape:export-xdpi="112.5"
+   inkscape:export-ydpi="112.5"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs3" />
+  <sodipodi:namedview
+     id="namedview3"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     showguides="true"
+     inkscape:zoom="1.484375"
+     inkscape:cx="208.84211"
+     inkscape:cy="157.97895"
+     inkscape:window-width="1392"
+     inkscape:window-height="1212"
+     inkscape:window-x="39"
+     inkscape:window-y="25"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="svg3" />
+  <!-- background -->
+  <!-- outer blue quarter-circle -->
+  <circle
+     cx="256"
+     cy="256"
+     r="256"
+     fill="#0A4A86"
+     id="circle1" />
+  <!-- cutout to create the blue ring -->
+  <!-- inner red quarter-circle -->
+  <circle
+     cx="252.29474"
+     cy="252.29474"
+     r="123.70526"
+     fill="#d32626"
+     id="circle3"
+     style="stroke-width:1.03088" />
+</svg>

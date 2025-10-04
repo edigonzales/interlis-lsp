@@ -1,6 +1,7 @@
 {
   "name": "interlis-lsp-client",
-  "displayName": "INTERLIS LSP Client",
+  "displayName": "INTERLIS Editor",
+  "icon": "images/ililogo.png",
   "publisher": "edigonzales",
   "version": "0.0.1",
   "engines": {
