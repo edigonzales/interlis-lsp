@@ -38,6 +38,25 @@ JRE folders before packaging the extension (`vsce package`). Users can still
 override both paths with the `interlisLsp.server.jarPath` and
 `interlisLsp.javaPath` settings if they need to point to custom locations.
 
+### Publishing the VS Code extension via GitHub Actions
+
+The `build and publish` workflow packages the extension (`interlis-lsp.vsix`) and
+publishes it to the Visual Studio Marketplace whenever the
+`VS_MARKETPLACE_TOKEN` secret is present. To configure the token:
+
+1. Create a Personal Access Token for the Marketplace by visiting
+   <https://aka.ms/vscodepat> and generating a **Publish Extensions** token for
+   your publisher account.
+2. In your GitHub repository, open **Settings → Secrets and variables → Actions**
+   and create a new repository secret named `VS_MARKETPLACE_TOKEN` that contains
+   the token value from step 1. GitHub stores the value securely and only exposes
+   it to workflow runs.
+
+During the workflow run, the secret is injected as the `VSCE_PAT` environment
+variable for the publish step and consumed by `vsce publish`. No code or logs in
+the repository can read the secret directly, keeping the credential scoped to
+the workflow.
+
 ## Project layout
 
 - `InterlisLanguageServer` implements `LanguageServer` and `LanguageClientAware`.
