@@ -21,8 +21,8 @@
 ### VS Code client experience 💡
 - **Activation on INTERLIS files** 📂 – the extension activates for `.ili` files and contributes a TextMate grammar and language configuration for syntax highlighting and editor defaults.
 - **Bundled runtime** 📦 – ships with a self-contained fat JAR and optional platform-specific JRE; paths can be overridden via settings.
-- **Commands palette** 🎛️ – run “Compile current file”, “Show UML class diagram”, “Show PlantUML class diagram”, “Show documentation as HTML”, and “Export documentation as DOCX” directly from VS Code.
-- **Integrated output channel** 📢 – compiler logs land in a dedicated “INTERLIS LSP” output channel that can clear itself when new runs start.
+- **Commands palette** 🎛️ – run "Compile current file", "Show UML class diagram", "Show PlantUML class diagram", "Show documentation as HTML", and "Export documentation as DOCX" directly from VS Code.
+- **Integrated output channel** 📢 – compiler logs land in a dedicated "INTERLIS LSP" output channel that can clear itself when new runs start.
 - **Configurable repositories** 🗄️ – choose preferred model repositories via settings passed to the server at initialization.
 - **Caret-aware templates** 🧠 – caret tracking middleware makes sure auto-inserted templates leave the cursor at the expected position after edits are applied.
 - **Webview downloads** 💾 – UML previews support saving generated SVG diagrams next to the source model.
