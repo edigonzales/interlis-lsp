@@ -118,8 +118,8 @@
   },
   "main": "./dist/extension.js",
   "scripts": {
-    "build": "esbuild src/extension.ts --bundle --platform=node --external:vscode --external:vscode-languageclient --external:vscode-languageclient/node --outfile=dist/extension.js",
-    "watch": "esbuild src/extension.ts --bundle --platform=node --external:vscode --external:vscode-languageclient --external:vscode-languageclient/node --outfile=dist/extension.js --watch"
+    "build": "esbuild src/extension.ts --bundle --platform=node --external:vscode --outfile=dist/extension.js",
+    "watch": "esbuild src/extension.ts --bundle --platform=node --external:vscode --outfile=dist/extension.js --watch"
   },
   "devDependencies": {
     "@types/node": "^24.5.2",
