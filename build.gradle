@@ -56,11 +56,13 @@ application {
     mainClass = 'ch.so.agi.lsp.interlis.LspServerLauncher'
 }
 
+/*
 tasks.shadowJar {
     manifest {
         attributes('Multi-Release': 'true')
     }
 }
+*/
 
 graalvmNative {
     binaries {
