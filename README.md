@@ -1,29 +1,120 @@
-# INTERLIS LSP 
+# INTERLIS Language Server & VS Code Extension 🧩
 
-This is a minimal Language Server for INTERLIS using lsp4j. It exposes a command
-`interlis.validate` that validates a `.ili` file via the Java ili2c library
-(**no external process**) and returns the compiler log; it also publishes LSP diagnostics.
+A monorepo that ships the INTERLIS-focused Language Server Protocol (LSP) implementation together with the accompanying VS Code extension. This document is aimed at developers who want to extend, debug, or package the tooling. For an end-user feature tour head over to the [client README](client/README.md). 💡
 
-> The ili2c API calls here are placeholders. Replace them with the real library calls and add the proper dependency in `build.gradle`.
+## Table of contents
+- [Architecture at a glance](#architecture-at-a-glance)
+- [Language server capabilities](#language-server-capabilities)
+- [Commands & custom requests](#commands--custom-requests)
+- [Runtime delivery & packaging](#runtime-delivery--packaging)
+- [Developer workflow](#developer-workflow)
+  - [Working on the LSP](#working-on-the-lsp)
+  - [Working on the VS Code extension](#working-on-the-vs-code-extension)
+  - [End-to-end debugging](#end-to-end-debugging)
+- [Automated checks](#automated-checks)
+- [Diagrams](#diagrams)
+  - [Class relationships](#class-relationships)
+  - [Compile command sequence](#compile-command-sequence)
+- [Additional resources](#additional-resources)
 
-## Build & Run
+## Architecture at a glance
 
-```bash
-./gradlew run
+```
+repo/
+├── build.gradle            # Gradle build orchestrating the Java server & tests
+├── src/main/java           # LSP implementation (lsp4j based)
+├── src/test/java           # Unit & integration tests
+├── client/                 # VS Code extension (TypeScript + esbuild)
+└── build/                  # Gradle output (fat jar, test reports, etc.)
 ```
 
-The server uses stdio transport. Your editor/extension should spawn it and connect via stdio.
+- The Java LSP is packaged as a fat JAR via the `shadowJar` Gradle task.
+- The VS Code extension embeds the server JAR and platform-specific JREs so that teams can distribute a single `.vsix` with no external dependencies. 🚀
+- The extension and server communicate over stdio using `vscode-languageclient`.
 
-### Bundling with the VS Code extension
+## Language server capabilities
 
-The VS Code client located in `client/` can ship a self-contained runtime. The
-extension looks for the following layout relative to the extension root when no
-custom paths are configured:
+`InterlisLanguageServer#initialize` wires up the server capabilities advertised to clients. The resulting payload (serialized via LSP) looks like this:
+
+```json
+{
+  "capabilities": {
+    "positionEncoding": "utf-16",
+    "textDocumentSync": {
+      "openClose": true,
+      "change": 2,
+      "save": {
+        "includeText": false
+      }
+    },
+    "completionProvider": {
+      "triggerCharacters": [".", ":"],
+      "resolveProvider": false
+    },
+    "documentFormattingProvider": true,
+    "documentOnTypeFormattingProvider": {
+      "firstTriggerCharacter": "="
+    },
+    "definitionProvider": true,
+    "documentSymbolProvider": true,
+    "executeCommandProvider": {
+      "commands": [
+        "interlis.compile",
+        "interlis.uml",
+        "interlis.uml.plant"
+      ]
+    }
+  }
+}
+```
+
+Key listeners and providers derived from these capabilities:
+
+| Event / Provider 💬 | Implementation | Notes |
+| --- | --- | --- |
+| `textDocument/didOpen` | `InterlisTextDocumentService#didOpen` | Compiles freshly opened files and streams diagnostics. |
+| `textDocument/didChange` | `InterlisTextDocumentService#didChange` | Updates the in-memory document tracker & invalidates caches. |
+| `textDocument/didSave` | `InterlisTextDocumentService#didSave` | Performs authoritative compilation using on-disk content. |
+| `textDocument/didClose` | `InterlisTextDocumentService#didClose` | Clears diagnostics and releases document state. |
+| `textDocument/completion` | `InterlisTextDocumentService#completion` | Provides context-aware completions (triggered by `.` or `:`). |
+| `textDocument/formatting` | `InterlisTextDocumentService#formatting` | Runs ili2c pretty printer for whole-document formatting. |
+| `textDocument/onTypeFormatting` | `InterlisTextDocumentService#onTypeFormatting` | Auto-inserts INTERLIS templates after typing `=`. |
+| `textDocument/definition` | `InterlisTextDocumentService#definition` | Resolves definitions across workspace & referenced models. |
+| `textDocument/documentSymbol` | `InterlisTextDocumentService#documentSymbol` | Builds outline nodes from the compiled AST. |
+| `workspace/didChangeConfiguration` | `InterlisWorkspaceService#didChangeConfiguration` | Refreshes server-side model repository settings. |
+
+## Commands & custom requests
+
+Workspace commands advertised via `initialize`:
+
+| Command ID | VS Code command | Description |
+| --- | --- | --- |
+| `interlis.compile` | `interlis.compile.run` | Compile current file, publish diagnostics, and return compiler log. |
+| `interlis.uml` | `interlis.uml.show` | Compile & render a Mermaid UML diagram as HTML. |
+| `interlis.uml.plant` | `interlis.uml.plant.show` | Compile & render PlantUML as HTML. |
+
+Custom JSON-RPC requests handled with `@JsonRequest`:
+
+| Request | VS Code caller | Description |
+| --- | --- | --- |
+| `interlis/exportDocx` | `interlis.docx.export` | Returns a Base64 DOCX payload derived from the compiled model. |
+| `interlis/exportHtml` | `interlis.html.show` | Returns rendered HTML documentation for previews. |
+
+Server-to-client notifications ✉️:
+
+| Notification | Payload | Purpose |
+| --- | --- | --- |
+| `interlis/clearLog` | none | Clear the shared output channel before new compiler runs. |
+| `interlis/log` | `{ text: string }` | Stream ili2c logs into the VS Code output view. |
+
+## Runtime delivery & packaging
+
+The extension bundles both the language server JAR and a trimmed JRE per platform so that users can run the tooling without installing Java. The expected folder layout inside the packaged extension is:
 
 ```
 client/
   server/
-    interlis-lsp-<version>-all.jar  # fat jar produced by `./gradlew shadowJar`
+    interlis-lsp-<version>-all.jar
     jre/
       darwin-arm64/
       darwin-x64/
@@ -33,78 +124,120 @@ client/
         bin/java(.exe)
 ```
 
-Use your existing GitHub Actions artifacts to populate the platform-specific
-JRE folders before packaging the extension (`vsce package`). Users can still
-override both paths with the `interlisLsp.server.jarPath` and
-`interlisLsp.javaPath` settings if they need to point to custom locations.
+To refresh runtimes:
+1. Produce a new fat JAR with `./gradlew shadowJar` (output lives in `build/libs/`).
+2. Copy platform-specific JREs into `client/server/jre/<platform>/`.
+3. Update `client/package.json` version if you plan to publish.
+4. Package the extension via `cd client && npm install && npm run build && npx vsce package`.
 
-### Publishing the VS Code extension via GitHub Actions
+Tip 👉 For CI packaging see the `build and publish` GitHub Actions workflow, which automatically runs `vsce publish` when the `VS_MARKETPLACE_TOKEN` secret is configured.
 
-The `build and publish` workflow packages the extension (`interlis-lsp.vsix`) and
-publishes it to the Visual Studio Marketplace whenever the
-`VS_MARKETPLACE_TOKEN` secret is present. To configure the token:
+## Developer workflow
 
-1. Create a Personal Access Token for the Marketplace by visiting
-   <https://aka.ms/vscodepat> and generating a **Publish Extensions** token for
-   your publisher account.
-2. In your GitHub repository, open **Settings → Secrets and variables → Actions**
-   and create a new repository secret named `VS_MARKETPLACE_TOKEN` that contains
-   the token value from step 1. GitHub stores the value securely and only exposes
-   it to workflow runs.
+### Working on the LSP
 
-During the workflow run, the secret is injected as the `VSCE_PAT` environment
-variable for the publish step and consumed by `vsce publish`. No code or logs in
-the repository can read the secret directly, keeping the credential scoped to
-the workflow.
+| Task | Command | Notes |
+| --- | --- | --- |
+| Run the server via stdio | `./gradlew run` | Prints logs to the console, communicates via stdin/stdout. |
+| Build a fat JAR | `./gradlew shadowJar` | Produces `build/libs/interlis-lsp-<version>-all.jar`. |
+| Execute unit tests | `./gradlew test` | Covers compilation cache, diagnostics mapping, formatting, etc. |
+| Format sources | `./gradlew spotlessApply` | If you enable [Spotless](https://github.com/diffplug/spotless) locally. |
 
-## Project layout
+### Working on the VS Code extension
 
-- `InterlisLanguageServer` implements `LanguageServer` and `LanguageClientAware`.
-- `InterlisTextDocumentService` and `InterlisWorkspaceService` wire document events and the `interlis.validate` command.
-- `InterlisValidator` calls ili2c (placeholder) and returns both text log and structured messages.
-- `DiagnosticsMapper` converts messages to LSP `Diagnostic`s.
-- Tests: simple unit tests for the validator and a smoke test for the command handler.
+1. Install dependencies: `cd client && npm install`.
+2. Build once or watch: `npm run build` or `npm run watch` (uses esbuild ⚡).
+3. Launch VS Code with the extension: `code client --extensionDevelopmentPath="$(pwd)/client"`.
+4. During development, point the extension to your local server build by setting `interlisLsp.server.jarPath`.
 
-## Reminder
-- OUTPUT-Tab kann nicht gelöscht werden. Man müsste einen eigenen LanguageClient (aufm Server) schreiben und dann auch ein Signal senden (zum Clearen).
+### End-to-end debugging
 
-## TODO
+- Start the LSP with `./gradlew run` and configure the extension to use the spawned process by editing `client/src/extension.ts` or setting a custom launch config.
+- Use the VS Code "Run and Debug" panel with the "Extension" configuration to attach a debugger to the client TypeScript code.
+- Enable verbose tracing by setting `"interlisLsp.trace.server": "verbose"` in your workspace settings and check the INTERLIS output channel. 🔍
 
-- ~~rename validate -> compile~~
-- ~~messaging, logging finalisieren. inkl client popup (?) + Parser für ili2c log~~
-- ~~compile onSave (und nicht onChange). Falls man onChange möchte, darf nicht die gespeicherte Datei zum LSP geschickt werden, sondern der Memory-Inhalt.~~
-- probiere onChange mit "fast approach" siehe Frage bei jEdit.
-- ~~Enable assert in tests.~~ And more tests.
-- snippets / autoclose
-- ~~pretty print (2 lokalen Modellen)~~    
-- ~~syntax highlighting~~
-- ~~syntax highlighting: brackets nur für Klammern (Wörter mit Snippets oder onEnterRules)~~
-- ~~syntax highlighting: autoClosingPairs auch hier word pairs mit snippets oder onEnterRules)~~
-- syntax highlighting: 2) Enhance with Semantic Tokens from your Java LSP ?? Semantic folding
-Real “fold by AST” works best via your LSP (foldingRangeProvider) so blocks fold exactly from … = to the matching END ….
-- Server Capabilities dokumentieren, e.g. initializeAdvertisesFormattingCapability für output verwenden.
-- ~~UML~~
-- UML: plantuml support (auch mit PLANTUML SOURCE)
-- ~~Hyperlink: -> Debug output, um besser zu verstehen, was abgeht. Auch die gefunden Modelle etc. pp~~
-- ~~Hyperlink: auch Strukturen und Domains etc.~~
-- word output
-- Sequence Diagramme für verschiedene Features
-- Autocomplete / Suggestions
- 
- 
- ## Develop
- 
- ```
- git fetch origin pull/9/head:codex/update-interlistextdocumentservice-to-bypass-cache
- ```
- 
- ```
- git checkout codex/update-interlistextdocumentservice-to-bypass-cache
- ```
- 
- ```
- git checkout main
- ```
- 
+## Automated checks
 
- 
+The repository relies on Gradle for Java builds/tests and npm scripts for the extension. In CI, we typically run:
+
+- `./gradlew check` – compiles the server and runs all tests.
+- `cd client && npm run build` – ensures the TypeScript bundle compiles.
+
+## Diagrams
+
+### Class relationships
+
+```mermaid
+classDiagram
+    direction LR
+    class InterlisLanguageServer {
+        +CMD_COMPILE
+        +CMD_GENERATE_UML
+        +CMD_GENERATE_PLANTUML
+        +initialize(params)
+        +publishDiagnostics(uri, diagnostics)
+        +clearOutput()
+        +logToClient(text)
+    }
+    class InterlisTextDocumentService {
+        +didOpen(params)
+        +didChange(params)
+        +didSave(params)
+        +completion(params)
+        +definition(params)
+        +documentSymbol(params)
+    }
+    class InterlisWorkspaceService {
+        +didChangeConfiguration(params)
+        +executeCommand(params)
+        +exportDocx(rawParams)
+        +exportHtml(rawParams)
+    }
+    class CommandHandlers {
+        +compile(path)
+        +generateUml(path)
+        +generatePlantUml(path)
+        +exportDocx(path, title)
+        +exportHtml(path, title)
+    }
+    class Ili2cUtil {
+        +compile(settings, path)
+        +prettyPrint(settings, path)
+    }
+
+    InterlisLanguageServer --> InterlisTextDocumentService
+    InterlisLanguageServer --> InterlisWorkspaceService
+    InterlisWorkspaceService --> CommandHandlers
+    CommandHandlers --> Ili2cUtil
+    InterlisTextDocumentService --> Ili2cUtil
+    InterlisLanguageServer ..> InterlisLanguageClient
+```
+
+### Compile command sequence
+
+```mermaid
+sequenceDiagram
+    participant User 👤
+    participant VSCode 🧩
+    participant LanguageClient 🔌
+    participant LSPServer ☕
+    participant Handlers 🧠
+    participant Ili2c 📚
+
+    User 👤->>VSCode 🧩: Run "INTERLIS: Compile current file"
+    VSCode 🧩->>LanguageClient 🔌: `executeCommand` interlis.compile(uri)
+    LanguageClient 🔌->>LSPServer ☕: `workspace/executeCommand`
+    LSPServer ☕->>Handlers 🧠: `CommandHandlers.compile(uri)`
+    Handlers 🧠->>Ili2c 📚: Compile + collect log/diagnostics
+    Ili2c 📚-->>Handlers 🧠: Compilation outcome
+    Handlers 🧠->>LSPServer ☕: Publish diagnostics + log text
+    LSPServer ☕->>LanguageClient 🔌: `interlis/clearLog` & `interlis/log`
+    LanguageClient 🔌->>VSCode 🧩: Update output channel & UI
+    VSCode 🧩-->>User 👤: Diagnostics & compiler log displayed ✨
+```
+
+## Additional resources
+
+- [Client feature overview & screenshots](client/README.md) 📸
+- [ili2c project](https://github.com/claeis/ili2c) – underlying compiler used by the LSP.
+- [Language Server Protocol specification](https://microsoft.github.io/language-server-protocol/specification) for deeper integration details.
