@@ -16,6 +16,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -118,6 +119,9 @@ final class InterlisRenameProvider {
             transferDescription = outcome != null ? outcome.getTransferDescription() : null;
             if (transferDescription != null) {
                 Element element = InterlisNameResolver.resolveElement(transferDescription, token);
+                if (element == null) {
+                    element = resolveElementAtPosition(transferDescription, uri, position, oldName);
+                }
                 if (element != null) {
                     try {
                         qualifiedName = element.getScopedName();
@@ -470,5 +474,166 @@ final class InterlisRenameProvider {
         WorkspaceEdit edit = new WorkspaceEdit();
         edit.setChanges(Collections.emptyMap());
         return edit;
+    }
+
+    static Element resolveElementAtPosition(TransferDescription td,
+                                            String uri,
+                                            Position position,
+                                            String name) {
+        if (td == null || uri == null || uri.isBlank() || position == null || name == null || name.isBlank()) {
+            return null;
+        }
+
+        Path targetPath = normalizePath(uri);
+        if (targetPath == null) {
+            return null;
+        }
+
+        int line = position.getLine() + 1;
+        ElementMatch best = findClosestElement(td, targetPath, line, name);
+        return best != null ? best.element : null;
+    }
+
+    private static ElementMatch findClosestElement(TransferDescription td,
+                                                   Path targetPath,
+                                                   int line,
+                                                   String name) {
+        if (td == null) {
+            return null;
+        }
+
+        ElementMatch best = null;
+        Iterator<Model> iterator = td.iterator();
+        while (iterator.hasNext()) {
+            Object next = iterator.next();
+            if (next instanceof Element element) {
+                ElementMatch candidate = findClosestElement(element, targetPath, line, name);
+                best = chooseBetter(best, candidate);
+            }
+        }
+        return best;
+    }
+
+    private static ElementMatch findClosestElement(Element element,
+                                                   Path targetPath,
+                                                   int line,
+                                                   String name) {
+        if (element == null) {
+            return null;
+        }
+
+        ElementMatch best = null;
+
+        Path elementPath = elementPath(element);
+        if (elementPath != null && elementPath.equals(targetPath)) {
+            String elementName = element.getName();
+            if (name.equals(elementName)) {
+                int distance = computeDistance(element.getSourceLine(), line);
+                best = new ElementMatch(element, distance, depth(element));
+            }
+        }
+
+        if (element instanceof ch.interlis.ili2c.metamodel.Container<?> container) {
+            Iterator<?> iterator = container.iterator();
+            while (iterator.hasNext()) {
+                Object child = iterator.next();
+                if (child instanceof Element childElement) {
+                    ElementMatch candidate = findClosestElement(childElement, targetPath, line, name);
+                    best = chooseBetter(best, candidate);
+                }
+            }
+        }
+
+        return best;
+    }
+
+    private static ElementMatch chooseBetter(ElementMatch current, ElementMatch candidate) {
+        if (candidate == null) {
+            return current;
+        }
+        if (current == null) {
+            return candidate;
+        }
+        if (candidate.distance < current.distance) {
+            return candidate;
+        }
+        if (candidate.distance == current.distance) {
+            if (candidate.depth > current.depth) {
+                return candidate;
+            }
+            String candidateScoped = safeScopedName(candidate.element);
+            String currentScoped = safeScopedName(current.element);
+            if (candidateScoped != null && (currentScoped == null || candidateScoped.length() > currentScoped.length())) {
+                return candidate;
+            }
+        }
+        return current;
+    }
+
+    private static int computeDistance(int elementLine, int targetLine) {
+        if (elementLine <= 0 || targetLine <= 0) {
+            return (elementLine == targetLine) ? 0 : Integer.MAX_VALUE / 2;
+        }
+        return Math.abs(elementLine - targetLine);
+    }
+
+    private static int depth(Element element) {
+        int depth = 0;
+        ch.interlis.ili2c.metamodel.Container<?> container = element != null ? element.getContainer() : null;
+        while (container instanceof Element parent) {
+            depth++;
+            container = parent.getContainer();
+        }
+        return depth;
+    }
+
+    private static String safeScopedName(Element element) {
+        if (element == null) {
+            return null;
+        }
+        try {
+            return element.getScopedName();
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private static Path elementPath(Element element) {
+        Model model = InterlisNameResolver.findEnclosingModel(element);
+        if (model == null) {
+            return null;
+        }
+        String fileName = model.getFileName();
+        if (fileName == null || fileName.isBlank()) {
+            return null;
+        }
+        return normalizePath(fileName);
+    }
+
+    private static Path normalizePath(String uriOrPath) {
+        if (uriOrPath == null || uriOrPath.isBlank()) {
+            return null;
+        }
+        String candidate = InterlisTextDocumentService.toFilesystemPathIfPossible(uriOrPath);
+        if (candidate == null || candidate.isBlank()) {
+            candidate = uriOrPath;
+        }
+        try {
+            return Paths.get(candidate).toAbsolutePath().normalize();
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private static final class ElementMatch {
+        final Element element;
+        final int distance;
+        final int depth;
+
+        ElementMatch(Element element, int distance, int depth) {
+            this.element = element;
+            this.distance = distance;
+            this.depth = depth;
+        }
     }
 }

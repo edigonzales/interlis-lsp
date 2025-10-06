@@ -2,11 +2,18 @@ package ch.so.agi.lsp.interlis;
 
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
+import org.eclipse.lsp4j.RenameParams;
+import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.TextEdit;
+import org.eclipse.lsp4j.WorkspaceEdit;
 import org.junit.jupiter.api.Test;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -92,5 +99,50 @@ class InterlisRenameProviderTest {
         TextEdit extendsClause = edits.get(2);
         assertEquals("MyModel.ThemaFoo", extendsClause.getNewText());
         assertEquals(new Range(new Position(3, 24), new Position(3, 37)), extendsClause.getRange());
+    }
+
+    @Test
+    void renameUpdatesFullyQualifiedReferencesInCompiledModels() throws Exception {
+        String source = String.join("\n",
+                "INTERLIS 2.3;",
+                "",
+                "MODEL SO_ARP_SEin_Konfiguration_20250115 (en) AT \"http://example.org\" VERSION \"2024-01-01\" =",
+                "",
+                "  TOPIC Configuration =",
+                "    STRUCTURE Thema =",
+                "    END Thema;",
+                "  END Configuration;",
+                "",
+                "  TOPIC AnotherTopic =",
+                "    STRUCTURE UsesThema EXTENDS SO_ARP_SEin_Konfiguration_20250115.Configuration.Thema =",
+                "    END UsesThema;",
+                "  END AnotherTopic;",
+                "",
+                "END SO_ARP_SEin_Konfiguration_20250115.");
+
+        Path iliFile = Files.createTempFile("rename-qualified", ".ili");
+        Files.writeString(iliFile, source, StandardCharsets.UTF_8);
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        InterlisRenameProvider provider = new InterlisRenameProvider(server, null, new CompilationCache(), Ili2cUtil::compile);
+
+        int tokenOffset = source.indexOf("STRUCTURE Thema") + "STRUCTURE ".length();
+        Position position = DocumentTracker.positionAt(source, tokenOffset);
+
+        RenameParams params = new RenameParams();
+        params.setTextDocument(new TextDocumentIdentifier(iliFile.toUri().toString()));
+        params.setPosition(position);
+        params.setNewName("ThemaFoo");
+
+        WorkspaceEdit edit = provider.rename(params);
+        assertNotNull(edit);
+        Map<String, List<TextEdit>> changes = edit.getChanges();
+        assertNotNull(changes);
+        assertTrue(changes.containsKey(iliFile.toUri().toString()));
+
+        List<TextEdit> edits = changes.get(iliFile.toUri().toString());
+        assertNotNull(edits);
+        assertTrue(edits.stream().anyMatch(e -> "SO_ARP_SEin_Konfiguration_20250115.Configuration.ThemaFoo".equals(e.getNewText())),
+                "Expected EXTENDS clause to update fully qualified reference");
     }
 }
