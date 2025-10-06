@@ -149,7 +149,11 @@ final class InterlisRenameProvider {
             if (text == null || text.isEmpty()) {
                 continue;
             }
-            List<TextEdit> edits = computeEdits(text, oldName, newName, spellings);
+            boolean isPrimaryDocument = targetUri.equals(uri);
+            int primaryStart = isPrimaryDocument ? start : -1;
+            int primaryEnd = isPrimaryDocument ? end : -1;
+
+            List<TextEdit> edits = computeEdits(text, oldName, newName, spellings, primaryStart, primaryEnd);
             if (!edits.isEmpty()) {
                 changes.put(targetUri, edits);
             }
@@ -260,7 +264,9 @@ final class InterlisRenameProvider {
     static List<TextEdit> computeEdits(String text,
                                        String oldName,
                                        String newName,
-                                       Set<String> spellings) {
+                                       Set<String> spellings,
+                                       int primaryStart,
+                                       int primaryEnd) {
         if (text == null || text.isEmpty() || oldName == null || oldName.isBlank()) {
             return Collections.emptyList();
         }
@@ -268,6 +274,7 @@ final class InterlisRenameProvider {
         List<TextEdit> edits = new ArrayList<>();
         int length = text.length();
         int index = 0;
+        int primaryEndTokenStart = findPrimaryEndToken(text, oldName, primaryStart);
         while (index < length) {
             char ch = text.charAt(index);
             if (!InterlisNameResolver.isIdentifierPart(ch)) {
@@ -289,6 +296,10 @@ final class InterlisRenameProvider {
                 continue;
             }
 
+            if (!shouldRenameToken(text, start, end, current, oldName, primaryStart, primaryEnd, primaryEndTokenStart)) {
+                continue;
+            }
+
             String replacement = replaceLastSegment(current, newName);
             if (replacement.equals(current)) {
                 continue;
@@ -300,6 +311,135 @@ final class InterlisRenameProvider {
         }
         return edits;
     }
+
+    private static boolean shouldRenameToken(String text,
+                                             int start,
+                                             int end,
+                                             String token,
+                                             String oldName,
+                                             int primaryStart,
+                                             int primaryEnd,
+                                             int primaryEndTokenStart) {
+        boolean qualified = token != null && token.indexOf('.') >= 0;
+        if (qualified) {
+            return true;
+        }
+
+        if (primaryStart >= 0 && primaryEnd >= 0 && start == primaryStart && end == primaryEnd) {
+            return true;
+        }
+
+        if (isDefinitionContext(text, start)) {
+            return false;
+        }
+
+        if (isEndContext(text, start)) {
+            return start == primaryEndTokenStart;
+        }
+
+        return true;
+    }
+
+    private static boolean isDefinitionContext(String text, int tokenStart) {
+        if (text == null || text.isEmpty() || tokenStart <= 0) {
+            return false;
+        }
+
+        int index = tokenStart - 1;
+        while (index >= 0 && Character.isWhitespace(text.charAt(index))) {
+            index--;
+        }
+        if (index < 0) {
+            return false;
+        }
+
+        int wordEnd = index;
+        while (index >= 0) {
+            char ch = text.charAt(index);
+            if (!Character.isLetter(ch)) {
+                break;
+            }
+            index--;
+        }
+
+        if (wordEnd <= index) {
+            return false;
+        }
+
+        String preceding = text.substring(index + 1, wordEnd + 1).toUpperCase(java.util.Locale.ROOT);
+        return DEFINITION_KEYWORDS.contains(preceding);
+    }
+
+    private static boolean isEndContext(String text, int tokenStart) {
+        if (text == null || text.isEmpty() || tokenStart <= 0) {
+            return false;
+        }
+
+        int index = tokenStart - 1;
+        while (index >= 0 && Character.isWhitespace(text.charAt(index))) {
+            index--;
+        }
+        if (index < 0) {
+            return false;
+        }
+
+        int wordEnd = index;
+        while (index >= 0 && Character.isLetter(text.charAt(index))) {
+            index--;
+        }
+
+        if (wordEnd <= index) {
+            return false;
+        }
+
+        String preceding = text.substring(index + 1, wordEnd + 1).toUpperCase(java.util.Locale.ROOT);
+        return "END".equals(preceding);
+    }
+
+    private static int findPrimaryEndToken(String text, String oldName, int primaryStart) {
+        if (text == null || text.isEmpty() || oldName == null || oldName.isBlank() || primaryStart < 0) {
+            return -1;
+        }
+
+        int searchFrom = Math.max(0, primaryStart);
+        int length = text.length();
+        int nameLength = oldName.length();
+
+        while (searchFrom < length) {
+            int endIndex = text.indexOf("END", searchFrom);
+            if (endIndex < 0) {
+                return -1;
+            }
+            int cursor = endIndex + 3;
+            while (cursor < length && Character.isWhitespace(text.charAt(cursor))) {
+                cursor++;
+            }
+            if (cursor + nameLength <= length && text.regionMatches(cursor, oldName, 0, nameLength)) {
+                int afterName = cursor + nameLength;
+                if (afterName >= length || !InterlisNameResolver.isIdentifierPart(text.charAt(afterName))) {
+                    return cursor;
+                }
+            }
+            searchFrom = cursor + 1;
+        }
+
+        return -1;
+    }
+
+    private static final java.util.Set<String> DEFINITION_KEYWORDS = java.util.Set.of(
+            "CLASS",
+            "STRUCTURE",
+            "TABLE",
+            "VIEW",
+            "ASSOCIATION",
+            "DOMAIN",
+            "UNIT",
+            "TOPIC",
+            "MODEL",
+            "ENUMERATION",
+            "FUNCTION",
+            "PROCEDURE"
+    );
 
     private static String replaceLastSegment(String token, String newName) {
         int idx = token != null ? token.lastIndexOf('.') : -1;

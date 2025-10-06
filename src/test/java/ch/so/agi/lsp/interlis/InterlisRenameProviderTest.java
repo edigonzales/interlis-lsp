@@ -40,7 +40,10 @@ class InterlisRenameProviderTest {
                 "SO_ARP_SEin_Konfiguration_20250115.Topic.Thema",
                 "Thema");
 
-        List<TextEdit> edits = InterlisRenameProvider.computeEdits(source, "Thema", "ThemaFoo", spellings);
+        int primaryStart = DocumentTracker.toOffset(source, new Position(0, 10));
+        int primaryEnd = primaryStart + "Thema".length();
+
+        List<TextEdit> edits = InterlisRenameProvider.computeEdits(source, "Thema", "ThemaFoo", spellings, primaryStart, primaryEnd);
 
         assertEquals(3, edits.size());
 
@@ -55,5 +58,39 @@ class InterlisRenameProviderTest {
         TextEdit extendsClause = edits.get(2);
         assertEquals("SO_ARP_SEin_Konfiguration_20250115.ThemaFoo", extendsClause.getNewText());
         assertEquals(new Range(new Position(3, 26), new Position(3, 66)), extendsClause.getRange());
+    }
+
+    @Test
+    void computeEditsSkipsOtherDefinitionsWithSameSimpleName() {
+        String source = String.join("\n",
+                "STRUCTURE Thema =",
+                "END Thema;",
+                "",
+                "STRUCTURE Thema EXTENDS MyModel.Thema =",
+                "END Thema;",
+                "");
+
+        LinkedHashSet<String> spellings = new LinkedHashSet<>();
+        spellings.add("Thema");
+        spellings.add("MyModel.Thema");
+
+        int primaryStart = DocumentTracker.toOffset(source, new Position(0, 10));
+        int primaryEnd = primaryStart + "Thema".length();
+
+        List<TextEdit> edits = InterlisRenameProvider.computeEdits(source, "Thema", "ThemaFoo", spellings, primaryStart, primaryEnd);
+
+        assertEquals(3, edits.size());
+
+        TextEdit definition = edits.get(0);
+        assertEquals("ThemaFoo", definition.getNewText());
+        assertEquals(new Range(new Position(0, 10), new Position(0, 15)), definition.getRange());
+
+        TextEdit endStatement = edits.get(1);
+        assertEquals("ThemaFoo", endStatement.getNewText());
+        assertEquals(new Range(new Position(1, 4), new Position(1, 9)), endStatement.getRange());
+
+        TextEdit extendsClause = edits.get(2);
+        assertEquals("MyModel.ThemaFoo", extendsClause.getNewText());
+        assertEquals(new Range(new Position(3, 24), new Position(3, 37)), extendsClause.getRange());
     }
 }
