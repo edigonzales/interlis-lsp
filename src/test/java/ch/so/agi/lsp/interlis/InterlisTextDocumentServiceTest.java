@@ -14,9 +14,12 @@ import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
 import org.eclipse.lsp4j.DidSaveTextDocumentParams;
+import org.eclipse.lsp4j.RenameParams;
 import org.eclipse.lsp4j.SymbolInformation;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.TextDocumentItem;
+import org.eclipse.lsp4j.TextEdit;
+import org.eclipse.lsp4j.WorkspaceEdit;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -333,6 +336,86 @@ class InterlisTextDocumentServiceTest {
         assertTrue(rangeContains(range, selection), "Expected selection range to be within the document symbol range");
         assertEquals(0, selection.getStart().getLine(), "Selection should be anchored to the model declaration");
         assertEquals(0, range.getStart().getLine(), "Range should expand to include the selection");
+    }
+
+    @Test
+    void renameReplacesIdentifierOccurrencesInDocument(@TempDir Path tempDir) throws Exception {
+        Path modelPath = Files.createTempFile(tempDir, "RenameSource", ".ili");
+        String content = String.join("\n",
+                "MODEL RenameTest;",
+                "TOPIC TopicA =",
+                "  CLASS Road =",
+                "    attr1 : TEXT;",
+                "  END Road;",
+                "END TopicA;",
+                "END RenameTest.",
+                "");
+        Files.writeString(modelPath, content);
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        server.setClientSettings(new ClientSettings());
+        InterlisTextDocumentService service = new InterlisTextDocumentService(server);
+
+        String uri = modelPath.toUri().toString();
+        TextDocumentItem item = new TextDocumentItem(uri, "interlis", 1, content);
+        service.didOpen(new DidOpenTextDocumentParams(item));
+
+        Position caret = new Position(2, 9);
+        RenameParams renameParams = new RenameParams(new TextDocumentIdentifier(uri), caret, "Street");
+
+        WorkspaceEdit workspaceEdit = service.rename(renameParams).get();
+        assertNotNull(workspaceEdit);
+        assertNotNull(workspaceEdit.getChanges());
+
+        List<TextEdit> edits = workspaceEdit.getChanges().get(uri);
+        assertNotNull(edits);
+        assertEquals(2, edits.size());
+        for (TextEdit edit : edits) {
+            assertEquals("Street", edit.getNewText());
+        }
+
+        List<Integer> startOffsets = new ArrayList<>();
+        for (TextEdit edit : edits) {
+            startOffsets.add(DocumentTracker.toOffset(content, edit.getRange().getStart()));
+        }
+        Collections.sort(startOffsets);
+
+        int firstOccurrence = content.indexOf("Road");
+        int secondOccurrence = content.indexOf("Road", firstOccurrence + 1);
+        assertEquals(firstOccurrence, startOffsets.get(0));
+        assertEquals(secondOccurrence, startOffsets.get(1));
+
+        String renamed = applyEdits(content, edits);
+        assertTrue(renamed.contains("CLASS Street"));
+        assertTrue(renamed.contains("END Street"));
+        assertFalse(renamed.contains("Road"));
+    }
+
+    private static String applyEdits(String original, List<TextEdit> edits) {
+        if (original == null) {
+            return null;
+        }
+        if (edits == null || edits.isEmpty()) {
+            return original;
+        }
+
+        record EditRange(int start, int end, String text) {
+        }
+
+        List<EditRange> ranges = new ArrayList<>(edits.size());
+        for (TextEdit edit : edits) {
+            int start = DocumentTracker.toOffset(original, edit.getRange().getStart());
+            int end = DocumentTracker.toOffset(original, edit.getRange().getEnd());
+            ranges.add(new EditRange(start, end, edit.getNewText() != null ? edit.getNewText() : ""));
+        }
+
+        ranges.sort((a, b) -> Integer.compare(b.start(), a.start()));
+
+        StringBuilder sb = new StringBuilder(original);
+        for (EditRange range : ranges) {
+            sb.replace(range.start(), range.end(), range.text());
+        }
+        return sb.toString();
     }
 
     @Test
