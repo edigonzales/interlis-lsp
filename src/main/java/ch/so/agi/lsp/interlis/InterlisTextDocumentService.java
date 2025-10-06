@@ -26,6 +26,7 @@ public class InterlisTextDocumentService implements TextDocumentService {
     private final InterlisDefinitionFinder definitionFinder;
     private final ModelDiscoveryService modelDiscoveryService;
     private final InterlisCompletionProvider completionProvider;
+    private final InterlisRenameProvider renameProvider;
     private final BiFunction<ClientSettings, String, Ili2cUtil.CompilationOutcome> compiler;
 
     public InterlisTextDocumentService(InterlisLanguageServer server) {
@@ -41,6 +42,7 @@ public class InterlisTextDocumentService implements TextDocumentService {
         this.definitionFinder = new InterlisDefinitionFinder(server, documents, this.compilationCache);
         this.modelDiscoveryService = new ModelDiscoveryService();
         this.completionProvider = new InterlisCompletionProvider(server, documents, this.compilationCache, this.compiler, this.modelDiscoveryService);
+        this.renameProvider = new InterlisRenameProvider(server, documents, this.compilationCache, this.compiler);
     }
 
     void onClientSettingsUpdated(ClientSettings settings) {
@@ -128,6 +130,33 @@ public class InterlisTextDocumentService implements TextDocumentService {
 
         List<TextEdit> edits = InterlisAutoCloser.computeEdits(text, params);
         return CompletableFuture.completedFuture(edits);
+    }
+
+    @Override
+    public CompletableFuture<WorkspaceEdit> rename(RenameParams params) {
+        return CompletableFutures.computeAsync(cancelChecker -> {
+            cancelChecker.checkCanceled();
+            try {
+                WorkspaceEdit edit = renameProvider.rename(params);
+                if (edit == null) {
+                    WorkspaceEdit empty = new WorkspaceEdit();
+                    empty.setChanges(Collections.emptyMap());
+                    return empty;
+                }
+                if (edit.getChanges() == null) {
+                    edit.setChanges(Collections.emptyMap());
+                }
+                return edit;
+            } catch (Exception ex) {
+                if (CancellationUtil.isCancellation(ex)) {
+                    throw CancellationUtil.propagateCancellation(ex);
+                }
+                LOG.error("Rename failed", ex);
+                WorkspaceEdit empty = new WorkspaceEdit();
+                empty.setChanges(Collections.emptyMap());
+                return empty;
+            }
+        });
     }
 
     @Override

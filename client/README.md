@@ -13,6 +13,7 @@
 - **Validation with diagnostics** ✅ – the server compiles INTERLIS models on open and save, converts ili2c messages to LSP diagnostics, and streams the compiler log to the client output channel for quick feedback.
 - **Smart completions** 🎯 – context-aware proposals for `IMPORTS`, dotted type references, and model names are built from the live compilation result and discovered repositories.
 - **Go to definition** 🔍 – jump to definitions inside the current workspace or linked model files based on the compiled transfer description.
+- **Symbol rename** ✏️ – rename models, topics, classes, structures, and associations while updating matching references across files.
 - **Document symbols** 🗂️ – browse topics, classes, associations, domains, and attributes via the VS Code outline populated from the INTERLIS AST.
 - **Formatting & pretty print** 🧹 – format whole documents with ili2c’s pretty printer and on-type helpers.
 - **On-type templates** ⚙️ – typing `=` after model, topic, class, or structure headers injects boilerplate blocks, meta-attributes, and matching `END` statements while restoring the caret.
