@@ -109,21 +109,16 @@ final class InterlisRenameProvider {
             return empty;
         }
 
-        LinkedHashSet<String> spellings = new LinkedHashSet<>();
-        spellings.add(token);
-        spellings.add(oldName);
-
-        Model model = null;
+        TransferDescription transferDescription = null;
         String qualifiedName = null;
         String pathOrUri = InterlisTextDocumentService.toFilesystemPathIfPossible(uri);
         if (pathOrUri != null && !pathOrUri.isBlank()) {
             ClientSettings cfg = server.getClientSettings();
             Ili2cUtil.CompilationOutcome outcome = getOrCompile(pathOrUri, cfg);
-            TransferDescription td = outcome != null ? outcome.getTransferDescription() : null;
-            if (td != null) {
-                Element element = InterlisNameResolver.resolveElement(td, token);
+            transferDescription = outcome != null ? outcome.getTransferDescription() : null;
+            if (transferDescription != null) {
+                Element element = InterlisNameResolver.resolveElement(transferDescription, token);
                 if (element != null) {
-                    model = InterlisNameResolver.findEnclosingModel(element);
                     try {
                         qualifiedName = element.getScopedName();
                     } catch (Exception ex) {
@@ -133,30 +128,9 @@ final class InterlisRenameProvider {
             }
         }
 
-        if (qualifiedName != null && !qualifiedName.isBlank()) {
-            String[] segments = qualifiedName.split("\\.");
-            for (int i = 0; i < segments.length; i++) {
-                String suffix = String.join(".", Arrays.copyOfRange(segments, i, segments.length));
-                if (!suffix.isBlank()) {
-                    spellings.add(suffix);
-                }
-            }
-        }
+        LinkedHashSet<String> spellings = collectSpellings(token, qualifiedName, oldName);
 
-        LinkedHashSet<String> targetUris = new LinkedHashSet<>();
-        targetUris.add(uri);
-        if (model != null) {
-            String fileName = model.getFileName();
-            if (fileName != null && !fileName.isBlank()) {
-                String normalized = InterlisTextDocumentService.toFilesystemPathIfPossible(fileName);
-                try {
-                    Path path = Paths.get(normalized);
-                    targetUris.add(path.toUri().toString());
-                } catch (Exception ex) {
-                    LOG.debug("Unable to resolve model path {}", fileName, ex);
-                }
-            }
-        }
+        LinkedHashSet<String> targetUris = collectCandidateUris(uri, transferDescription);
 
         Map<String, List<TextEdit>> changes = new LinkedHashMap<>();
         for (String targetUri : targetUris) {
@@ -203,10 +177,90 @@ final class InterlisRenameProvider {
         return outcome;
     }
 
-    private static List<TextEdit> computeEdits(String text,
-                                               String oldName,
-                                               String newName,
-                                               Set<String> spellings) {
+    static LinkedHashSet<String> collectSpellings(String token, String qualifiedName, String oldName) {
+        LinkedHashSet<String> spellings = new LinkedHashSet<>();
+        if (token != null && !token.isBlank()) {
+            spellings.add(token);
+        }
+        if (oldName != null && !oldName.isBlank()) {
+            spellings.add(oldName);
+        }
+        if (qualifiedName == null || qualifiedName.isBlank()) {
+            return spellings;
+        }
+
+        String[] segments = Arrays.stream(qualifiedName.split("\\."))
+                .filter(segment -> segment != null && !segment.isBlank())
+                .toArray(String[]::new);
+        for (int i = 0; i < segments.length; i++) {
+            String suffix = String.join(".", Arrays.copyOfRange(segments, i, segments.length));
+            if (!suffix.isBlank()) {
+                spellings.add(suffix);
+            }
+        }
+
+        if (segments.length > 1) {
+            String last = segments[segments.length - 1];
+            if (!last.isBlank()) {
+                for (int i = 0; i < segments.length - 1; i++) {
+                    String prefix = segments[i];
+                    if (prefix != null && !prefix.isBlank()) {
+                        spellings.add(prefix + "." + last);
+                    }
+                }
+            }
+        }
+
+        return spellings;
+    }
+
+    static LinkedHashSet<String> collectCandidateUris(String primaryUri, TransferDescription td) {
+        LinkedHashSet<String> uris = new LinkedHashSet<>();
+        if (primaryUri != null && !primaryUri.isBlank()) {
+            uris.add(primaryUri);
+        }
+        if (td == null) {
+            return uris;
+        }
+
+        Set<Model> seen = new LinkedHashSet<>();
+        Model[] models = td.getModelsFromLastFile();
+        if (models != null) {
+            for (Model model : models) {
+                collectModelUrisRecursive(model, seen, uris);
+            }
+        }
+        return uris;
+    }
+
+    private static void collectModelUrisRecursive(Model model, Set<Model> seen, Set<String> uris) {
+        if (model == null || !seen.add(model)) {
+            return;
+        }
+        String fileName = model.getFileName();
+        if (fileName != null && !fileName.isBlank()) {
+            String normalized = InterlisTextDocumentService.toFilesystemPathIfPossible(fileName);
+            if (normalized != null && !normalized.isBlank()) {
+                try {
+                    Path path = Paths.get(normalized);
+                    uris.add(path.toUri().toString());
+                } catch (Exception ex) {
+                    LOG.debug("Unable to resolve model path {}", fileName, ex);
+                }
+            }
+        }
+        Model[] imports = model.getImporting();
+        if (imports != null) {
+            for (Model imp : imports) {
+                collectModelUrisRecursive(imp, seen, uris);
+            }
+        }
+    }
+
+    static List<TextEdit> computeEdits(String text,
+                                       String oldName,
+                                       String newName,
+                                       Set<String> spellings) {
         if (text == null || text.isEmpty() || oldName == null || oldName.isBlank()) {
             return Collections.emptyList();
         }
