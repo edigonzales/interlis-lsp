@@ -64,6 +64,10 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
         DocumentOnTypeFormattingOptions onType = new DocumentOnTypeFormattingOptions("=");
         caps.setDocumentOnTypeFormattingProvider(onType);
 
+        RenameOptions renameOptions = new RenameOptions();
+        renameOptions.setPrepareProvider(false);
+        caps.setRenameProvider(Either.forRight(renameOptions));
+
         InitializeResult result = new InitializeResult(caps);
         return CompletableFuture.completedFuture(result);
     }
