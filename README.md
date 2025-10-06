@@ -56,6 +56,7 @@ repo/
       "firstTriggerCharacter": "="
     },
     "definitionProvider": true,
+    "renameProvider": true,
     "documentSymbolProvider": true,
     "executeCommandProvider": {
       "commands": [
@@ -80,6 +81,7 @@ Key listeners and providers derived from these capabilities:
 | `textDocument/formatting` | `InterlisTextDocumentService#formatting` | Runs ili2c pretty printer for whole-document formatting. |
 | `textDocument/onTypeFormatting` | `InterlisTextDocumentService#onTypeFormatting` | Auto-inserts INTERLIS templates after typing `=`. |
 | `textDocument/definition` | `InterlisTextDocumentService#definition` | Resolves definitions across workspace & referenced models. |
+| `textDocument/rename` | `InterlisTextDocumentService#rename` + `InterlisRenameProvider` | Applies validated renames across declarations and references. |
 | `textDocument/documentSymbol` | `InterlisTextDocumentService#documentSymbol` | Builds outline nodes from the compiled AST. |
 | `workspace/didChangeConfiguration` | `InterlisWorkspaceService#didChangeConfiguration` | Refreshes server-side model repository settings. |
 
