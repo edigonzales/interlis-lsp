@@ -3,6 +3,8 @@ import * as path from "path";
 import * as fs from "fs";
 import { LanguageClient, LanguageClientOptions, Executable, ServerOptions, State } from "vscode-languageclient/node";
 
+const OUTPUT_NAME = "INTERLIS LSP";
+
 let client: LanguageClient | undefined;
 let revealOutputOnNextLog = false;
 const CARET_SENTINEL = "__INTERLIS_AUTOCLOSE_CARET__";
@@ -30,7 +32,6 @@ export async function activate(context: vscode.ExtensionContext) {
   const javaPath = resolveJavaPath(context, cfg.get<string>("javaPath"));
 
   // Single channel
-  const OUTPUT_NAME = "INTERLIS LSP";
   const output = vscode.window.createOutputChannel(OUTPUT_NAME); // no { log: true }
   const exec: Executable = {
     command: javaPath,
@@ -152,16 +153,14 @@ export async function activate(context: vscode.ExtensionContext) {
 
     client!.onNotification("interlis/clearLog", () => {
       output.clear();
-      if (revealOutputOnNextLog) {
-        output.show(true);
-        revealOutputOnNextLog = false;
-      }
     });
 
     client!.onNotification("interlis/log", (p: { text?: string }) => {
       if (p?.text) {
         output.append(p.text);
-        ensurePanelVisible();
+        const preserveFocus = !revealOutputOnNextLog;
+        revealOutputOnNextLog = false;
+        void ensurePanelVisible(preserveFocus);
       }
     });
   };
@@ -431,7 +430,7 @@ function resolveJavaPath(context: vscode.ExtensionContext, configured: string | 
 }
 
 async function ensurePanelVisible(preserveEditorFocus = true) {
-  await vscode.commands.executeCommand("workbench.action.focusPanel");
+  await vscode.commands.executeCommand("workbench.action.output.showOutput", OUTPUT_NAME);
   if (preserveEditorFocus) {
     await vscode.commands.executeCommand("workbench.action.focusActiveEditorGroup");
   }
