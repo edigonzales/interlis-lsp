@@ -39,7 +39,7 @@
     "comments": {
       "patterns": [
         {
-          "name": "comment.line.double-slash",
+          "name": "comment.line.meta-attribute.interlis",
           "match": "^(\\s*!!@.*?)(\\r?)$",
           "captures": {
             "1": {

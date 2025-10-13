@@ -5,7 +5,7 @@
   "colors": {},
   "tokenColors": [
     {
-      "scope": "entity.name.tag.meta-attribute.interlis",
+      "scope": "comment.line.meta-attribute.interlis",
       "settings": {
         "foreground": "#d19a66"
       }
