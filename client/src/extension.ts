@@ -146,6 +146,11 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Register notification handlers ONCE, immediately
   let handlersRegistered = false;
+  const revealOutputChannel = (preserveEditorFocus = true) => {
+    output.show(preserveEditorFocus);
+    void ensurePanelVisible(preserveEditorFocus);
+  };
+
   const registerHandlersOnce = () => {
     if (handlersRegistered) return;
     handlersRegistered = true;
@@ -153,7 +158,7 @@ export async function activate(context: vscode.ExtensionContext) {
     client!.onNotification("interlis/clearLog", () => {
       output.clear();
       if (revealOutputOnNextLog) {
-        output.show(true);
+        revealOutputChannel(true);
         revealOutputOnNextLog = false;
       }
     });
@@ -161,7 +166,7 @@ export async function activate(context: vscode.ExtensionContext) {
     client!.onNotification("interlis/log", (p: { text?: string }) => {
       if (p?.text) {
         output.append(p.text);
-        ensurePanelVisible();
+        revealOutputChannel(true);
       }
     });
   };
