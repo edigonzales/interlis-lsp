@@ -39,11 +39,11 @@
     "comments": {
       "patterns": [
         {
-          "name": "comment.line.meta-attribute.interlis",
+          "name": "comment.line.double-slash",
           "match": "^(\\s*!!@.*?)(\\r?)$",
           "captures": {
             "1": {
-              "name": "entity.name.tag.meta-attribute.interlis"
+              "name": "meta.preprocessor.string"
             },
             "2": {
               "name": "punctuation.definition.comment.interlis"

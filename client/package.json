@@ -25,7 +25,7 @@
     "prettyprint",
     "uml"
   ],
-  "version": "0.0.10",
+  "version": "0.0.11",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -105,16 +105,20 @@
       "[interlis]": {
         "editor.formatOnType": true
       },
-      "editor.fontLigatures": true,
-      "editor.tokenColorCustomizations": {
-        "textMateRules": [
-          {
-            "scope": "entity.name.tag.meta-attribute.interlis",
-            "settings": { "foreground": "#d19a66", "fontStyle": "" }
-          }
-        ]
-      }
+      "editor.fontLigatures": true
+    },
+    "themes": [
+    {
+      "label": "INTERLIS Default Colors (dark)",
+      "uiTheme": "vs-dark",
+      "path": "./themes/interlis-color-theme-dark.json"
+    },
+    {
+      "label": "INTERLIS Default Colors (light)",
+      "uiTheme": "vs",
+      "path": "./themes/interlis-color-theme-light.json"
     }
+  ]
   },
   "main": "./dist/extension.js",
   "scripts": {
