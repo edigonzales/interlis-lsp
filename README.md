@@ -152,6 +152,35 @@ Tip 👉 For CI packaging see the `build and publish` GitHub Actions workflow, w
 3. Launch VS Code with the extension: `code client --extensionDevelopmentPath="$(pwd)/client"`.
 4. During development, point the extension to your local server build by setting `interlisLsp.server.jarPath`.
 
+#### Meta-attribute highlighting
+
+Meta attributes in INTERLIS start with the `!!` comment prefix, followed by an `@`-prefixed body (for example `!!@trace`). The
+TextMate grammar (`client/syntaxes/interlis.tmLanguage.json`) now splits those pieces into distinct scopes:
+
+| Segment | Scope | Purpose |
+| --- | --- | --- |
+| `!!` | `punctuation.definition.comment.interlis` | Keeps the leading characters styled as comments. |
+| `@trace` | `entity.name.tag.meta-attribute.interlis` | Marks the attribute body so `editor.tokenColorCustomizations` rules can target it. |
+
+Because the attribute body is assigned a dedicated scope, theme authors and users can safely add a `textMateRules` override such
+as:
+
+```jsonc
+"editor.tokenColorCustomizations": {
+  "textMateRules": [
+    {
+      "scope": "entity.name.tag.meta-attribute.interlis",
+      "settings": {
+        "foreground": "#d19a66"
+      }
+    }
+  ]
+}
+```
+
+VS Code applies the rule to any token carrying that scope, ensuring consistent coloring across light and dark themes while the
+comment prefix retains its original appearance.
+
 ### End-to-end debugging
 
 - Start the LSP with `./gradlew run` and configure the extension to use the spawned process by editing `client/src/extension.ts` or setting a custom launch config.
