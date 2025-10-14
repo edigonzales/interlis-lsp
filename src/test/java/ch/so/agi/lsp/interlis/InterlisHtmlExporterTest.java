@@ -121,9 +121,19 @@ class InterlisHtmlExporterTest {
         assertTrue(html.contains("<th>Wert</th><th>Beschreibung</th>"));
         int enumerationTableCount = html.split("<th>Wert</th><th>Beschreibung</th>").length - 1;
         assertEquals(2, enumerationTableCount, "Expected enumeration tables for both domains");
-        assertTrue(html.contains("<td>rot.hell</td><td>Hell doc</td>"));
-        assertTrue(html.contains("<td>rot.dunkel</td><td>Dunkel doc</td>"));
-        assertTrue(html.contains("<td>blau</td><td>Blau doc</td>"));
+
+        String allRoofColorsTable = tableHtmlForHeading(html, "AllRoofColors (Enumeration)");
+        assertTrue(allRoofColorsTable.contains("<td>rot</td><td>Rot doc</td>"));
+        assertTrue(allRoofColorsTable.contains("<td>rot.hell</td><td>Hell doc</td>"));
+        assertTrue(allRoofColorsTable.contains("<td>rot.dunkel</td><td>Dunkel doc</td>"));
+        assertTrue(allRoofColorsTable.contains("<td>blau</td><td>Blau doc</td>"));
+
+        String roofColorTable = tableHtmlForHeading(html, "RoofColor (Enumeration)");
+        assertFalse(roofColorTable.contains("<td>rot</td>"),
+                "EnumerationType table should not contain intermediate values");
+        assertTrue(roofColorTable.contains("<td>rot.hell</td><td>Hell doc</td>"));
+        assertTrue(roofColorTable.contains("<td>rot.dunkel</td><td>Dunkel doc</td>"));
+        assertTrue(roofColorTable.contains("<td>blau</td><td>Blau doc</td>"));
 
         assertFalse(html.contains("<script"));
         assertFalse(html.contains("<link"));
@@ -178,5 +188,16 @@ class InterlisHtmlExporterTest {
         }
         topic.add(view);
         return view;
+    }
+
+    private static String tableHtmlForHeading(String html, String headingText) {
+        String marker = "<span class=\"heading-text\">" + headingText + "</span>";
+        int headingIndex = html.indexOf(marker);
+        assertTrue(headingIndex >= 0, "Heading not found: " + headingText);
+        int tableStart = html.indexOf("<table", headingIndex);
+        assertTrue(tableStart >= 0, "Table not found after heading: " + headingText);
+        int tableEnd = html.indexOf("</table>", tableStart);
+        assertTrue(tableEnd >= 0, "Table not closed for heading: " + headingText);
+        return html.substring(tableStart, tableEnd + "</table>".length());
     }
 }

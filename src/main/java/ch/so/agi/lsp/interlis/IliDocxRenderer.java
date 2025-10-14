@@ -475,12 +475,14 @@ public final class IliDocxRenderer {
         }
         Enumeration enumeration = enumType.getConsolidatedEnumeration();
         if (enumeration != null) {
-            appendEnumerationEntries(entries, "", enumeration);
+            boolean includeIntermediateValues = enumType instanceof EnumTreeValueType;
+            appendEnumerationEntries(entries, "", enumeration, includeIntermediateValues);
         }
         return entries;
     }
 
-    private static void appendEnumerationEntries(List<EnumEntry> target, String prefix, Enumeration enumeration) {
+    private static void appendEnumerationEntries(List<EnumEntry> target, String prefix, Enumeration enumeration,
+            boolean includeIntermediateValues) {
         if (enumeration == null) {
             return;
         }
@@ -494,10 +496,13 @@ public final class IliDocxRenderer {
                 continue;
             }
             String value = prefix.isEmpty() ? name : prefix + "." + name;
-            target.add(new EnumEntry(value, nz(element.getDocumentation())));
             Enumeration sub = element.getSubEnumeration();
-            if (sub != null && sub.size() > 0) {
-                appendEnumerationEntries(target, value, sub);
+            boolean hasSubElements = sub != null && sub.size() > 0;
+            if (!hasSubElements || includeIntermediateValues) {
+                target.add(new EnumEntry(value, nz(element.getDocumentation())));
+            }
+            if (hasSubElements) {
+                appendEnumerationEntries(target, value, sub, includeIntermediateValues);
             }
         }
     }

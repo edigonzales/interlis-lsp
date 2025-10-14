@@ -209,21 +209,35 @@ class InterlisDocxExporterTest {
                     .filter(t -> t.getRow(0) != null && t.getRow(0).getCell(0) != null
                             && "Wert".equals(t.getRow(0).getCell(0).getText()))
                     .collect(Collectors.toList());
-            assertTrue(enumerationTables.size() >= 2, "Expected tables for both enumerations");
+            assertEquals(2, enumerationTables.size(), "Expected tables for both enumerations");
 
-            for (XWPFTable enumerationTable : enumerationTables) {
-                assertEquals(BigInteger.valueOf(3000), enumerationTable.getCTTbl().getTblGrid().getGridColArray(0).getW());
-                assertEquals(BigInteger.valueOf(6000), enumerationTable.getCTTbl().getTblGrid().getGridColArray(1).getW());
+            XWPFTable enumTreeTable = enumerationTables.get(0);
+            assertEquals(BigInteger.valueOf(3000), enumTreeTable.getCTTbl().getTblGrid().getGridColArray(0).getW());
+            assertEquals(BigInteger.valueOf(6000), enumTreeTable.getCTTbl().getTblGrid().getGridColArray(1).getW());
+            assertEquals("rot", enumTreeTable.getRow(1).getCell(0).getText());
+            assertEquals("Rot doc", enumTreeTable.getRow(1).getCell(1).getText());
+            assertEquals("rot.hell", enumTreeTable.getRow(2).getCell(0).getText());
+            assertEquals("Hell doc", enumTreeTable.getRow(2).getCell(1).getText());
+            assertEquals("rot.dunkel", enumTreeTable.getRow(3).getCell(0).getText());
+            assertEquals("Dunkel doc", enumTreeTable.getRow(3).getCell(1).getText());
+            assertEquals("blau", enumTreeTable.getRow(4).getCell(0).getText());
+            assertEquals("Blau doc", enumTreeTable.getRow(4).getCell(1).getText());
 
-                assertEquals("rot", enumerationTable.getRow(1).getCell(0).getText());
-                assertEquals("Rot doc", enumerationTable.getRow(1).getCell(1).getText());
-                assertEquals("rot.hell", enumerationTable.getRow(2).getCell(0).getText());
-                assertEquals("Hell doc", enumerationTable.getRow(2).getCell(1).getText());
-                assertEquals("rot.dunkel", enumerationTable.getRow(3).getCell(0).getText());
-                assertEquals("Dunkel doc", enumerationTable.getRow(3).getCell(1).getText());
-                assertEquals("blau", enumerationTable.getRow(4).getCell(0).getText());
-                assertEquals("Blau doc", enumerationTable.getRow(4).getCell(1).getText());
-            }
+            XWPFTable enumTable = enumerationTables.get(1);
+            assertEquals(BigInteger.valueOf(3000), enumTable.getCTTbl().getTblGrid().getGridColArray(0).getW());
+            assertEquals(BigInteger.valueOf(6000), enumTable.getCTTbl().getTblGrid().getGridColArray(1).getW());
+            assertEquals("rot.hell", enumTable.getRow(1).getCell(0).getText());
+            assertEquals("Hell doc", enumTable.getRow(1).getCell(1).getText());
+            assertEquals("rot.dunkel", enumTable.getRow(2).getCell(0).getText());
+            assertEquals("Dunkel doc", enumTable.getRow(2).getCell(1).getText());
+            assertEquals("blau", enumTable.getRow(3).getCell(0).getText());
+            assertEquals("Blau doc", enumTable.getRow(3).getCell(1).getText());
+
+            List<IliDocxRenderer.EnumEntry> enumEntries = IliDocxRenderer
+                    .collectEnumerationEntries((AbstractEnumerationType) enumerationType);
+            assertEquals(3, enumEntries.size(), "Expected EnumerationType entries to contain only leaves");
+            assertTrue(enumEntries.stream().noneMatch(entry -> "rot".equals(entry.value())),
+                    "EnumerationType entries should not contain intermediate nodes");
 
             List<IliDocxRenderer.EnumEntry> enumTreeEntries = IliDocxRenderer
                     .collectEnumerationEntries((AbstractEnumerationType) allRoofColors.getType());
