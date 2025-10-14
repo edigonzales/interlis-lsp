@@ -37,7 +37,7 @@ dependencies {
     implementation 'org.apache.xmlbeans:xmlbeans:5.2.0'
 
     implementation 'org.slf4j:slf4j-api:2.0.13'
-    implementation "org.apache.logging.log4j:log4j-slf4j2-impl:2.21.1" // wegen poi
+    //implementation "org.apache.logging.log4j:log4j-slf4j2-impl:2.21.1" // Wegen poi, dafür funktioniert aber slf4j-simple nicht mehr. Es beides Implementierungen. Zum Debuggen auskommentieren.
     runtimeOnly 'org.slf4j:slf4j-simple:2.0.13'
 
     //compileOnly 'org.graalvm.nativeimage:svm:21.3.15'

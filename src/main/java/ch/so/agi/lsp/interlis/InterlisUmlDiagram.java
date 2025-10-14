@@ -3,12 +3,17 @@ package ch.so.agi.lsp.interlis;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import ch.interlis.ili2c.metamodel.*;
 
 /**
  * Shared diagram model and builder used by Mermaid and PlantUML renderers.
  */
 final class InterlisUmlDiagram {
+    private static final Logger LOG = LoggerFactory.getLogger(InterlisUmlDiagram.class);
+
     private InterlisUmlDiagram() {
     }
 
@@ -335,18 +340,25 @@ final class InterlisUmlDiagram {
                 return "String";
             } else if (t instanceof EnumerationType) {
                 return a.isDomainBoolean() ? "Boolean" : a.getContainer().getName();
-            } else if (t instanceof FormattedType ft && isDateOrTime(ft)) {
-                return ft.getDefinedBaseDomain().getName();
+            } else if (t instanceof FormattedType ft) {
+                if (isDateOrTime(ft)) {
+                    return ft.getDefinedBaseDomain().getName();    
+                } else {
+                    if (ft.getDefinedBaseDomain().getName() != null) {
+                        return ft.getDefinedBaseDomain().getName();
+                    }
+                    return "FormattedType";
+                }
             } else if (t instanceof TextOIDType tt) {
                 Type textOidType = tt.getOIDType();
                 if (textOidType instanceof TypeAlias alias) {
                     return alias.getAliasing().getName();
                 } else {
-                    return textOidType.getName();
+                    return "OID (Text)";
                 }
             } else if (t instanceof TypeAlias ta) {
                 return ta.getAliasing().getName();
-            }
+            } 
             String n = t.getName();
             return (n != null && !n.isEmpty()) ? n : t.getClass().getSimpleName();
         }
