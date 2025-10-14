@@ -29,18 +29,18 @@ body {
 }
 @media (prefers-color-scheme: dark) {
   body {
-    background: #111111;
-    color: #f5f5f5;
+    background: #ffffff;
+    color: #1b1b1b;
   }
   table {
-    border-color: #555555;
-    background-color: rgba(24, 24, 24, 0.95);
+    border-color: #999999;
+    background-color: rgba(255, 255, 255, 0.96);
   }
   th {
-    background-color: #1e1e1e;
+    background-color: #ffffff;
   }
   th, td {
-    border-color: #555555;
+    border-color: #999999;
   }
 }
 .container {
