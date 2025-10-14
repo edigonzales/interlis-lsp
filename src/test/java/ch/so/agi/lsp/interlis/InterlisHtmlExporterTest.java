@@ -1,5 +1,6 @@
 package ch.so.agi.lsp.interlis;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -34,6 +35,7 @@ class InterlisHtmlExporterTest {
                 "VERSION \"2024-01-01\" =",
                 "  TOPIC DocTopic =",
                 "    DOMAIN RoofColor = (rot (hell, dunkel), blau);",
+                "    DOMAIN AllRoofColors = ALL OF RoofColor;",
                 "    STRUCTURE Address =",
                 "      Street : MANDATORY TEXT*50;",
                 "    END Address;",
@@ -77,6 +79,9 @@ class InterlisHtmlExporterTest {
 
         Domain enumDomain = findDomain(topic, "RoofColor");
         enumDomain.setDocumentation("Roof color documentation");
+
+        Domain allRoofColors = findDomain(topic, "AllRoofColors");
+        allRoofColors.setDocumentation("All roof colors documentation");
         EnumerationType enumerationType = (EnumerationType) enumDomain.getType();
         Enumeration enumeration = enumerationType.getEnumeration();
         Enumeration.Element rot = enumeration.getElement(0);
@@ -101,20 +106,34 @@ class InterlisHtmlExporterTest {
         assertTrue(html.contains("<span class=\"heading-number\">2.1</span><span class=\"heading-text\">Address (Abstract Structure)</span>"));
         assertTrue(html.contains("<span class=\"heading-number\">2.2</span><span class=\"heading-text\">Building (Class)</span>"));
         assertTrue(html.contains("<span class=\"heading-number\">2.3</span><span class=\"heading-text\">BuildingView (View)</span>"));
-        assertTrue(html.contains("<span class=\"heading-number\">2.4</span><span class=\"heading-text\">RoofColor (Enumeration)</span>"));
+        assertTrue(html.contains("<span class=\"heading-number\">2.4</span><span class=\"heading-text\">AllRoofColors (Enumeration)</span>"));
+        assertTrue(html.contains("<span class=\"heading-number\">2.5</span><span class=\"heading-text\">RoofColor (Enumeration)</span>"));
         assertTrue(html.contains("Topic documentation"));
         assertTrue(html.contains("Structure documentation"));
         assertTrue(html.contains("Class documentation"));
         assertTrue(html.contains("View documentation"));
         assertTrue(html.contains("Roof color documentation"));
+        assertTrue(html.contains("All roof colors documentation"));
 
         assertTrue(html.contains("<th>Attributname</th><th>Kardinalität</th><th>Typ</th><th>Beschreibung</th>"));
         assertTrue(html.contains("<td>Status</td><td>0..1</td><td>Enumeration</td><td>geplant, gebaut, abgerissen</td>"));
 
         assertTrue(html.contains("<th>Wert</th><th>Beschreibung</th>"));
-        assertTrue(html.contains("<td>rot.hell</td><td>Hell doc</td>"));
-        assertTrue(html.contains("<td>rot.dunkel</td><td>Dunkel doc</td>"));
-        assertTrue(html.contains("<td>blau</td><td>Blau doc</td>"));
+        int enumerationTableCount = html.split("<th>Wert</th><th>Beschreibung</th>").length - 1;
+        assertEquals(2, enumerationTableCount, "Expected enumeration tables for both domains");
+
+        String allRoofColorsTable = tableHtmlForHeading(html, "AllRoofColors (Enumeration)");
+        assertTrue(allRoofColorsTable.contains("<td>rot</td><td>Rot doc</td>"));
+        assertTrue(allRoofColorsTable.contains("<td>rot.hell</td><td>Hell doc</td>"));
+        assertTrue(allRoofColorsTable.contains("<td>rot.dunkel</td><td>Dunkel doc</td>"));
+        assertTrue(allRoofColorsTable.contains("<td>blau</td><td>Blau doc</td>"));
+
+        String roofColorTable = tableHtmlForHeading(html, "RoofColor (Enumeration)");
+        assertFalse(roofColorTable.contains("<td>rot</td>"),
+                "EnumerationType table should not contain intermediate values");
+        assertTrue(roofColorTable.contains("<td>rot.hell</td><td>Hell doc</td>"));
+        assertTrue(roofColorTable.contains("<td>rot.dunkel</td><td>Dunkel doc</td>"));
+        assertTrue(roofColorTable.contains("<td>blau</td><td>Blau doc</td>"));
 
         assertFalse(html.contains("<script"));
         assertFalse(html.contains("<link"));
@@ -169,5 +188,16 @@ class InterlisHtmlExporterTest {
         }
         topic.add(view);
         return view;
+    }
+
+    private static String tableHtmlForHeading(String html, String headingText) {
+        String marker = "<span class=\"heading-text\">" + headingText + "</span>";
+        int headingIndex = html.indexOf(marker);
+        assertTrue(headingIndex >= 0, "Heading not found: " + headingText);
+        int tableStart = html.indexOf("<table", headingIndex);
+        assertTrue(tableStart >= 0, "Table not found after heading: " + headingText);
+        int tableEnd = html.indexOf("</table>", tableStart);
+        assertTrue(tableEnd >= 0, "Table not closed for heading: " + headingText);
+        return html.substring(tableStart, tableEnd + "</table>".length());
     }
 }

@@ -5,10 +5,12 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import ch.interlis.ili2c.metamodel.AbstractEnumerationType;
 import ch.interlis.ili2c.metamodel.AttributeDef;
 import ch.interlis.ili2c.metamodel.Domain;
 import ch.interlis.ili2c.metamodel.Enumeration;
 import ch.interlis.ili2c.metamodel.EnumerationType;
+import ch.interlis.ili2c.metamodel.EnumTreeValueType;
 import ch.interlis.ili2c.metamodel.Model;
 import ch.interlis.ili2c.metamodel.Table;
 import ch.interlis.ili2c.metamodel.Topic;
@@ -22,6 +24,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.stream.Collectors;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.apache.poi.xwpf.usermodel.XWPFRun;
@@ -59,6 +62,7 @@ class InterlisDocxExporterTest {
                 "VERSION \"2024-01-01\" =",
                 "  TOPIC DocTopic =",
                 "    DOMAIN RoofColor = (rot (hell, dunkel), blau);",
+                "    DOMAIN AllRoofColors = ALL OF RoofColor;",
                 "    STRUCTURE Address =",
                 "      Street : MANDATORY TEXT*50;",
                 "    END Address;",
@@ -109,6 +113,12 @@ class InterlisDocxExporterTest {
         Domain enumDomain = findDomain(topic, "RoofColor");
         assertNotNull(enumDomain, "Expected domain RoofColor");
         enumDomain.setDocumentation("Roof color documentation");
+
+        Domain allRoofColors = findDomain(topic, "AllRoofColors");
+        assertNotNull(allRoofColors, "Expected domain AllRoofColors");
+        allRoofColors.setDocumentation("All roof colors documentation");
+        assertTrue(allRoofColors.getType() instanceof EnumTreeValueType,
+                "Expected EnumTreeValueType for AllRoofColors");
 
         EnumerationType enumerationType = (EnumerationType) enumDomain.getType();
         assertNotNull(enumerationType, "Expected enumeration type for RoofColor");
@@ -171,6 +181,11 @@ class InterlisDocxExporterTest {
             assertTrue(paragraphs.get(enumIndex + 1).contains("Roof color documentation"),
                     "Expected enumeration documentation after heading");
 
+            int enumTreeIndex = indexContaining(paragraphs, "AllRoofColors (Enumeration)");
+            assertTrue(enumTreeIndex >= 0, "Expected AllRoofColors enumeration heading");
+            assertTrue(paragraphs.get(enumTreeIndex + 1).contains("All roof colors documentation"),
+                    "Expected EnumTreeValueType documentation after heading");
+
             List<XWPFTable> tables = document.getTables();
             assertTrue(!tables.isEmpty(), "Expected at least one table");
             XWPFTable table = tables.get(0);
@@ -190,23 +205,43 @@ class InterlisDocxExporterTest {
             assertEquals(BigInteger.valueOf(4), table.getCTTbl().getTblPr().getTblBorders().getTop().getSz());
             assertEquals(BigInteger.valueOf(4), table.getCTTbl().getTblPr().getTblBorders().getInsideV().getSz());
 
-            XWPFTable enumerationTable = tables.stream()
+            List<XWPFTable> enumerationTables = tables.stream()
                     .filter(t -> t.getRow(0) != null && t.getRow(0).getCell(0) != null
                             && "Wert".equals(t.getRow(0).getCell(0).getText()))
-                    .findFirst()
-                    .orElseThrow(() -> new AssertionError("Expected enumeration table"));
+                    .collect(Collectors.toList());
+            assertEquals(2, enumerationTables.size(), "Expected tables for both enumerations");
 
-            assertEquals(BigInteger.valueOf(3000), enumerationTable.getCTTbl().getTblGrid().getGridColArray(0).getW());
-            assertEquals(BigInteger.valueOf(6000), enumerationTable.getCTTbl().getTblGrid().getGridColArray(1).getW());
+            XWPFTable enumTreeTable = enumerationTables.get(0);
+            assertEquals(BigInteger.valueOf(3000), enumTreeTable.getCTTbl().getTblGrid().getGridColArray(0).getW());
+            assertEquals(BigInteger.valueOf(6000), enumTreeTable.getCTTbl().getTblGrid().getGridColArray(1).getW());
+            assertEquals("rot", enumTreeTable.getRow(1).getCell(0).getText());
+            assertEquals("Rot doc", enumTreeTable.getRow(1).getCell(1).getText());
+            assertEquals("rot.hell", enumTreeTable.getRow(2).getCell(0).getText());
+            assertEquals("Hell doc", enumTreeTable.getRow(2).getCell(1).getText());
+            assertEquals("rot.dunkel", enumTreeTable.getRow(3).getCell(0).getText());
+            assertEquals("Dunkel doc", enumTreeTable.getRow(3).getCell(1).getText());
+            assertEquals("blau", enumTreeTable.getRow(4).getCell(0).getText());
+            assertEquals("Blau doc", enumTreeTable.getRow(4).getCell(1).getText());
 
-            assertEquals("rot", enumerationTable.getRow(1).getCell(0).getText());
-            assertEquals("Rot doc", enumerationTable.getRow(1).getCell(1).getText());
-            assertEquals("rot.hell", enumerationTable.getRow(2).getCell(0).getText());
-            assertEquals("Hell doc", enumerationTable.getRow(2).getCell(1).getText());
-            assertEquals("rot.dunkel", enumerationTable.getRow(3).getCell(0).getText());
-            assertEquals("Dunkel doc", enumerationTable.getRow(3).getCell(1).getText());
-            assertEquals("blau", enumerationTable.getRow(4).getCell(0).getText());
-            assertEquals("Blau doc", enumerationTable.getRow(4).getCell(1).getText());
+            XWPFTable enumTable = enumerationTables.get(1);
+            assertEquals(BigInteger.valueOf(3000), enumTable.getCTTbl().getTblGrid().getGridColArray(0).getW());
+            assertEquals(BigInteger.valueOf(6000), enumTable.getCTTbl().getTblGrid().getGridColArray(1).getW());
+            assertEquals("rot.hell", enumTable.getRow(1).getCell(0).getText());
+            assertEquals("Hell doc", enumTable.getRow(1).getCell(1).getText());
+            assertEquals("rot.dunkel", enumTable.getRow(2).getCell(0).getText());
+            assertEquals("Dunkel doc", enumTable.getRow(2).getCell(1).getText());
+            assertEquals("blau", enumTable.getRow(3).getCell(0).getText());
+            assertEquals("Blau doc", enumTable.getRow(3).getCell(1).getText());
+
+            List<IliDocxRenderer.EnumEntry> enumEntries = IliDocxRenderer
+                    .collectEnumerationEntries((AbstractEnumerationType) enumerationType);
+            assertEquals(3, enumEntries.size(), "Expected EnumerationType entries to contain only leaves");
+            assertTrue(enumEntries.stream().noneMatch(entry -> "rot".equals(entry.value())),
+                    "EnumerationType entries should not contain intermediate nodes");
+
+            List<IliDocxRenderer.EnumEntry> enumTreeEntries = IliDocxRenderer
+                    .collectEnumerationEntries((AbstractEnumerationType) allRoofColors.getType());
+            assertEquals(4, enumTreeEntries.size(), "Expected EnumTreeValueType entries");
 
             boolean foundInlineEnum = false;
             for (XWPFTable attrTable : tables) {
