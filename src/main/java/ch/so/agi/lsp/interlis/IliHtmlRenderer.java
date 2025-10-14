@@ -1,7 +1,10 @@
 package ch.so.agi.lsp.interlis;
 
+import ch.interlis.ili2c.metamodel.AbstractEnumerationType;
 import ch.interlis.ili2c.metamodel.Container;
 import ch.interlis.ili2c.metamodel.Domain;
+import ch.interlis.ili2c.metamodel.EnumerationType;
+import ch.interlis.ili2c.metamodel.EnumTreeValueType;
 import ch.interlis.ili2c.metamodel.Model;
 import ch.interlis.ili2c.metamodel.Table;
 import ch.interlis.ili2c.metamodel.Topic;
@@ -160,9 +163,10 @@ th {
 
     private static void renderEnumerations(StringBuilder sb, Numbering numbering, Model model, Container scope, int headingLevel) {
         for (Domain domain : IliDocxRenderer.getElements(scope, Domain.class)) {
-            if (!(domain.getType() instanceof ch.interlis.ili2c.metamodel.EnumerationType enumType)) {
+            if (!(domain.getType() instanceof EnumerationType) && !(domain.getType() instanceof EnumTreeValueType)) {
                 continue;
             }
+            AbstractEnumerationType enumType = (AbstractEnumerationType) domain.getType();
             appendHeading(sb, numbering, headingLevel, IliDocxRenderer.enumerationTitle(domain));
             appendDocumentation(sb, domain.getDocumentation());
             appendEnumerationTable(sb, IliDocxRenderer.collectEnumerationEntries(enumType));

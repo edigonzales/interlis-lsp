@@ -1,6 +1,7 @@
 package ch.so.agi.lsp.interlis;
 
 import ch.interlis.ili2c.metamodel.AbstractClassDef;
+import ch.interlis.ili2c.metamodel.AbstractEnumerationType;
 import ch.interlis.ili2c.metamodel.AreaType;
 import ch.interlis.ili2c.metamodel.AssociationDef;
 import ch.interlis.ili2c.metamodel.AttributeDef;
@@ -10,8 +11,9 @@ import ch.interlis.ili2c.metamodel.Container;
 import ch.interlis.ili2c.metamodel.CoordType;
 import ch.interlis.ili2c.metamodel.Domain;
 import ch.interlis.ili2c.metamodel.Element;
-import ch.interlis.ili2c.metamodel.EnumerationType;
 import ch.interlis.ili2c.metamodel.Enumeration;
+import ch.interlis.ili2c.metamodel.EnumerationType;
+import ch.interlis.ili2c.metamodel.EnumTreeValueType;
 import ch.interlis.ili2c.metamodel.FormattedType;
 import ch.interlis.ili2c.metamodel.Model;
 import ch.interlis.ili2c.metamodel.MultiAreaType;
@@ -339,9 +341,10 @@ public final class IliDocxRenderer {
     private static void renderEnumerations(XWPFDocument doc, Model model, Container scope, int headingLevel) {
         for (Domain domain : getElements(scope, Domain.class)) {
             Type type = domain.getType();
-            if (!(type instanceof EnumerationType enumType)) {
+            if (!(type instanceof EnumerationType) && !(type instanceof EnumTreeValueType)) {
                 continue;
             }
+            AbstractEnumerationType enumType = (AbstractEnumerationType) type;
             writeHeading(doc, enumerationTitle(domain), headingLevel);
             writeDocumentationParagraph(doc, domain.getDocumentation());
             writeEnumerationTable(doc, enumType);
@@ -434,7 +437,7 @@ public final class IliDocxRenderer {
         applyParagraphSpacing(spacer);
     }
 
-    private static void writeEnumerationTable(XWPFDocument doc, EnumerationType enumType) {
+    private static void writeEnumerationTable(XWPFDocument doc, AbstractEnumerationType enumType) {
         XWPFTable table = doc.createTable();
         CTTbl ctTable = table.getCTTbl();
         configureTable(ctTable);
@@ -465,7 +468,7 @@ public final class IliDocxRenderer {
         applyParagraphSpacing(spacer);
     }
 
-    static List<EnumEntry> collectEnumerationEntries(EnumerationType enumType) {
+    static List<EnumEntry> collectEnumerationEntries(AbstractEnumerationType enumType) {
         List<EnumEntry> entries = new ArrayList<>();
         if (enumType == null) {
             return entries;
