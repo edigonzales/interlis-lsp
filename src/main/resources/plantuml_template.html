@@ -55,17 +55,20 @@
     .diagram-scroll {
       position: absolute;
       inset: 0;
-      overflow: auto;
+      overflow: hidden;
       cursor: grab;
+      touch-action: none;
     }
-    .diagram-scroll.dragging { cursor: grabbing; }
+    .diagram-scroll:active { cursor: grabbing; }
     .diagram-content {
       transform-origin: top left;
       display: inline-block;
+      cursor: inherit;
     }
     .diagram-content img {
       display: block;
       max-width: 100%;
+      cursor: inherit;
     }
     .source-header {
       padding: 12px 16px;
@@ -123,8 +126,6 @@
   <div class="diagram-pane">
     <div class="diagram-wrap">
       <div class="diagram-toolbar">
-        <button type="button" data-a="zin">+</button>
-        <button type="button" data-a="zout">−</button>
         <button type="button" data-a="fit">Fit</button>
         <a href="${plantUmlPngUrl}" target="_blank" rel="noreferrer">Open PNG</a>
         <a href="${plantUmlSvgUrl}" target="_blank" rel="noreferrer" download>Download SVG</a>
@@ -143,6 +144,7 @@
   </div>
 </div>
 
+<script src="https://unpkg.com/@panzoom/panzoom@4.6.0/dist/panzoom.min.js"></script>
 <script>
 (function() {
   const page = document.querySelector('.page');
@@ -151,16 +153,25 @@
   const scroll = document.querySelector('.diagram-scroll');
   const sourcePane = document.querySelector('.source-pane');
   const toolbar = document.querySelector('.diagram-toolbar');
-  let scale = 1;
-  const STEP = 0.2;
-  let isDragging = false;
-  let startX = 0;
-  let startY = 0;
-  let scrollLeft = 0;
-  let scrollTop = 0;
+  const panzoom = content && scroll && window.Panzoom ? window.Panzoom(content, {
+    maxScale: 4,
+    minScale: 0.25,
+    contain: 'outside',
+    cursor: 'grab',
+    canvas: true
+  }) : null;
 
-  function applyScale() {
-    content.style.transform = `scale(${scale})`;
+  if (panzoom && scroll) {
+    scroll.addEventListener('wheel', function (event) {
+      event.preventDefault();
+      panzoom.zoomWithWheel(event);
+    }, { passive: false });
+  }
+
+  function resetPanzoom() {
+    if (panzoom) {
+      panzoom.reset({ animate: true });
+    }
   }
 
   function setSourceCollapsed(collapsed) {
@@ -186,15 +197,8 @@
       const action = e.target && e.target.getAttribute('data-a');
       if (!action) { return; }
       e.preventDefault();
-      if (action === 'zin') {
-        scale = Math.min(4, scale * (1 + STEP));
-        applyScale();
-      } else if (action === 'zout') {
-        scale = Math.max(0.25, scale / (1 + STEP));
-        applyScale();
-      } else if (action === 'fit') {
-        scale = 1;
-        applyScale();
+      if (action === 'fit') {
+        resetPanzoom();
       } else if (action === 'toggle-source') {
         setSourceCollapsed(!page.classList.contains('source-collapsed'));
       }
@@ -202,43 +206,8 @@
   }
 
   image.addEventListener('load', function () {
-    scale = 1;
-    applyScale();
+    resetPanzoom();
   });
-
-  if (scroll) {
-      scroll.addEventListener('pointerdown', function (e) {
-        if (e.button !== 0) { return; }
-        isDragging = true;
-        startX = e.clientX;
-        startY = e.clientY;
-        scrollLeft = scroll.scrollLeft;
-        scrollTop = scroll.scrollTop;
-        scroll.classList.add('dragging');
-        if (scroll.setPointerCapture) {
-          scroll.setPointerCapture(e.pointerId);
-        }
-      });
-
-    scroll.addEventListener('pointermove', function (e) {
-      if (!isDragging) { return; }
-      scroll.scrollLeft = scrollLeft - (e.clientX - startX);
-      scroll.scrollTop = scrollTop - (e.clientY - startY);
-    });
-
-    function stopDrag(e) {
-      if (!isDragging) { return; }
-      isDragging = false;
-      scroll.classList.remove('dragging');
-      if (scroll.hasPointerCapture && scroll.hasPointerCapture(e.pointerId)) {
-        scroll.releasePointerCapture(e.pointerId);
-      }
-    }
-
-    scroll.addEventListener('pointerup', stopDrag);
-    scroll.addEventListener('pointercancel', stopDrag);
-    scroll.addEventListener('pointerleave', stopDrag);
-  }
 
   const copyButton = document.getElementById('copyButton');
   const sourceContent = document.getElementById('sourceContent');
