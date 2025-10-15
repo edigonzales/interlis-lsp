@@ -160,18 +160,61 @@
     cursor: 'grab',
     canvas: true
   }) : null;
+  let fitState = null;
+
+  function updateFitState() {
+    if (!panzoom || !scroll || !image || !image.naturalWidth || !image.naturalHeight) {
+      return null;
+    }
+
+    const { clientWidth, clientHeight } = scroll;
+    if (!clientWidth || !clientHeight) {
+      return null;
+    }
+
+    const fitScale = Math.min(clientWidth / image.naturalWidth, clientHeight / image.naturalHeight, 1);
+    const panX = (clientWidth - image.naturalWidth * fitScale) / 2;
+    const panY = (clientHeight - image.naturalHeight * fitScale) / 2;
+    const minScale = fitScale <= 0
+      ? 0.05
+      : Math.min(fitScale, Math.max(fitScale / 4, 0.05));
+    const maxScale = Math.max(4, fitScale * 8);
+
+    panzoom.setOptions({
+      minScale: minScale,
+      maxScale: maxScale,
+      contain: 'outside',
+      cursor: 'grab',
+      canvas: true
+    });
+
+    fitState = {
+      scale: fitScale,
+      x: panX,
+      y: panY
+    };
+
+    return fitState;
+  }
+
+  function applyFit(animate) {
+    if (!panzoom) { return; }
+    const state = fitState || updateFitState();
+    if (!state) { return; }
+    panzoom.zoom(state.scale, { animate: !!animate, force: true });
+    panzoom.pan(state.x, state.y, { animate: !!animate, force: true });
+  }
+
+  function refreshFit(animate) {
+    updateFitState();
+    applyFit(animate);
+  }
 
   if (panzoom && scroll) {
     scroll.addEventListener('wheel', function (event) {
       event.preventDefault();
       panzoom.zoomWithWheel(event);
     }, { passive: false });
-  }
-
-  function resetPanzoom() {
-    if (panzoom) {
-      panzoom.reset({ animate: true });
-    }
   }
 
   function setSourceCollapsed(collapsed) {
@@ -198,16 +241,37 @@
       if (!action) { return; }
       e.preventDefault();
       if (action === 'fit') {
-        resetPanzoom();
+        refreshFit(true);
       } else if (action === 'toggle-source') {
         setSourceCollapsed(!page.classList.contains('source-collapsed'));
+        setTimeout(function () {
+          refreshFit(false);
+        }, 0);
       }
     });
   }
 
-  image.addEventListener('load', function () {
-    resetPanzoom();
-  });
+  function handleResize() {
+    if (!panzoom) { return; }
+    const currentScale = panzoom.getScale ? panzoom.getScale() : null;
+    const wasFit = currentScale && fitState && Math.abs(currentScale - fitState.scale) < 0.01;
+    updateFitState();
+    if (wasFit) {
+      applyFit(false);
+    }
+  }
+
+  if (image) {
+    image.addEventListener('load', function () {
+      refreshFit(false);
+    });
+
+    if (image.complete) {
+      refreshFit(false);
+    }
+  }
+
+  window.addEventListener('resize', handleResize);
 
   const copyButton = document.getElementById('copyButton');
   const sourceContent = document.getElementById('sourceContent');
