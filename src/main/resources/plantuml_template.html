@@ -147,6 +147,7 @@
 <script>
 (function() {
   const page = document.querySelector('.page');
+  const pane = document.querySelector('.diagram-pane');
   const content = document.getElementById('diagramContent');
   const image = document.getElementById('plantImage');
   const scroll = document.querySelector('.diagram-scroll');
@@ -214,7 +215,13 @@
       return null;
     }
 
-    const { clientWidth, clientHeight } = scroll;
+    const viewport = pane || scroll;
+    if (!viewport) {
+      return null;
+    }
+
+    const clientWidth = viewport.clientWidth;
+    const clientHeight = viewport.clientHeight;
     if (!clientWidth || !clientHeight) {
       return null;
     }
