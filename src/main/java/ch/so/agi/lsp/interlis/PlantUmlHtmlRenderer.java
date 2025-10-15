@@ -18,7 +18,7 @@ public final class PlantUmlHtmlRenderer {
     private static final String SOURCE_PLACEHOLDER = "${plantUmlSource}";
     private static final String PNG_URL_PLACEHOLDER = "${plantUmlPngUrl}";
     private static final String SVG_URL_PLACEHOLDER = "${plantUmlSvgUrl}";
-    private static final String PLANTUML_SERVER_BASE = "https://www.plantuml.com/plantuml";
+    private static final String PLANTUML_SERVER_BASE = "https://uml.planttext.com/plantuml";
     private static final String TEMPLATE = loadTemplate();
 
     private PlantUmlHtmlRenderer() {

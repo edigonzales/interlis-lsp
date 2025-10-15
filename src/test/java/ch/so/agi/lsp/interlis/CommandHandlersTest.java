@@ -73,8 +73,8 @@ class CommandHandlersTest {
         String html = assertInstanceOf(String.class, htmlObj);
 
         assertTrue(html.contains("@startuml"));
-        assertTrue(html.contains("https://www.plantuml.com/plantuml/png/"));
-        assertTrue(html.contains("https://www.plantuml.com/plantuml/svg/"));
+        assertTrue(html.contains("https://uml.planttext.com/plantuml/png/"));
+        assertTrue(html.contains("https://uml.planttext.com/plantuml/svg/"));
     }
 
     @Test

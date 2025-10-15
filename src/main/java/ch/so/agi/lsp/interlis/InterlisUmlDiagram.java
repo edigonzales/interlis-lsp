@@ -232,7 +232,7 @@ final class InterlisUmlDiagram {
 
             for (Domain dom : getElements(container, Domain.class)) {
                 Type t = dom.getType();
-                LOG.info("type: " + dom.getName() + " " + t);
+                //LOG.info("type: " + dom.getName() + " " + t);
                 if (t instanceof EnumerationType || t instanceof EnumTreeValueType) {
                     String fqn = fqnOf(m, container, dom);
                     Node node = d.nodes.computeIfAbsent(fqn, k -> new Node(k, dom.getName(), setOf("Enumeration")));
