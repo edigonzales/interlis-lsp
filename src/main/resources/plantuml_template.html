@@ -131,8 +131,8 @@
         <button type="button" data-a="toggle-source" aria-expanded="true">Hide code</button>
       </div>
       <div class="diagram-scroll">
-        <div class="diagram-content" id="diagramContent">
-          <img id="plantImage" src="${plantUmlPngUrl}" alt="PlantUML diagram" />
+        <div class="diagram-content" id="diagramContent" ${plantUmlPngDataAttributes}>
+          <img id="plantImage" src="${plantUmlPngUrl}" alt="PlantUML diagram" ${plantUmlPngSizeAttributes}/>
         </div>
       </div>
     </div>
@@ -161,8 +161,50 @@
   }) : null;
   let fitState = null;
 
+  function parsePositiveNumber(value) {
+    if (!value) { return null; }
+    const num = Number(value);
+    return Number.isFinite(num) && num > 0 ? num : null;
+  }
+
+  function getNaturalWidth() {
+    if (image && image.naturalWidth > 0) {
+      return image.naturalWidth;
+    }
+    const contentWidth = content ? parsePositiveNumber(content.getAttribute('data-natural-width')) : null;
+    if (contentWidth) { return contentWidth; }
+    return image ? parsePositiveNumber(image.getAttribute('width')) : null;
+  }
+
+  function getNaturalHeight() {
+    if (image && image.naturalHeight > 0) {
+      return image.naturalHeight;
+    }
+    const contentHeight = content ? parsePositiveNumber(content.getAttribute('data-natural-height')) : null;
+    if (contentHeight) { return contentHeight; }
+    return image ? parsePositiveNumber(image.getAttribute('height')) : null;
+  }
+
+  function cacheNaturalSize() {
+    if (!content || !image) { return; }
+    const width = image.naturalWidth;
+    const height = image.naturalHeight;
+    if (width > 0 && height > 0) {
+      content.setAttribute('data-natural-width', String(width));
+      content.setAttribute('data-natural-height', String(height));
+      image.setAttribute('width', String(width));
+      image.setAttribute('height', String(height));
+    }
+  }
+
   function updateFitState() {
-    if (!panzoom || !scroll || !image || !image.naturalWidth || !image.naturalHeight) {
+    if (!panzoom || !scroll) {
+      return null;
+    }
+
+    const naturalWidth = getNaturalWidth();
+    const naturalHeight = getNaturalHeight();
+    if (!naturalWidth || !naturalHeight) {
       return null;
     }
 
@@ -171,9 +213,9 @@
       return null;
     }
 
-    const fitScale = Math.min(clientWidth / image.naturalWidth, clientHeight / image.naturalHeight);
-    const panX = (clientWidth - image.naturalWidth * fitScale) / 2;
-    const panY = (clientHeight - image.naturalHeight * fitScale) / 2;
+    const fitScale = Math.min(clientWidth / naturalWidth, clientHeight / naturalHeight);
+    const panX = (clientWidth - naturalWidth * fitScale) / 2;
+    const panY = (clientHeight - naturalHeight * fitScale) / 2;
     const minScale = fitScale <= 0
       ? 0.02
       : Math.max(fitScale / 8, 0.02);
@@ -262,10 +304,12 @@
 
   if (image) {
     image.addEventListener('load', function () {
+      cacheNaturalSize();
       refreshFit(false);
     });
 
     if (image.complete) {
+      cacheNaturalSize();
       refreshFit(false);
     }
   }

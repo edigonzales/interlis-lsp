@@ -1,14 +1,20 @@
 package ch.so.agi.lsp.interlis;
 
+import java.awt.image.BufferedImage;
+import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.net.URL;
+import java.net.URLConnection;
 import java.util.Objects;
 import java.util.zip.Deflater;
 import java.util.zip.DeflaterOutputStream;
+
+import javax.imageio.ImageIO;
 
 /**
  * Loads the PlantUML HTML template and injects the generated diagram text.
@@ -18,6 +24,8 @@ public final class PlantUmlHtmlRenderer {
     private static final String SOURCE_PLACEHOLDER = "${plantUmlSource}";
     private static final String PNG_URL_PLACEHOLDER = "${plantUmlPngUrl}";
     private static final String SVG_URL_PLACEHOLDER = "${plantUmlSvgUrl}";
+    private static final String PNG_DATA_ATTR_PLACEHOLDER = "${plantUmlPngDataAttributes}";
+    private static final String PNG_SIZE_ATTR_PLACEHOLDER = "${plantUmlPngSizeAttributes}";
     private static final String PLANTUML_SERVER_BASE = "https://uml.planttext.com/plantuml";
     private static final String TEMPLATE = loadTemplate();
 
@@ -30,10 +38,36 @@ public final class PlantUmlHtmlRenderer {
         String encoded = encodeForServer(plantUmlSource);
         String pngUrl = PLANTUML_SERVER_BASE + "/png/" + encoded;
         String svgUrl = PLANTUML_SERVER_BASE + "/svg/" + encoded;
+        ImageDimensions dimensions = fetchImageDimensions(pngUrl);
+        String dataAttributes = dimensions != null ? dimensions.toDataAttributes() : "";
+        String sizeAttributes = dimensions != null ? dimensions.toSizeAttributes() : "";
         return TEMPLATE
                 .replace(SOURCE_PLACEHOLDER, escapedSource)
                 .replace(PNG_URL_PLACEHOLDER, pngUrl)
-                .replace(SVG_URL_PLACEHOLDER, svgUrl);
+                .replace(SVG_URL_PLACEHOLDER, svgUrl)
+                .replace(PNG_DATA_ATTR_PLACEHOLDER, dataAttributes)
+                .replace(PNG_SIZE_ATTR_PLACEHOLDER, sizeAttributes);
+    }
+
+    private static ImageDimensions fetchImageDimensions(String pngUrl) {
+        try {
+            URLConnection connection = new URL(pngUrl).openConnection();
+            connection.setConnectTimeout(5000);
+            connection.setReadTimeout(5000);
+            try (InputStream input = new BufferedInputStream(connection.getInputStream())) {
+                BufferedImage image = ImageIO.read(input);
+                if (image != null) {
+                    int width = image.getWidth();
+                    int height = image.getHeight();
+                    if (width > 0 && height > 0) {
+                        return new ImageDimensions(width, height);
+                    }
+                }
+            }
+        } catch (IOException e) {
+            // Ignore failures and fall back to client-side detection.
+        }
+        return null;
     }
 
     private static String loadTemplate() {
@@ -119,5 +153,22 @@ public final class PlantUmlHtmlRenderer {
             return '_';
         }
         return '?';
+    }
+    private static final class ImageDimensions {
+        private final int width;
+        private final int height;
+
+        private ImageDimensions(int width, int height) {
+            this.width = width;
+            this.height = height;
+        }
+
+        private String toDataAttributes() {
+            return "data-natural-width=\"" + width + "\" data-natural-height=\"" + height + "\"";
+        }
+
+        private String toSizeAttributes() {
+            return "width=\"" + width + "\" height=\"" + height + "\"";
+        }
     }
 }
