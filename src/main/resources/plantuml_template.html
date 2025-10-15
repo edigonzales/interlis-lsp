@@ -70,6 +70,9 @@
     .diagram-map .leaflet-control-container {
       display: none;
     }
+    .diagram-map .diagram-image {
+      image-rendering: auto;
+    }
     .diagram-preload {
       display: none;
     }
@@ -240,9 +243,25 @@
       }).addTo(map);
     }
 
-    map.setMaxBounds(imageBounds.pad(0.25));
+    map.setMaxBounds(imageBounds);
     map.setView(imageBounds.getCenter(), NATURAL_ZOOM, { animate: false });
     scheduleLayoutRefresh();
+  }
+
+  function getViewportSize() {
+    if (!mapContainer) { return null; }
+    const rect = mapContainer.getBoundingClientRect();
+    const width = rect.width;
+    const height = rect.height;
+    if (width > 0 && height > 0) {
+      return { width: width, height: height };
+    }
+    const clientWidth = mapContainer.clientWidth;
+    const clientHeight = mapContainer.clientHeight;
+    if (clientWidth > 0 && clientHeight > 0) {
+      return { width: clientWidth, height: clientHeight };
+    }
+    return null;
   }
 
   function recalcFitState() {
@@ -250,7 +269,21 @@
       return;
     }
 
-    const fitZoom = map.getBoundsZoom(imageBounds, true);
+    const naturalWidth = getNaturalWidth();
+    const naturalHeight = getNaturalHeight();
+    const viewport = getViewportSize();
+    if (!naturalWidth || !naturalHeight || !viewport) {
+      return;
+    }
+
+    const scaleX = viewport.width / naturalWidth;
+    const scaleY = viewport.height / naturalHeight;
+    const fitScale = Math.min(scaleX, scaleY);
+    if (!(fitScale > 0)) {
+      return;
+    }
+
+    const fitZoom = NATURAL_ZOOM + Math.log2(fitScale);
     const center = imageBounds.getCenter();
     const minZoom = Math.min(fitZoom - 4, NATURAL_ZOOM - 4);
     const maxZoom = Math.max(NATURAL_ZOOM + 8, fitZoom + 8);
