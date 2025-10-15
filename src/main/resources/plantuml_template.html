@@ -67,7 +67,6 @@
     }
     .diagram-content img {
       display: block;
-      max-width: 100%;
       cursor: inherit;
     }
     .source-header {
@@ -154,9 +153,9 @@
   const sourcePane = document.querySelector('.source-pane');
   const toolbar = document.querySelector('.diagram-toolbar');
   const panzoom = content && scroll && window.Panzoom ? window.Panzoom(content, {
-    maxScale: 4,
-    minScale: 0.25,
-    contain: 'outside',
+    maxScale: 8,
+    minScale: 0.125,
+    contain: 'none',
     cursor: 'grab',
     canvas: true
   }) : null;
@@ -176,14 +175,14 @@
     const panX = (clientWidth - image.naturalWidth * fitScale) / 2;
     const panY = (clientHeight - image.naturalHeight * fitScale) / 2;
     const minScale = fitScale <= 0
-      ? 0.05
-      : Math.min(fitScale, Math.max(fitScale / 4, 0.05));
-    const maxScale = Math.max(4, fitScale * 8);
+      ? 0.02
+      : Math.max(Math.min(fitScale, 1) / 8, 0.02);
+    const maxScale = Math.max(12, Math.max(fitScale, 1) * 12);
 
     panzoom.setOptions({
       minScale: minScale,
       maxScale: maxScale,
-      contain: 'outside',
+      contain: 'none',
       cursor: 'grab',
       canvas: true
     });
