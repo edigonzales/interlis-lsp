@@ -55,8 +55,9 @@
     .diagram-scroll {
       position: absolute;
       inset: 0;
-      overflow: auto;
+      overflow: hidden;
       cursor: grab;
+      touch-action: none;
     }
     .diagram-scroll.dragging { cursor: grabbing; }
     .diagram-content {
@@ -65,7 +66,7 @@
     }
     .diagram-content img {
       display: block;
-      max-width: 100%;
+      max-width: none;
     }
     .source-header {
       padding: 12px 16px;
@@ -123,8 +124,6 @@
   <div class="diagram-pane">
     <div class="diagram-wrap">
       <div class="diagram-toolbar">
-        <button type="button" data-a="zin">+</button>
-        <button type="button" data-a="zout">−</button>
         <button type="button" data-a="fit">Fit</button>
         <a href="${plantUmlPngUrl}" target="_blank" rel="noreferrer">Open PNG</a>
         <a href="${plantUmlSvgUrl}" target="_blank" rel="noreferrer" download>Download SVG</a>
@@ -143,6 +142,7 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@panzoom/panzoom@9.4.0/dist/panzoom.min.js"></script>
 <script>
 (function() {
   const page = document.querySelector('.page');
@@ -151,16 +151,31 @@
   const scroll = document.querySelector('.diagram-scroll');
   const sourcePane = document.querySelector('.source-pane');
   const toolbar = document.querySelector('.diagram-toolbar');
-  let scale = 1;
-  const STEP = 0.2;
-  let isDragging = false;
-  let startX = 0;
-  let startY = 0;
-  let scrollLeft = 0;
-  let scrollTop = 0;
+  let panzoomInstance = null;
 
-  function applyScale() {
-    content.style.transform = `scale(${scale})`;
+  function initPanzoom() {
+    if (!content || panzoomInstance || typeof Panzoom !== 'function') { return; }
+    panzoomInstance = Panzoom(content, {
+      maxScale: 4,
+      minScale: 0.25,
+      contain: 'outside'
+    });
+
+    if (scroll) {
+      scroll.addEventListener('wheel', function (event) {
+        if (!panzoomInstance) { return; }
+        if (event.ctrlKey || event.metaKey) { return; }
+        panzoomInstance.zoomWithWheel(event);
+      }, { passive: false });
+
+      content.addEventListener('panzoomstart', function () {
+        scroll.classList.add('dragging');
+      });
+
+      content.addEventListener('panzoomend', function () {
+        scroll.classList.remove('dragging');
+      });
+    }
   }
 
   function setSourceCollapsed(collapsed) {
@@ -186,58 +201,31 @@
       const action = e.target && e.target.getAttribute('data-a');
       if (!action) { return; }
       e.preventDefault();
-      if (action === 'zin') {
-        scale = Math.min(4, scale * (1 + STEP));
-        applyScale();
-      } else if (action === 'zout') {
-        scale = Math.max(0.25, scale / (1 + STEP));
-        applyScale();
-      } else if (action === 'fit') {
-        scale = 1;
-        applyScale();
+      if (action === 'fit') {
+        if (panzoomInstance) {
+          panzoomInstance.reset({ animate: true });
+        }
       } else if (action === 'toggle-source') {
         setSourceCollapsed(!page.classList.contains('source-collapsed'));
       }
     });
   }
 
-  image.addEventListener('load', function () {
-    scale = 1;
-    applyScale();
-  });
-
-  if (scroll) {
-      scroll.addEventListener('pointerdown', function (e) {
-        if (e.button !== 0) { return; }
-        isDragging = true;
-        startX = e.clientX;
-        startY = e.clientY;
-        scrollLeft = scroll.scrollLeft;
-        scrollTop = scroll.scrollTop;
-        scroll.classList.add('dragging');
-        if (scroll.setPointerCapture) {
-          scroll.setPointerCapture(e.pointerId);
-        }
-      });
-
-    scroll.addEventListener('pointermove', function (e) {
-      if (!isDragging) { return; }
-      scroll.scrollLeft = scrollLeft - (e.clientX - startX);
-      scroll.scrollTop = scrollTop - (e.clientY - startY);
-    });
-
-    function stopDrag(e) {
-      if (!isDragging) { return; }
-      isDragging = false;
-      scroll.classList.remove('dragging');
-      if (scroll.hasPointerCapture && scroll.hasPointerCapture(e.pointerId)) {
-        scroll.releasePointerCapture(e.pointerId);
-      }
+  function resetPanzoom() {
+    if (!panzoomInstance) {
+      initPanzoom();
     }
+    if (panzoomInstance) {
+      panzoomInstance.reset({ animate: false });
+    }
+  }
 
-    scroll.addEventListener('pointerup', stopDrag);
-    scroll.addEventListener('pointercancel', stopDrag);
-    scroll.addEventListener('pointerleave', stopDrag);
+  if (image) {
+    image.setAttribute('draggable', 'false');
+    image.addEventListener('load', resetPanzoom);
+    if (image.complete && image.naturalWidth) {
+      resetPanzoom();
+    }
   }
 
   const copyButton = document.getElementById('copyButton');
