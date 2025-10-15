@@ -231,8 +231,8 @@
     const scaledHeight = naturalHeight * fitScale;
     const offsetX = (clientWidth - scaledWidth) / 2;
     const offsetY = (clientHeight - scaledHeight) / 2;
-    const panX = fitScale ? offsetX / fitScale : offsetX;
-    const panY = fitScale ? offsetY / fitScale : offsetY;
+    const panX = offsetX;
+    const panY = offsetY;
     const minScale = fitScale <= 0
       ? 0.02
       : Math.max(fitScale / 8, 0.02);
