@@ -259,9 +259,19 @@
     panzoom.pan(state.x, state.y, { animate: !!animate, force: true, relative: false });
   }
 
-  function refreshFit(animate) {
-    updateFitState();
-    applyFit(animate);
+  function refreshFit(animate, forceApply) {
+    if (!panzoom) { return; }
+    const currentScale = panzoom.getScale ? panzoom.getScale() : null;
+    const state = updateFitState();
+    if (!state) { return; }
+    if (forceApply) {
+      applyFit(animate);
+      return;
+    }
+    if (currentScale == null) { return; }
+    if (Math.abs(currentScale - state.scale) < 0.01) {
+      applyFit(animate);
+    }
   }
 
   if (panzoom && scroll) {
@@ -295,35 +305,29 @@
       if (!action) { return; }
       e.preventDefault();
       if (action === 'fit') {
-        refreshFit(true);
+        refreshFit(true, true);
       } else if (action === 'toggle-source') {
         setSourceCollapsed(!page.classList.contains('source-collapsed'));
         setTimeout(function () {
-          refreshFit(false);
+          refreshFit(false, false);
         }, 0);
       }
     });
   }
 
   function handleResize() {
-    if (!panzoom) { return; }
-    const currentScale = panzoom.getScale ? panzoom.getScale() : null;
-    const wasFit = currentScale && fitState && Math.abs(currentScale - fitState.scale) < 0.01;
-    updateFitState();
-    if (wasFit) {
-      applyFit(false);
-    }
+    refreshFit(false, false);
   }
 
   if (image) {
     image.addEventListener('load', function () {
       cacheNaturalSize();
-      refreshFit(false);
+      refreshFit(false, false);
     });
 
     if (image.complete) {
       cacheNaturalSize();
-      refreshFit(false);
+      refreshFit(false, false);
     }
   }
 
