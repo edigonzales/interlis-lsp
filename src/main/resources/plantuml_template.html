@@ -215,7 +215,7 @@
       return null;
     }
 
-    const viewport = pane || scroll;
+    const viewport = scroll || pane;
     if (!viewport) {
       return null;
     }
@@ -227,8 +227,12 @@
     }
 
     const fitScale = Math.min(clientWidth / naturalWidth, clientHeight / naturalHeight);
-    const panX = (clientWidth - naturalWidth * fitScale) / 2;
-    const panY = (clientHeight - naturalHeight * fitScale) / 2;
+    const scaledWidth = naturalWidth * fitScale;
+    const scaledHeight = naturalHeight * fitScale;
+    const offsetX = (clientWidth - scaledWidth) / 2;
+    const offsetY = (clientHeight - scaledHeight) / 2;
+    const panX = fitScale ? offsetX / fitScale : offsetX;
+    const panY = fitScale ? offsetY / fitScale : offsetY;
     const minScale = fitScale <= 0
       ? 0.02
       : Math.max(fitScale / 8, 0.02);
@@ -262,6 +266,7 @@
   function refreshFit(animate, forceApply) {
     if (!panzoom) { return; }
     const currentScale = panzoom.getScale ? panzoom.getScale() : null;
+    const currentPan = panzoom.getPan ? panzoom.getPan() : null;
     const state = updateFitState();
     if (!state) { return; }
     if (forceApply) {
@@ -269,7 +274,14 @@
       return;
     }
     if (currentScale == null) { return; }
-    if (Math.abs(currentScale - state.scale) < 0.01) {
+    const scaleMatches = Math.abs(currentScale - state.scale) < 0.01;
+    let panMatches = true;
+    if (currentPan) {
+      const deltaX = Math.abs((currentPan.x || 0) - state.x);
+      const deltaY = Math.abs((currentPan.y || 0) - state.y);
+      panMatches = deltaX < 0.5 && deltaY < 0.5;
+    }
+    if (scaleMatches && panMatches) {
       applyFit(animate);
     }
   }
