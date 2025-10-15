@@ -171,13 +171,13 @@
       return null;
     }
 
-    const fitScale = Math.min(clientWidth / image.naturalWidth, clientHeight / image.naturalHeight, 1);
+    const fitScale = Math.min(clientWidth / image.naturalWidth, clientHeight / image.naturalHeight);
     const panX = (clientWidth - image.naturalWidth * fitScale) / 2;
     const panY = (clientHeight - image.naturalHeight * fitScale) / 2;
     const minScale = fitScale <= 0
       ? 0.02
-      : Math.max(Math.min(fitScale, 1) / 8, 0.02);
-    const maxScale = Math.max(12, Math.max(fitScale, 1) * 12);
+      : Math.max(fitScale / 8, 0.02);
+    const maxScale = Math.max(12, fitScale * 12);
 
     panzoom.setOptions({
       minScale: minScale,
