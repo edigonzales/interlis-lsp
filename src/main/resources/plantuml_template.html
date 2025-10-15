@@ -3,6 +3,7 @@
   <meta charset="utf-8" />
   <title>PlantUML class diagram</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-o9N1j7kMkQGyy6JyxBqs5hGuB59lB6L1RxCu2LLC5wE=" crossorigin=""/>
   <style>
     html, body { height: 100%; margin: 0; }
     body { background: #ffffff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #333; }
@@ -56,18 +57,21 @@
       position: absolute;
       inset: 0;
       overflow: hidden;
-      cursor: grab;
-      touch-action: none;
     }
-    .diagram-scroll:active { cursor: grabbing; }
-    .diagram-content {
-      transform-origin: top left;
-      display: inline-block;
-      cursor: inherit;
+    .diagram-map {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
     }
-    .diagram-content img {
-      display: block;
-      cursor: inherit;
+    .diagram-map.leaflet-container {
+      background: transparent;
+    }
+    .diagram-map .leaflet-control-container {
+      display: none;
+    }
+    .diagram-preload {
+      display: none;
     }
     .source-header {
       padding: 12px 16px;
@@ -131,9 +135,8 @@
         <button type="button" data-a="toggle-source" aria-expanded="true">Hide code</button>
       </div>
       <div class="diagram-scroll">
-        <div class="diagram-content" id="diagramContent" ${plantUmlPngDataAttributes}>
-          <img id="plantImage" src="${plantUmlPngUrl}" alt="PlantUML diagram" ${plantUmlPngSizeAttributes}/>
-        </div>
+        <div id="diagramMap" class="diagram-map" data-image-url="${plantUmlPngUrl}" ${plantUmlPngDataAttributes}></div>
+        <img id="plantImage" class="diagram-preload" src="${plantUmlPngUrl}" alt="PlantUML diagram" aria-hidden="true" ${plantUmlPngSizeAttributes}/>
       </div>
     </div>
   </div>
@@ -143,24 +146,21 @@
   </div>
 </div>
 
-<script src="https://unpkg.com/@panzoom/panzoom@4.6.0/dist/panzoom.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script>
 (function() {
   const page = document.querySelector('.page');
-  const pane = document.querySelector('.diagram-pane');
-  const content = document.getElementById('diagramContent');
   const image = document.getElementById('plantImage');
-  const scroll = document.querySelector('.diagram-scroll');
+  const mapContainer = document.getElementById('diagramMap');
   const sourcePane = document.querySelector('.source-pane');
   const toolbar = document.querySelector('.diagram-toolbar');
-  const panzoom = content && scroll && window.Panzoom ? window.Panzoom(content, {
-    maxScale: 8,
-    minScale: 0.125,
-    contain: 'none',
-    cursor: 'grab',
-    canvas: true
-  }) : null;
+  const imageUrl = mapContainer ? mapContainer.getAttribute('data-image-url') : null;
+  let map = null;
+  let imageLayer = null;
+  let imageBounds = null;
   let fitState = null;
+  let layoutPending = false;
+  const NATURAL_ZOOM = 0;
 
   function parsePositiveNumber(value) {
     if (!value) { return null; }
@@ -169,128 +169,134 @@
   }
 
   function getNaturalWidth() {
+    if (mapContainer) {
+      const datasetWidth = parsePositiveNumber(mapContainer.getAttribute('data-natural-width'));
+      if (datasetWidth) { return datasetWidth; }
+    }
     if (image && image.naturalWidth > 0) {
       return image.naturalWidth;
     }
-    const contentWidth = content ? parsePositiveNumber(content.getAttribute('data-natural-width')) : null;
-    if (contentWidth) { return contentWidth; }
     return image ? parsePositiveNumber(image.getAttribute('width')) : null;
   }
 
   function getNaturalHeight() {
+    if (mapContainer) {
+      const datasetHeight = parsePositiveNumber(mapContainer.getAttribute('data-natural-height'));
+      if (datasetHeight) { return datasetHeight; }
+    }
     if (image && image.naturalHeight > 0) {
       return image.naturalHeight;
     }
-    const contentHeight = content ? parsePositiveNumber(content.getAttribute('data-natural-height')) : null;
-    if (contentHeight) { return contentHeight; }
     return image ? parsePositiveNumber(image.getAttribute('height')) : null;
   }
 
   function cacheNaturalSize() {
-    if (!content || !image) { return; }
+    if (!mapContainer || !image) { return; }
     const width = image.naturalWidth;
     const height = image.naturalHeight;
     if (width > 0 && height > 0) {
       const widthValue = String(width);
       const heightValue = String(height);
-      content.setAttribute('data-natural-width', widthValue);
-      content.setAttribute('data-natural-height', heightValue);
+      mapContainer.setAttribute('data-natural-width', widthValue);
+      mapContainer.setAttribute('data-natural-height', heightValue);
       image.setAttribute('width', widthValue);
       image.setAttribute('height', heightValue);
-      if (content.style) {
-        content.style.width = widthValue + 'px';
-        content.style.height = heightValue + 'px';
-      }
     }
   }
 
-  function updateFitState() {
-    if (!panzoom || !scroll) {
-      return null;
+  function ensureMapReady() {
+    if (!mapContainer || !window.L || !imageUrl) {
+      return;
     }
 
     const naturalWidth = getNaturalWidth();
     const naturalHeight = getNaturalHeight();
     if (!naturalWidth || !naturalHeight) {
-      return null;
+      return;
     }
 
-    const viewport = scroll || pane;
-    if (!viewport) {
-      return null;
+    imageBounds = window.L.latLngBounds([[0, 0], [naturalHeight, naturalWidth]]);
+
+    if (!map) {
+      map = window.L.map(mapContainer, {
+        crs: window.L.CRS.Simple,
+        zoomControl: false,
+        attributionControl: false,
+        preferCanvas: true,
+        wheelPxPerZoomLevel: 80,
+        zoomSnap: 0.01,
+        zoomDelta: 0.5,
+        inertia: true
+      });
     }
 
-    const clientWidth = viewport.clientWidth;
-    const clientHeight = viewport.clientHeight;
-    if (!clientWidth || !clientHeight) {
-      return null;
+    if (imageLayer) {
+      imageLayer.setBounds(imageBounds);
+      imageLayer.setUrl(imageUrl);
+    } else {
+      imageLayer = window.L.imageOverlay(imageUrl, imageBounds, {
+        interactive: true,
+        className: 'diagram-image'
+      }).addTo(map);
     }
 
-    const fitScale = Math.min(clientWidth / naturalWidth, clientHeight / naturalHeight);
-    const scaledWidth = naturalWidth * fitScale;
-    const scaledHeight = naturalHeight * fitScale;
-    const offsetX = (clientWidth - scaledWidth) / 2;
-    const offsetY = (clientHeight - scaledHeight) / 2;
-    const panX = offsetX;
-    const panY = offsetY;
-    const minScale = fitScale <= 0
-      ? 0.02
-      : Math.max(fitScale / 8, 0.02);
-    const maxScale = Math.max(12, fitScale * 12);
+    map.setMaxBounds(imageBounds.pad(0.25));
+    map.setView(imageBounds.getCenter(), NATURAL_ZOOM, { animate: false });
+    scheduleLayoutRefresh();
+  }
 
-    panzoom.setOptions({
-      minScale: minScale,
-      maxScale: maxScale,
-      contain: 'none',
-      cursor: 'grab',
-      canvas: true
-    });
+  function recalcFitState() {
+    if (!map || !imageBounds) {
+      return;
+    }
+
+    const fitZoom = map.getBoundsZoom(imageBounds, true);
+    const center = imageBounds.getCenter();
+    const minZoom = Math.min(fitZoom - 4, NATURAL_ZOOM - 4);
+    const maxZoom = Math.max(NATURAL_ZOOM + 8, fitZoom + 8);
+
+    map.setMinZoom(minZoom);
+    map.setMaxZoom(maxZoom);
 
     fitState = {
-      scale: fitScale,
-      x: panX,
-      y: panY
+      zoom: fitZoom,
+      center: center
     };
-
-    return fitState;
   }
 
   function applyFit(animate) {
-    if (!panzoom) { return; }
-    const state = fitState || updateFitState();
-    if (!state) { return; }
-    panzoom.zoom(state.scale, { animate: !!animate, force: true, relative: false });
-    panzoom.pan(state.x, state.y, { animate: !!animate, force: true, relative: false });
+    if (!map || !fitState) { return; }
+    map.setView(fitState.center, fitState.zoom, { animate: !!animate });
   }
 
   function refreshFit(animate, forceApply) {
-    if (!panzoom) { return; }
-    const currentScale = panzoom.getScale ? panzoom.getScale() : null;
-    const currentPan = panzoom.getPan ? panzoom.getPan() : null;
-    const state = updateFitState();
-    if (!state) { return; }
+    if (!map || !fitState) { return; }
     if (forceApply) {
       applyFit(animate);
       return;
     }
-    if (currentScale == null) { return; }
-    const scaleMatches = Math.abs(currentScale - state.scale) < 0.01;
-    let panMatches = true;
-    if (currentPan) {
-      const deltaX = Math.abs((currentPan.x || 0) - state.x);
-      const deltaY = Math.abs((currentPan.y || 0) - state.y);
-      panMatches = deltaX < 0.5 && deltaY < 0.5;
-    }
-    if (scaleMatches && panMatches) {
+    const currentZoom = map.getZoom();
+    const currentCenter = map.getCenter();
+    const zoomMatches = typeof currentZoom === 'number' && Math.abs(currentZoom - fitState.zoom) < 0.01;
+    const centerMatches = currentCenter
+      ? (Math.abs(currentCenter.lat - fitState.center.lat) < 0.5 && Math.abs(currentCenter.lng - fitState.center.lng) < 0.5)
+      : false;
+    if (zoomMatches && centerMatches) {
       applyFit(animate);
     }
   }
 
-  if (panzoom && scroll) {
-    scroll.addEventListener('wheel', function (event) {
-      event.preventDefault();
-      panzoom.zoomWithWheel(event);
-    }, { passive: false });
+  function scheduleLayoutRefresh() {
+    if (!map || layoutPending) { return; }
+    layoutPending = true;
+    window.requestAnimationFrame(function () {
+      map.invalidateSize();
+      window.requestAnimationFrame(function () {
+        layoutPending = false;
+        recalcFitState();
+        refreshFit(false, false);
+      });
+    });
   }
 
   function setSourceCollapsed(collapsed) {
@@ -321,29 +327,33 @@
       } else if (action === 'toggle-source') {
         setSourceCollapsed(!page.classList.contains('source-collapsed'));
         setTimeout(function () {
-          refreshFit(false, false);
+          scheduleLayoutRefresh();
         }, 0);
       }
     });
   }
 
   function handleResize() {
-    refreshFit(false, false);
+    scheduleLayoutRefresh();
   }
 
   if (image) {
     image.addEventListener('load', function () {
       cacheNaturalSize();
-      refreshFit(false, false);
+      ensureMapReady();
     });
 
     if (image.complete) {
       cacheNaturalSize();
-      refreshFit(false, false);
+      ensureMapReady();
     }
+  } else {
+    ensureMapReady();
   }
 
   window.addEventListener('resize', handleResize);
+
+  ensureMapReady();
 
   const copyButton = document.getElementById('copyButton');
   const sourceContent = document.getElementById('sourceContent');
