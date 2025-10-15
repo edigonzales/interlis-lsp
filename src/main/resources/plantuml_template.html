@@ -190,10 +190,16 @@
     const width = image.naturalWidth;
     const height = image.naturalHeight;
     if (width > 0 && height > 0) {
-      content.setAttribute('data-natural-width', String(width));
-      content.setAttribute('data-natural-height', String(height));
-      image.setAttribute('width', String(width));
-      image.setAttribute('height', String(height));
+      const widthValue = String(width);
+      const heightValue = String(height);
+      content.setAttribute('data-natural-width', widthValue);
+      content.setAttribute('data-natural-height', heightValue);
+      image.setAttribute('width', widthValue);
+      image.setAttribute('height', heightValue);
+      if (content.style) {
+        content.style.width = widthValue + 'px';
+        content.style.height = heightValue + 'px';
+      }
     }
   }
 
@@ -242,8 +248,8 @@
     if (!panzoom) { return; }
     const state = fitState || updateFitState();
     if (!state) { return; }
-    panzoom.zoom(state.scale, { animate: !!animate, force: true });
-    panzoom.pan(state.x, state.y, { animate: !!animate, force: true });
+    panzoom.zoom(state.scale, { animate: !!animate, force: true, relative: false });
+    panzoom.pan(state.x, state.y, { animate: !!animate, force: true, relative: false });
   }
 
   function refreshFit(animate) {
