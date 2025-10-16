@@ -65,6 +65,12 @@ public class InterlisTextDocumentService implements TextDocumentService {
         documents.applyChanges(params.getTextDocument(), params.getContentChanges());
         String uri = params.getTextDocument().getUri();
         String pathOrUri = toFilesystemPathIfPossible(uri);
+        // Any edit invalidates the transfer description cached for this document. Features
+        // such as completion, rename or document symbols combine the live text tracked by
+        // {@link DocumentTracker} with the cached {@link Ili2cUtil.CompilationOutcome}.
+        // Keeping the old compilation result after a change would leave those features with
+        // stale model information until the file is saved, so we drop the cache entry here
+        // and let the next request trigger a fresh compile if it needs one.
         compilationCache.invalidate(pathOrUri);
     }
 
