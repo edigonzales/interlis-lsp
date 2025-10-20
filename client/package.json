@@ -141,7 +141,10 @@
   },
   "main": "./dist/extension.js",
   "scripts": {
+    "check:deps": "node ./scripts/ensure-deps.cjs",
+    "prebuild": "npm run check:deps",
     "build": "esbuild src/extension.ts --bundle --platform=node --external:vscode --outfile=dist/extension.js && esbuild webview/app.ts --bundle --format=iife --platform=browser --loader:.css=text --loader:.ttf=dataurl --outfile=dist/webview.js",
+    "prewatch": "npm run check:deps",
     "watch": "esbuild src/extension.ts --bundle --platform=node --external:vscode --outfile=dist/extension.js --watch"
   },
   "devDependencies": {

@@ -148,8 +148,8 @@ Tip 👉 For CI packaging see the `build and publish` GitHub Actions workflow, w
 
 ### Working on the VS Code extension
 
-1. Install dependencies: `cd client && npm install`.
-2. Build once or watch: `npm run build` or `npm run watch` (uses esbuild ⚡).
+1. Install dependencies: `cd client && npm install` (optional for day-to-day work – the build script will now auto-install missing packages).
+2. Build once or watch: `npm run build` or `npm run watch` (uses esbuild ⚡ and runs `npm run check:deps` up front to ensure new GLSP packages are present).
 3. Launch VS Code with the extension: `code client --extensionDevelopmentPath="$(pwd)/client"`.
 4. During development, point the extension to your local server build by setting `interlisLsp.server.jarPath`.
 
