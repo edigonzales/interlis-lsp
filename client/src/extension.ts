@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
 import { LanguageClient, LanguageClientOptions, Executable, ServerOptions, State } from "vscode-languageclient/node";
+import { GlspSupport } from "./glspSupport";
 
 let client: LanguageClient | undefined;
 let revealOutputOnNextLog = false;
@@ -117,6 +118,9 @@ export async function activate(context: vscode.ExtensionContext) {
   client = new LanguageClient("interlisLsp", "INTERLIS Language Server", serverOptions, clientOptions);
   context.subscriptions.push(client);
   await client.start();
+
+  const glspSupport = new GlspSupport(client);
+  void glspSupport.refresh();
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeTextDocument(event => {
@@ -253,6 +257,20 @@ export async function activate(context: vscode.ExtensionContext) {
         // Optional: bring Output to front to show any client-side errors
         output.show(true);
       }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("interlis.glsp.info", async () => {
+      const info = await glspSupport.refresh();
+      if (!info) {
+        return;
+      }
+      const rawPath = info.path ?? "";
+      const normalizedPath = rawPath.length === 0 ? "" : rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
+      const endpoint = `ws://${info.host || "127.0.0.1"}:${info.port}${normalizedPath}`;
+      const status = info.running ? "running" : "not running";
+      void vscode.window.showInformationMessage(`INTERLIS GLSP server is ${status} at ${endpoint}`);
     })
   );
 

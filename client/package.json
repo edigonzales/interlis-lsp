@@ -74,6 +74,10 @@
       {
         "command": "interlis.docx.export",
         "title": "INTERLIS: Export documentation as DOCX"
+      },
+      {
+        "command": "interlis.glsp.info",
+        "title": "INTERLIS: Show GLSP server info"
       }
     ],
     "configuration": {
@@ -132,6 +136,7 @@
     "typescript": "^5.9.2"
   },
   "dependencies": {
+    "@eclipse-glsp/vscode-integration": "^2.5.0",
     "vscode-languageclient": "^9.0.1"
   }
 }
