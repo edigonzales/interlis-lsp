@@ -45,8 +45,9 @@ public final class InterlisGlspServer {
             started = true;
             LOG.info("Started INTERLIS GLSP server on {}:{}{}", host, port, pathWithSlash());
         } catch (RuntimeException ex) {
+            started = false;
             LOG.error("Failed to start INTERLIS GLSP server", ex);
-            throw ex;
+            languageServer.logToClient("Failed to start INTERLIS GLSP server: " + ex.getMessage() + "\n");
         }
     }
 

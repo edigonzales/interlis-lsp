@@ -113,7 +113,7 @@ public class InterlisWorkspaceService implements WorkspaceService {
     }
 
     @JsonRequest(InterlisLanguageServer.REQ_GLSP_INFO)
-    public CompletableFuture<GlspInfo> glspInfo() {
+    public CompletableFuture<GlspInfo> glspInfo(Object rawParams) {
         InterlisGlspServer glsp = server.getGlspServer();
         if (glsp == null) {
             return CompletableFuture.completedFuture(new GlspInfo("", 0, "", false));
