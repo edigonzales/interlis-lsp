@@ -142,9 +142,25 @@ Tip 👉 For CI packaging see the `build and publish` GitHub Actions workflow, w
 | Task | Command | Notes |
 | --- | --- | --- |
 | Run the server via stdio | `./gradlew run` | Prints logs to the console, communicates via stdin/stdout. |
+| Headless compile smoke test | `./gradlew test --tests ch.so.agi.lsp.interlis.InterlisLanguageServerSmokeTest` | Boots the LSP in-process and asserts that diagnostics + ili2c logs flow for a sample `.ili` file. |
 | Build a fat JAR | `./gradlew shadowJar` | Produces `build/libs/interlis-lsp-<version>-all.jar`. |
 | Execute unit tests | `./gradlew test` | Covers compilation cache, diagnostics mapping, formatting, etc. |
 | Format sources | `./gradlew spotlessApply` | If you enable [Spotless](https://github.com/diffplug/spotless) locally. |
+
+When you need to poke the language server without the VS Code client, two options are available:
+
+```bash
+# 1) Run the in-process smoke test (preferred for CI / scripted checks)
+./gradlew test --tests ch.so.agi.lsp.interlis.InterlisLanguageServerSmokeTest
+
+# 2) Talk to the server over stdio using the helper script
+./gradlew shadowJar                      # ensure the fat JAR exists
+scripts/lsp_smoke.py --model path/to/model.ili
+```
+
+The Python script starts the bundled JAR, issues the canonical `initialize → didOpen → interlis.compile` flow, and prints every
+JSON-RPC message it receives. This mirrors what VS Code would do and is handy when diagnosing “no diagnostics / no log output”
+reports.
 
 ### Working on the VS Code extension
 
