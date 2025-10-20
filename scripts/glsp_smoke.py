@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Minimal smoke test that talks to the INTERLIS language server over stdio."""
+"""Smoke test that ensures the embedded GLSP server starts and reports itself."""
 
 from __future__ import annotations
 
@@ -13,7 +13,6 @@ import time
 from typing import Any, Dict, Optional
 
 DEFAULT_JAR = pathlib.Path('build/libs/interlis-lsp-0.0.LOCALBUILD-all.jar')
-DEFAULT_MODEL = pathlib.Path('src/test/data/TestSuite_mod-0.ili')
 
 
 def send_message(proc: subprocess.Popen[Any], payload: Dict[str, Any]) -> None:
@@ -39,8 +38,10 @@ def read_message(proc: subprocess.Popen[Any], timeout: float = 5.0) -> Optional[
         buffer += chunk
         if b"\r\n\r\n" in buffer:
             break
+
     if b"\r\n\r\n" not in buffer:
         return None
+
     header, rest = buffer.split(b"\r\n\r\n", 1)
     headers: Dict[str, str] = {}
     for line in header.decode('utf-8').split('\r\n'):
@@ -48,6 +49,7 @@ def read_message(proc: subprocess.Popen[Any], timeout: float = 5.0) -> Optional[
             continue
         key, value = line.split(':', 1)
         headers[key.strip().lower()] = value.strip()
+
     length = int(headers.get('content-length', '0'))
     body = rest
     while len(body) < length:
@@ -55,11 +57,13 @@ def read_message(proc: subprocess.Popen[Any], timeout: float = 5.0) -> Optional[
         if not chunk:
             break
         body += chunk
+
     if len(body) != length:
         return None
     text = body.decode('utf-8')
     if not text.strip():
         return None
+
     return json.loads(text)
 
 
@@ -67,18 +71,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--jar', type=pathlib.Path, default=DEFAULT_JAR,
                         help='Path to the fat JAR built via ./gradlew shadowJar.')
-    parser.add_argument('--model', type=pathlib.Path, default=DEFAULT_MODEL,
-                        help='Path to the INTERLIS .ili file to compile.')
     args = parser.parse_args()
 
     jar = args.jar
     if not jar.is_file():
         print(f"error: {jar} not found. Build it first with ./gradlew shadowJar", file=sys.stderr)
-        return 1
-
-    model_path = args.model.resolve()
-    if not model_path.is_file():
-        print(f"error: {model_path} is not a file", file=sys.stderr)
         return 1
 
     proc = subprocess.Popen(
@@ -99,25 +96,22 @@ def main() -> int:
 
     threading.Thread(target=collect_stderr, daemon=True).start()
 
-    root_uri = model_path.parent.resolve().as_uri()
-    model_uri = model_path.as_uri()
-
     send_message(proc, {
         'jsonrpc': '2.0',
         'id': 1,
         'method': 'initialize',
         'params': {
             'processId': None,
-            'clientInfo': {'name': 'smoke-test', 'version': '1.0'},
-            'rootUri': root_uri,
+            'clientInfo': {'name': 'glsp-smoke', 'version': '1.0'},
             'capabilities': {},
+            'rootUri': None,
             'initializationOptions': {
-                'modelRepositories': model_path.parent.resolve().as_uri(),
                 'suppressRepositoryLogs': True
             }
         }
     })
-    print('initialize ->', read_message(proc, timeout=10))
+    init_response = read_message(proc, timeout=10)
+    print('initialize ->', init_response)
 
     send_message(proc, {
         'jsonrpc': '2.0',
@@ -125,50 +119,66 @@ def main() -> int:
         'params': {}
     })
 
-    text = model_path.read_text(encoding='utf-8')
+    time.sleep(1.0)
+
+    info_result: Optional[Dict[str, Any]] = None
+    for attempt in range(10):
+        if proc.poll() is not None:
+            break
+        info_request_id = 2 + attempt
+        send_message(proc, {
+            'jsonrpc': '2.0',
+            'id': info_request_id,
+            'method': 'interlis/glspInfo',
+            'params': {}
+        })
+
+        deadline = time.time() + 2
+        while time.time() < deadline:
+            message = read_message(proc, timeout=0.5)
+            if not message:
+                continue
+            print('message ->', message)
+            if message.get('id') == info_request_id:
+                info_result = message.get('result')
+                break
+        if info_result:
+            break
+        time.sleep(0.5)
+
+    if info_result is None:
+        print('error: did not receive interlis/glspInfo response', file=sys.stderr)
+        proc.terminate()
+        return 1
+
+    host = info_result.get('host')
+    port = info_result.get('port')
+    path = info_result.get('path')
+    running = info_result.get('running')
+    print(f"GLSP server running={running} at ws://{host}:{port}{path}")
+
     send_message(proc, {
         'jsonrpc': '2.0',
-        'method': 'textDocument/didOpen',
-        'params': {
-            'textDocument': {
-                'uri': model_uri,
-                'languageId': 'interlis',
-                'version': 1,
-                'text': text
-            }
-        }
+        'id': info_request_id + 1,
+        'method': 'shutdown',
+        'params': None
     })
-    print('didOpen ->', read_message(proc, timeout=10))
+    print('shutdown ->', read_message(proc, timeout=5))
 
     send_message(proc, {
         'jsonrpc': '2.0',
-        'id': 2,
-        'method': 'workspace/executeCommand',
-        'params': {
-            'command': 'interlis.compile',
-            'arguments': [model_uri]
-        }
+        'method': 'exit',
+        'params': None
     })
 
-    while True:
-        message = read_message(proc, timeout=5)
-        if not message:
-            break
-        print('message ->', message)
-        if message.get('id') == 2:
-            break
-
-    proc.terminate()
-    try:
-        proc.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        proc.kill()
+    proc.wait(timeout=5)
 
     if stderr_lines:
         print('\n[stderr]')
         for line in stderr_lines:
             print(line)
-    return 0
+
+    return 0 if running else 2
 
 
 if __name__ == '__main__':

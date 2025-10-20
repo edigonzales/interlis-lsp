@@ -80,7 +80,7 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
     @Override
     public void initialized(InitializedParams params) {
         if (glspServer != null && !glspServer.isStarted()) {
-            glspServer.start();
+            glspServer.startAsync();
         }
     }
 

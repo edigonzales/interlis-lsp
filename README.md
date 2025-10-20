@@ -156,6 +156,10 @@ When you need to poke the language server without the VS Code client, two option
 # 2) Talk to the server over stdio using the helper script
 ./gradlew shadowJar                      # ensure the fat JAR exists
 scripts/lsp_smoke.py --model path/to/model.ili
+
+# 3) Verify the GLSP endpoint comes up and reports its status
+./gradlew shadowJar                      # ensure the fat JAR exists
+scripts/glsp_smoke.py
 ```
 
 The Python script starts the bundled JAR, issues the canonical `initialize → didOpen → interlis.compile` flow, and prints every

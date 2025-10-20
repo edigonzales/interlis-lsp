@@ -13,6 +13,7 @@ import org.eclipse.lsp4j.ApplyWorkspaceEditParams;
 import org.eclipse.lsp4j.ApplyWorkspaceEditResponse;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
 import org.eclipse.lsp4j.InitializeParams;
+import org.eclipse.lsp4j.InitializedParams;
 import org.eclipse.lsp4j.MessageActionItem;
 import org.eclipse.lsp4j.MessageParams;
 import org.eclipse.lsp4j.PublishDiagnosticsParams;
@@ -46,6 +47,12 @@ class InterlisLanguageServerSmokeTest {
         initOptions.put("suppressRepositoryLogs", Boolean.TRUE);
         init.setInitializationOptions(initOptions);
         server.initialize(init).get(30, TimeUnit.SECONDS);
+        server.initialized(new InitializedParams());
+        assertNotNull(server.getGlspServer(), "Smoke test requires the embedded GLSP server");
+        assertTrue(server.getGlspServer().startAsync().get(10, TimeUnit.SECONDS),
+                "GLSP server should confirm it started successfully");
+        assertTrue(server.getGlspServer().isStarted(),
+                "GLSP server should be marked as running after startup");
 
         TextDocumentItem document = new TextDocumentItem();
         document.setLanguageId("interlis");
