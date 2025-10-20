@@ -27,6 +27,9 @@ dependencies {
     implementation 'org.eclipse.lsp4j:org.eclipse.lsp4j:0.24.0'
     implementation 'org.eclipse.lsp4j:org.eclipse.lsp4j.jsonrpc:0.24.0'
 
+    implementation 'org.eclipse.glsp:org.eclipse.glsp.server:2.5.0'
+    implementation 'org.eclipse.glsp:org.eclipse.glsp.server.websocket:2.5.0'
+
     implementation 'ch.interlis:ili2c-tool:5.6.6'
     implementation 'ch.interlis:ili2c-core:5.6.6'
     implementation 'ch.ehi:ehibasics:1.4.1'

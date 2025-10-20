@@ -114,6 +114,10 @@ public class InterlisTextDocumentService implements TextDocumentService {
         return CompletableFuture.completedFuture(edits);
     }
 
+    public String getTrackedDocumentText(String uri) {
+        return documents.getText(uri);
+    }
+
     @Override
     public CompletableFuture<Either<List<CompletionItem>, CompletionList>> completion(CompletionParams params) {
         return CompletableFutures.computeAsync(cancelChecker -> {
@@ -267,7 +271,7 @@ public class InterlisTextDocumentService implements TextDocumentService {
         }
     }
 
-    static String toFilesystemPathIfPossible(String uriOrPath) {
+    public static String toFilesystemPathIfPossible(String uriOrPath) {
         if (uriOrPath == null) return null;
         if (uriOrPath.startsWith("file:")) {
             try {
@@ -278,7 +282,7 @@ public class InterlisTextDocumentService implements TextDocumentService {
         return uriOrPath;
     }
 
-    static String readDocument(String uriOrPath) throws Exception {
+    public static String readDocument(String uriOrPath) throws Exception {
         if (uriOrPath == null) {
             return "";
         }

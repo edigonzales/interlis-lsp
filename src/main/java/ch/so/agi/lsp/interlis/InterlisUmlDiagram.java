@@ -11,7 +11,7 @@ import ch.interlis.ili2c.metamodel.*;
 /**
  * Shared diagram model and builder used by Mermaid and PlantUML renderers.
  */
-final class InterlisUmlDiagram {
+public final class InterlisUmlDiagram {
     private static final Logger LOG = LoggerFactory.getLogger(InterlisUmlDiagram.class);
 
     private InterlisUmlDiagram() {
@@ -59,6 +59,30 @@ final class InterlisUmlDiagram {
             this.stereotypes = stereotypes;
             this.attributes = new ArrayList<>();
             this.methods = new ArrayList<>();
+        }
+    }
+
+    public static final class ClassEntry {
+        private final String fqn;
+        private final String displayName;
+        private final String namespace;
+
+        public ClassEntry(String fqn, String displayName, String namespace) {
+            this.fqn = fqn;
+            this.displayName = displayName;
+            this.namespace = namespace;
+        }
+
+        public String fqn() {
+            return fqn;
+        }
+
+        public String displayName() {
+            return displayName;
+        }
+
+        public String namespace() {
+            return namespace;
         }
     }
 
@@ -296,6 +320,55 @@ final class InterlisUmlDiagram {
         private static boolean belongsToLastFile(Element e, Set<Model> lastModels) {
             return lastModels.contains(modelOf(e));
         }
+    }
+
+    public static List<ClassEntry> collectPrimaryClasses(TransferDescription td) {
+        Diagram diagram = build(td);
+        Map<String, String> namespaceByNode = new LinkedHashMap<>();
+
+        for (Map.Entry<String, Namespace> entry : diagram.namespaces.entrySet()) {
+            String label = entry.getKey();
+            Namespace ns = entry.getValue();
+            if (ns == null || ns.nodeOrder == null) {
+                continue;
+            }
+            for (String fqn : ns.nodeOrder) {
+                if (fqn == null) {
+                    continue;
+                }
+                String normalized = "<root>".equals(label) ? null : label;
+                namespaceByNode.putIfAbsent(fqn, normalized);
+            }
+        }
+
+        List<ClassEntry> classes = new ArrayList<>();
+        for (Map.Entry<String, String> entry : namespaceByNode.entrySet()) {
+            Node node = diagram.nodes.get(entry.getKey());
+            if (isPrimaryClass(node)) {
+                classes.add(new ClassEntry(node.fqn, node.displayName, entry.getValue()));
+            }
+        }
+        return classes;
+    }
+
+    private static boolean isPrimaryClass(Node node) {
+        if (node == null) {
+            return false;
+        }
+        if (node.stereotypes == null || node.stereotypes.isEmpty()) {
+            return true;
+        }
+        for (String stereotype : node.stereotypes) {
+            if (stereotype == null) {
+                continue;
+            }
+            String upper = stereotype.toUpperCase(Locale.ROOT);
+            if ("EXTERNAL".equals(upper) || "ENUMERATION".equals(upper) || "FUNCTION".equals(upper)
+                    || "STRUCTURE".equals(upper)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
