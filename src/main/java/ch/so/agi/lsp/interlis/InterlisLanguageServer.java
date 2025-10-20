@@ -32,7 +32,6 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
         this.textDocumentService = new InterlisTextDocumentService(this);
         this.workspaceService = new InterlisWorkspaceService(this);
         this.glspServer = new InterlisGlspServer(this);
-        this.glspServer.start();
     }
 
     // ---- LanguageServer ----
@@ -80,17 +79,24 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
 
     @Override
     public void initialized(InitializedParams params) {
-        // no-op
+        if (glspServer != null && !glspServer.isStarted()) {
+            glspServer.start();
+        }
     }
 
     @Override
     public CompletableFuture<Object> shutdown() {
+        if (glspServer != null) {
+            glspServer.stop();
+        }
         return CompletableFuture.completedFuture(null);
     }
 
     @Override
     public void exit() {
-        glspServer.stop();
+        if (glspServer != null) {
+            glspServer.stop();
+        }
     }
 
     @Override
