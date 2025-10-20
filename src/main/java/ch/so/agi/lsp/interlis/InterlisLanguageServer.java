@@ -7,6 +7,8 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 
+import ch.so.agi.glsp.interlis.InterlisGlspServer;
+
 /**
  * Main LSP entrypoint. Wires TextDocument/Workspace services and exposes capabilities.
  */
@@ -15,6 +17,7 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
     
     private final InterlisTextDocumentService textDocumentService;
     private final InterlisWorkspaceService workspaceService;
+    private final InterlisGlspServer glspServer;
     
     private final AtomicReference<ClientSettings> clientSettings = new AtomicReference<>(new ClientSettings());
 
@@ -23,10 +26,13 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
     public static final String CMD_GENERATE_PLANTUML = "interlis.uml.plant";
     public static final String REQ_EXPORT_DOCX = "interlis/exportDocx";
     public static final String REQ_EXPORT_HTML = "interlis/exportHtml";
+    public static final String REQ_GLSP_INFO = "interlis/glspInfo";
 
     public InterlisLanguageServer() {
         this.textDocumentService = new InterlisTextDocumentService(this);
         this.workspaceService = new InterlisWorkspaceService(this);
+        this.glspServer = new InterlisGlspServer(this);
+        this.glspServer.start();
     }
 
     // ---- LanguageServer ----
@@ -84,7 +90,7 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
 
     @Override
     public void exit() {
-        // no-op
+        glspServer.stop();
     }
 
     @Override
@@ -122,6 +128,14 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
         ClientSettings sanitized = s != null ? s : new ClientSettings();
         clientSettings.set(sanitized);
         textDocumentService.onClientSettingsUpdated(sanitized);
+    }
+
+    public InterlisGlspServer getGlspServer() {
+        return glspServer;
+    }
+
+    public InterlisTextDocumentService getInterlisTextDocumentService() {
+        return textDocumentService;
     }
     
     public void clearOutput() {

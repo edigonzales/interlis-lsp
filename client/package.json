@@ -64,6 +64,10 @@
         "title": "INTERLIS: Show UML class diagram"
       },
       {
+        "command": "interlis.uml.glsp.show",
+        "title": "INTERLIS: Show GLSP class diagram"
+      },
+      {
         "command": "interlis.uml.plant.show",
         "title": "INTERLIS: Show PlantUML class diagram"
       },
@@ -74,6 +78,10 @@
       {
         "command": "interlis.docx.export",
         "title": "INTERLIS: Export documentation as DOCX"
+      },
+      {
+        "command": "interlis.glsp.info",
+        "title": "INTERLIS: Show GLSP server info"
       }
     ],
     "configuration": {
@@ -108,21 +116,32 @@
       "editor.fontLigatures": true
     },
     "themes": [
-    {
-      "label": "INTERLIS Default Colors (dark)",
-      "uiTheme": "vs-dark",
-      "path": "./themes/interlis-color-theme-dark.json"
-    },
-    {
-      "label": "INTERLIS Default Colors (light)",
-      "uiTheme": "vs",
-      "path": "./themes/interlis-color-theme-light.json"
-    }
-  ]
+      {
+        "label": "INTERLIS Default Colors (dark)",
+        "uiTheme": "vs-dark",
+        "path": "./themes/interlis-color-theme-dark.json"
+      },
+      {
+        "label": "INTERLIS Default Colors (light)",
+        "uiTheme": "vs",
+        "path": "./themes/interlis-color-theme-light.json"
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "interlis.glsp.diagram",
+        "displayName": "INTERLIS GLSP Diagram",
+        "selector": [
+          {
+            "filenamePattern": "*.ili"
+          }
+        ]
+      }
+    ]
   },
   "main": "./dist/extension.js",
   "scripts": {
-    "build": "esbuild src/extension.ts --bundle --platform=node --external:vscode --outfile=dist/extension.js",
+    "build": "esbuild src/extension.ts --bundle --platform=node --external:vscode --outfile=dist/extension.js && esbuild webview/app.ts --bundle --format=iife --platform=browser --loader:.css=text --loader:.ttf=dataurl --outfile=dist/webview.js",
     "watch": "esbuild src/extension.ts --bundle --platform=node --external:vscode --outfile=dist/extension.js --watch"
   },
   "devDependencies": {
@@ -132,6 +151,14 @@
     "typescript": "^5.9.2"
   },
   "dependencies": {
+    "@eclipse-glsp/client": "^2.5.0",
+    "@eclipse-glsp/protocol": "^2.5.0",
+    "@eclipse-glsp/vscode-integration": "^2.5.0",
+    "@eclipse-glsp/vscode-integration-webview": "^2.5.0",
+    "@vscode/codicons": "^0.0.36",
+    "balloon-css": "^1.2.0",
+    "inversify": "^6.1.1",
+    "reflect-metadata": "^0.2.2",
     "vscode-languageclient": "^9.0.1"
   }
 }

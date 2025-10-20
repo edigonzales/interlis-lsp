@@ -10,6 +10,7 @@ A monorepo that ships the INTERLIS-focused Language Server Protocol (LSP) implem
 - [Developer workflow](#developer-workflow)
   - [Working on the LSP](#working-on-the-lsp)
   - [Working on the VS Code extension](#working-on-the-vs-code-extension)
+    - [GLSP class diagram viewer](#glsp-class-diagram-viewer)
   - [End-to-end debugging](#end-to-end-debugging)
 - [Automated checks](#automated-checks)
 - [Diagrams](#diagrams)
@@ -151,6 +152,44 @@ Tip 👉 For CI packaging see the `build and publish` GitHub Actions workflow, w
 2. Build once or watch: `npm run build` or `npm run watch` (uses esbuild ⚡).
 3. Launch VS Code with the extension: `code client --extensionDevelopmentPath="$(pwd)/client"`.
 4. During development, point the extension to your local server build by setting `interlisLsp.server.jarPath`.
+
+#### GLSP class diagram viewer
+
+The GLSP integration is intentionally lightweight right now: it connects the Java-based GLSP server started inside the language
+server, opens a webview that bundles the default GLSP client widgets, and renders one node per INTERLIS class (no associations y
+et). The workflow is:
+
+1. Build the extension assets with `npm run build` so that both `dist/extension.js` and `dist/webview.js` exist.
+2. Open an `.ili` file and run **`INTERLIS: Show GLSP class diagram`** (Command Palette or context menu).
+3. A custom editor opens next to the text document; it connects to the embedded GLSP server over WebSocket (`ws://127.0.0.1:7057/
+interlis` by default) and streams the diagram model.
+
+```mermaid
+sequenceDiagram
+    participant User as User
+    participant VSCode as VS Code command
+    participant Manager as GlspManager
+    participant Connector as GLSP connector
+    participant Webview as Diagram webview
+    participant Server as GLSP server
+
+    User->>VSCode: Run "INTERLIS: Show GLSP class diagram"
+    VSCode->>Manager: registerGlspFeatures()
+    Manager->>Manager: ensureInitialized()
+    Manager->>Server: interlis/glspInfo (via LSP)
+    Manager->>Connector: start SocketGlspVscodeServer (ws://host:port/path)
+    Connector-->>Server: JSON-RPC handshake
+    Manager->>VSCode: vscode.openWith(..., interlis.glsp.diagram)
+    VSCode->>Webview: load dist/webview.js + CSS
+    Webview-->>Connector: Messenger ready + initialize
+    Connector-->>Server: RequestModelAction
+    Server-->>Webview: Diagram actions (nodes for classes)
+    Webview-->>User: Render read-only class diagram
+```
+
+At this stage the diagram is read-only, mirrors only the primary INTERLIS model, and relies on the existing language server comp
+ilation pipeline. Future iterations can add element selection, navigation, and text synchronization by plugging into the same co
+nnector.
 
 #### Meta-attribute highlighting
 
