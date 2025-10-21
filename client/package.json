@@ -30,7 +30,9 @@
     "vscode": "^1.90.0"
   },
   "activationEvents": [
-    "onLanguage:interlis"
+    "onLanguage:interlis",
+    "onCustomEditor:interlis.glspDiagram",
+    "onCommand:interlis.uml.glsp.show"
   ],
   "contributes": {
     "languages": [
@@ -68,6 +70,10 @@
         "title": "INTERLIS: Show PlantUML class diagram"
       },
       {
+        "command": "interlis.uml.glsp.show",
+        "title": "INTERLIS: Open GLSP class diagram"
+      },
+      {
         "command": "interlis.html.show",
         "title": "INTERLIS: Show documentation as HTML"
       },
@@ -94,6 +100,11 @@
           "default": "%ILI_DIR;https://models.interlis.ch;%JAR_DIR",
           "markdownDescription": "Preferred INTERLIS model repositories as a comma-separated string."
         },
+        "interlisLsp.glsp.jarPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to the INTERLIS GLSP server fat JAR. Leave empty to use the jar bundled with the extension."
+        },
         "interlisLsp.autoShowOutputOnStart": {
           "type": "boolean",
           "default": true,
@@ -107,6 +118,17 @@
       },
       "editor.fontLigatures": true
     },
+    "customEditors": [
+      {
+        "viewType": "interlis.glspDiagram",
+        "displayName": "INTERLIS UML Diagram (GLSP)",
+        "selector": [
+          {
+            "filenamePattern": "*.ili"
+          }
+        ]
+      }
+    ],
     "themes": [
     {
       "label": "INTERLIS Default Colors (dark)",
@@ -132,6 +154,7 @@
     "typescript": "^5.9.2"
   },
   "dependencies": {
+    "@eclipse-glsp/vscode-integration": "^2.5.0",
     "vscode-languageclient": "^9.0.1"
   }
 }
