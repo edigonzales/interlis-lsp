@@ -6,14 +6,14 @@ import * as fs from "fs";
 import { LanguageClient, LanguageClientOptions, Executable, ServerOptions, State } from "vscode-languageclient/node";
 import {
   configureDefaultCommands,
-  GlspSocketServerLauncher,
   GlspVscodeConnector,
   SocketGlspVscodeServer
 } from "@eclipse-glsp/vscode-integration/node";
 import { InterlisDiagramProvider } from "./glsp/interlisDiagramProvider";
+import { JavaSocketServerLauncher } from "./glsp/javaSocketServerLauncher";
 
 let client: LanguageClient | undefined;
-let glspLauncher: GlspSocketServerLauncher | undefined;
+let glspLauncher: JavaSocketServerLauncher | undefined;
 let glspConnector: GlspVscodeConnector | undefined;
 let revealOutputOnNextLog = false;
 const CARET_SENTINEL = "__INTERLIS_AUTOCLOSE_CARET__";
@@ -131,9 +131,9 @@ export async function activate(context: vscode.ExtensionContext) {
   await client.start();
 
   try {
-    const launcher = new GlspSocketServerLauncher({
-      executable: javaPath,
-      args: ["-jar", glspJarPath],
+    const launcher = new JavaSocketServerLauncher({
+      executable: glspJarPath,
+      javaCommand: javaPath,
       socketConnectionOptions: { port: 0 },
       logging: true
     });
