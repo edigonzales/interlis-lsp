@@ -126,7 +126,8 @@
           {
             "filenamePattern": "*.ili"
           }
-        ]
+        ],
+        "priority": "option"
       }
     ],
     "themes": [
