@@ -86,10 +86,57 @@ class InterlisLanguageServerSmokeTest {
         server.exit();
     }
 
+    @Test
+    void incrementalChangesTriggerBackgroundValidation() throws Exception {
+        RecordingClient client = new RecordingClient();
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        server.connect(client);
+
+        InitializeParams init = new InitializeParams();
+        init.setRootUri(sampleFile.getParent().toUri().toString());
+        java.util.Map<String, Object> initOptions = new java.util.HashMap<>();
+        initOptions.put("modelRepositories", sampleFile.getParent().toUri().toString());
+        initOptions.put("suppressRepositoryLogs", Boolean.TRUE);
+        init.setInitializationOptions(initOptions);
+        server.initialize(init).get(30, TimeUnit.SECONDS);
+        server.initialized(new InitializedParams());
+
+        TextDocumentItem document = new TextDocumentItem();
+        document.setLanguageId("interlis");
+        document.setText(Files.readString(sampleFile));
+        document.setUri(sampleFile.toUri().toString());
+        document.setVersion(1);
+
+        server.getTextDocumentService().didOpen(new DidOpenTextDocumentParams(document));
+        client.awaitDiagnostics(1, 10, TimeUnit.SECONDS);
+        int afterOpen = client.getPublishDiagnosticsCalls();
+
+        org.eclipse.lsp4j.VersionedTextDocumentIdentifier identifier = new org.eclipse.lsp4j.VersionedTextDocumentIdentifier();
+        identifier.setUri(document.getUri());
+        identifier.setVersion(document.getVersion() + 1);
+
+        org.eclipse.lsp4j.TextDocumentContentChangeEvent change = new org.eclipse.lsp4j.TextDocumentContentChangeEvent();
+        change.setRange(new org.eclipse.lsp4j.Range(new org.eclipse.lsp4j.Position(0, 0), new org.eclipse.lsp4j.Position(0, 0)));
+        change.setText("// comment\n");
+
+        org.eclipse.lsp4j.DidChangeTextDocumentParams changeParams = new org.eclipse.lsp4j.DidChangeTextDocumentParams();
+        changeParams.setTextDocument(identifier);
+        changeParams.setContentChanges(java.util.List.of(change));
+        server.getTextDocumentService().didChange(changeParams);
+
+        client.awaitDiagnostics(afterOpen + 1, 10, TimeUnit.SECONDS);
+        assertTrue(client.getPublishDiagnosticsCalls() >= afterOpen + 1,
+                "Expected another diagnostics publication after didChange");
+
+        server.shutdown().get(10, TimeUnit.SECONDS);
+        server.exit();
+    }
+
     private static final class RecordingClient implements InterlisLanguageClient {
         private final List<String> logMessages = new ArrayList<>();
         private int clearLogCalls = 0;
         private int publishDiagnosticsCalls = 0;
+        private final Object diagnosticsMonitor = new Object();
 
         @Override
         public void clearLog() {
@@ -105,7 +152,10 @@ class InterlisLanguageServerSmokeTest {
 
         @Override
         public void publishDiagnostics(PublishDiagnosticsParams diagnostics) {
-            publishDiagnosticsCalls++;
+            synchronized (diagnosticsMonitor) {
+                publishDiagnosticsCalls++;
+                diagnosticsMonitor.notifyAll();
+            }
         }
 
         @Override
@@ -149,5 +199,21 @@ class InterlisLanguageServerSmokeTest {
             return publishDiagnosticsCalls;
         }
 
+        void awaitDiagnostics(int expectedCount, long timeout, TimeUnit unit) throws InterruptedException {
+            long deadline = System.nanoTime() + unit.toNanos(timeout);
+            synchronized (diagnosticsMonitor) {
+                while (publishDiagnosticsCalls < expectedCount) {
+                    long remaining = deadline - System.nanoTime();
+                    if (remaining <= 0) {
+                        break;
+                    }
+                    long waitMillis = TimeUnit.NANOSECONDS.toMillis(remaining);
+                    if (waitMillis <= 0) {
+                        waitMillis = 1;
+                    }
+                    diagnosticsMonitor.wait(waitMillis);
+                }
+            }
+        }
     }
 }

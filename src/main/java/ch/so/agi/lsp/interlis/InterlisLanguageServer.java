@@ -89,6 +89,7 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
         if (glspServer != null) {
             glspServer.stop();
         }
+        textDocumentService.shutdown();
         return CompletableFuture.completedFuture(null);
     }
 
@@ -97,6 +98,7 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
         if (glspServer != null) {
             glspServer.stop();
         }
+        textDocumentService.shutdown();
     }
 
     @Override
