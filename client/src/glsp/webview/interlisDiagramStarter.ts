@@ -9,7 +9,11 @@ import { interlisDiagramModule } from "./interlisDiagramModule";
 class InterlisDiagramStarter extends GLSPStarter {
   protected override createContainer(...containerConfiguration: ContainerConfiguration): Container {
     const container = new Container();
-    return initializeDiagramContainer(container, ...containerConfiguration, interlisDiagramModule);
+    return initializeDiagramContainer(
+      container,
+      ...containerConfiguration,
+      { add: interlisDiagramModule }
+    );
   }
 }
 

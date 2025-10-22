@@ -1,9 +1,14 @@
 package ch.so.agi.glsp.interlis;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import org.eclipse.glsp.server.di.ServerModule;
 import org.eclipse.glsp.server.launch.DefaultCLIParser;
 import org.eclipse.glsp.server.launch.SocketGLSPServerLauncher;
 import org.eclipse.glsp.server.utils.LaunchUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Entry point that boots the INTERLIS GLSP server when the VS Code extension
@@ -12,6 +17,8 @@ import org.eclipse.glsp.server.utils.LaunchUtil;
  * command line arguments.
  */
 public final class InterlisGlspServerLauncher {
+    private static final Logger LOG = LoggerFactory.getLogger(InterlisGlspServerLauncher.class);
+
     private InterlisGlspServerLauncher() {
     }
 
@@ -23,7 +30,20 @@ public final class InterlisGlspServerLauncher {
             return;
         }
 
-        LaunchUtil.configureLogger(cli.isConsoleLog(), cli.parseLogDir(), cli.parseLogLevel());
+        String logDirSetting = cli.parseLogDir();
+        Path logDir = null;
+        if (logDirSetting != null && !logDirSetting.isBlank()) {
+            logDir = Path.of(logDirSetting);
+            try {
+                Files.createDirectories(logDir);
+            } catch (IOException ex) {
+                LOG.warn("Failed to create GLSP log directory {}: {}", logDir, ex.getMessage());
+                logDir = null;
+            }
+        }
+
+        LaunchUtil.configureLogger(cli.isConsoleLog(), logDir != null ? logDir.toString() : null,
+                cli.parseLogLevel());
 
         int port = cli.parsePort();
         String host = cli.parseHostname();

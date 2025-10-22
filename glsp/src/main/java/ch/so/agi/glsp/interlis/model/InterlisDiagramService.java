@@ -1,7 +1,9 @@
 package ch.so.agi.glsp.interlis.model;
 
+import ch.interlis.ili2c.metamodel.Container;
 import ch.interlis.ili2c.metamodel.Model;
 import ch.interlis.ili2c.metamodel.Table;
+import ch.interlis.ili2c.metamodel.Topic;
 import ch.interlis.ili2c.metamodel.TransferDescription;
 import ch.so.agi.glsp.interlis.InterlisDiagramModule;
 import com.google.inject.Singleton;
@@ -71,11 +73,12 @@ public final class InterlisDiagramService {
         GGraphBuilder graph = new GGraphBuilder("graph")
                 .id("interlis-uml-root")
                 .addCssClass("interlis-uml-graph")
-                .layoutOptions(Map.of(
-                        "paddingTop", "40",
-                        "paddingLeft", "40",
-                        "hGap", "32",
-                        "vGap", "24"
+                .layoutOptions(Map.ofEntries(
+                        Map.entry("algorithm", "org.eclipse.elk.layered"),
+                        Map.entry("paddingTop", "40"),
+                        Map.entry("paddingLeft", "40"),
+                        Map.entry("hGap", "32"),
+                        Map.entry("vGap", "24")
                 ));
         List<GModelElement> classes = collectMainModelClasses(td).stream()
                 .map(entry -> new GNodeBuilder("interlis-class")
@@ -111,26 +114,73 @@ public final class InterlisDiagramService {
             if (model == null || model.getName() == null) {
                 continue;
             }
-            for (Table table : topLevelTables(model)) {
-                String id = (model.getName() + "_" + table.getName()).toLowerCase(Locale.ROOT);
-                String label = model.getName() + "." + table.getName();
-                result.add(new ClassEntry(id, label));
+            collectTables(result, model, model);
+            for (Topic topic : elementsOf(model, Topic.class)) {
+                collectTables(result, model, topic);
             }
         }
         result.sort(Comparator.comparing(ClassEntry::displayName));
         return result;
     }
 
-    private List<Table> topLevelTables(Model model) {
-        List<Table> tables = new ArrayList<>();
-        for (var it = model.iterator(); it.hasNext(); ) {
+    private void collectTables(List<ClassEntry> sink, Model model, Container container) {
+        for (Table table : elementsOf(container, Table.class)) {
+            if (!table.isIdentifiable()) {
+                continue;
+            }
+            String identifier = sanitizeIdentifier(model.getName(), container, table.getName());
+            String label = buildLabel(model.getName(), container, table.getName());
+            sink.add(new ClassEntry(identifier, label));
+        }
+    }
+
+    private <T> List<T> elementsOf(Container container, Class<T> type) {
+        List<T> result = new ArrayList<>();
+        for (var it = container.iterator(); it.hasNext(); ) {
             Object next = it.next();
-            if (next instanceof Table table && Objects.equals(table.getContainer(), model)) {
-                tables.add(table);
+            if (type.isInstance(next)) {
+                result.add(type.cast(next));
             }
         }
-        tables.sort(Comparator.comparing(Table::getName, Comparator.nullsLast(String::compareTo)));
-        return tables;
+        result.sort(Comparator.comparing(
+                element -> nameOf(element, type),
+                Comparator.nullsLast(String::compareToIgnoreCase)));
+        return result;
+    }
+
+    private <T> String nameOf(T element, Class<T> type) {
+        if (element instanceof Model model) {
+            return model.getName();
+        }
+        if (element instanceof Topic topic) {
+            return topic.getName();
+        }
+        if (element instanceof Table table) {
+            return table.getName();
+        }
+        return type.getSimpleName();
+    }
+
+    private String sanitizeIdentifier(String modelName, Container container, String elementName) {
+        List<String> parts = new ArrayList<>();
+        parts.add(modelName);
+        if (container instanceof Topic topic) {
+            parts.add(topic.getName());
+        }
+        parts.add(elementName);
+        return parts.stream()
+                .filter(Objects::nonNull)
+                .map(part -> part.replaceAll("[^A-Za-z0-9_]+", "-").toLowerCase(Locale.ROOT))
+                .collect(Collectors.joining("_"));
+    }
+
+    private String buildLabel(String modelName, Container container, String elementName) {
+        StringBuilder label = new StringBuilder(modelName);
+        if (container instanceof Topic topic) {
+            label.append('.').append(topic.getName());
+        }
+        label.append('.').append(elementName);
+        return label.toString();
     }
 
     private GModelRoot placeholder(String message) {
