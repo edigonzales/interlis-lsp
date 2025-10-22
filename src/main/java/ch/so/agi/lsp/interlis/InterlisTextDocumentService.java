@@ -15,12 +15,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 
 public class InterlisTextDocumentService implements TextDocumentService {
@@ -34,10 +28,6 @@ public class InterlisTextDocumentService implements TextDocumentService {
     private final InterlisCompletionProvider completionProvider;
     private final InterlisRenameProvider renameProvider;
     private final BiFunction<ClientSettings, String, Ili2cUtil.CompilationOutcome> compiler;
-
-    private final ScheduledExecutorService validationExecutor;
-    private final ConcurrentMap<String, ScheduledFuture<?>> pendingRevalidations = new ConcurrentHashMap<>();
-    private static final long REVALIDATION_DELAY_MS = 400L;
 
     public InterlisTextDocumentService(InterlisLanguageServer server) {
         this(server, new CompilationCache(), Ili2cUtil::compile);
@@ -53,11 +43,6 @@ public class InterlisTextDocumentService implements TextDocumentService {
         this.modelDiscoveryService = new ModelDiscoveryService();
         this.completionProvider = new InterlisCompletionProvider(server, documents, this.compilationCache, this.compiler, this.modelDiscoveryService);
         this.renameProvider = new InterlisRenameProvider(server, documents, this.compilationCache, this.compiler);
-        this.validationExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
-            Thread t = new Thread(r, "interlis-validation");
-            t.setDaemon(true);
-            return t;
-        });
     }
 
     void onClientSettingsUpdated(ClientSettings settings) {
@@ -72,7 +57,6 @@ public class InterlisTextDocumentService implements TextDocumentService {
     public void didOpen(DidOpenTextDocumentParams params) {
         String uri = params.getTextDocument().getUri();
         documents.open(params.getTextDocument());
-        cancelScheduledValidation(uri);
         compileAndPublish(uri, "didOpen");
     }
 
@@ -88,13 +72,11 @@ public class InterlisTextDocumentService implements TextDocumentService {
         // stale model information until the file is saved, so we drop the cache entry here
         // and let the next request trigger a fresh compile if it needs one.
         compilationCache.invalidate(pathOrUri);
-        scheduleValidation(uri);
     }
 
     @Override
     public void didSave(DidSaveTextDocumentParams params) {
         String uri = params.getTextDocument().getUri();
-        cancelScheduledValidation(uri);
         // Often a good moment to do an authoritative compile based on on-disk state
         compileAndPublish(uri, "didSave", true);
     }
@@ -103,7 +85,6 @@ public class InterlisTextDocumentService implements TextDocumentService {
     public void didClose(DidCloseTextDocumentParams params) {
         String uri = params.getTextDocument().getUri();
         server.publishDiagnostics(uri, Collections.emptyList());
-        cancelScheduledValidation(uri);
         documents.close(uri);
     }
 
@@ -131,20 +112,6 @@ public class InterlisTextDocumentService implements TextDocumentService {
             }
         }
         return CompletableFuture.completedFuture(edits);
-    }
-
-    public String getTrackedDocumentText(String uri) {
-        return documents.getText(uri);
-    }
-
-    void shutdown() {
-        pendingRevalidations.forEach((u, future) -> {
-            if (future != null) {
-                future.cancel(false);
-            }
-        });
-        pendingRevalidations.clear();
-        validationExecutor.shutdownNow();
     }
 
     @Override
@@ -297,43 +264,9 @@ public class InterlisTextDocumentService implements TextDocumentService {
                 throw CancellationUtil.propagateCancellation(ex);
             }
             LOG.error("Validation failed for {} (source={})", documentUri, source, ex);
-        }
-    }
-
-    private void scheduleValidation(String documentUri) {
-        if (documentUri == null || documentUri.isBlank()) {
-            return;
-        }
-
-        cancelScheduledValidation(documentUri);
-
-        try {
-            ScheduledFuture<?> future = validationExecutor.schedule(() -> {
-                try {
-                    compileAndPublish(documentUri, "didChange");
-                } catch (Exception ex) {
-                    if (CancellationUtil.isCancellation(ex)) {
-                        LOG.debug("Validation cancelled for {} (source=didChange)", documentUri);
-                    } else {
-                        LOG.error("Validation failed for {} (source=didChange)", documentUri, ex);
-                    }
-                } finally {
-                    pendingRevalidations.remove(documentUri);
-                }
-            }, REVALIDATION_DELAY_MS, TimeUnit.MILLISECONDS);
-            pendingRevalidations.put(documentUri, future);
-        } catch (Exception ex) {
-            LOG.error("Failed to schedule validation for {}", documentUri, ex);
-        }
-    }
-
-    private void cancelScheduledValidation(String documentUri) {
-        if (documentUri == null) {
-            return;
-        }
-        ScheduledFuture<?> future = pendingRevalidations.remove(documentUri);
-        if (future != null) {
-            future.cancel(false);
+            server.publishDiagnostics(documentUri, Collections.emptyList());
+            server.logToClient(String.format("Validation failed for %s via %s: %s%n",
+                    documentUri, source, ex.getMessage()));
         }
     }
 
