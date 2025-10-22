@@ -58,6 +58,7 @@ public final class InterlisDiagramService {
         }
 
         try {
+            LOG.info("Building INTERLIS UML diagram for {}", source);
             TransferDescription td = compiler.compile(source);
             if (td == null) {
                 return placeholder("Failed to compile INTERLIS model.");
@@ -80,7 +81,8 @@ public final class InterlisDiagramService {
                         Map.entry("hGap", "32"),
                         Map.entry("vGap", "24")
                 ));
-        List<GModelElement> classes = collectMainModelClasses(td).stream()
+        List<ClassEntry> classEntries = collectMainModelClasses(td, source);
+        List<GModelElement> classes = classEntries.stream()
                 .map(entry -> new GNodeBuilder("interlis-class")
                         .id(entry.identifier())
                         .size(190, 90)
@@ -96,7 +98,9 @@ public final class InterlisDiagramService {
                     .size(220, 80)
                     .layout("vbox")
                     .addCssClass("interlis-placeholder-node")
-                    .add(new GLabelBuilder().text("No top-level classes found.").build())
+                    .add(new GLabelBuilder()
+                            .text("No top-level classes found. Check the GLSP output channel for details.")
+                            .build())
                     .build());
         } else {
             classes.forEach(graph::add);
@@ -107,8 +111,8 @@ public final class InterlisDiagramService {
         return graph.build();
     }
 
-    private List<ClassEntry> collectMainModelClasses(TransferDescription td) {
-        Model[] models = Optional.ofNullable(td.getModelsFromLastFile()).orElse(new Model[0]);
+    private List<ClassEntry> collectMainModelClasses(TransferDescription td, Path source) {
+        List<Model> models = determineModels(td);
         List<ClassEntry> result = new ArrayList<>();
         for (Model model : models) {
             if (model == null || model.getName() == null) {
@@ -120,6 +124,32 @@ public final class InterlisDiagramService {
             }
         }
         result.sort(Comparator.comparing(ClassEntry::displayName));
+        LOG.info("INTERLIS UML diagram for {} contains {} identifiable classes across {} model(s)", source,
+                result.size(), models.size());
+        return result;
+    }
+
+    private List<Model> determineModels(TransferDescription td) {
+        Model[] lastFileModels = Optional.ofNullable(td.getModelsFromLastFile()).orElse(null);
+        List<Model> result = new ArrayList<>();
+        if (lastFileModels != null) {
+            for (Model model : lastFileModels) {
+                if (model != null) {
+                    result.add(model);
+                }
+            }
+        }
+        if (!result.isEmpty()) {
+            return result;
+        }
+
+        LOG.debug("No models reported for the last file; falling back to all models in the transfer description");
+        for (var it = td.iterator(); it.hasNext();) {
+            Model model = it.next();
+            if (model != null) {
+                result.add(model);
+            }
+        }
         return result;
     }
 

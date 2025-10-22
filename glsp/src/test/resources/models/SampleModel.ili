@@ -1,0 +1,25 @@
+INTERLIS 2.4;
+
+MODEL ModelA (de)
+  AT "https://example.com"
+  VERSION "2025-09-17"
+=
+
+  STRUCTURE StructA =
+    attr2 : TEXT;
+    attr3 : TEXT;
+  END StructA;
+
+  CLASS Organisation (ABSTRACT) =
+    attr1 : TEXT;
+  END Organisation;
+
+  TOPIC TopicA =
+    CLASS Gemeinde =
+      Name : MANDATORY TEXT*500;
+      BFSNr : MANDATORY 2000 .. 3000;
+      Bezirk : MANDATORY TEXT*50;
+    END Gemeinde;
+  END TopicA;
+
+END ModelA.

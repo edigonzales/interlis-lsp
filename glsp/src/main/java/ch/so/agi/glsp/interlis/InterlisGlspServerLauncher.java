@@ -30,17 +30,7 @@ public final class InterlisGlspServerLauncher {
             return;
         }
 
-        String logDirSetting = cli.parseLogDir();
-        Path logDir = null;
-        if (logDirSetting != null && !logDirSetting.isBlank()) {
-            logDir = Path.of(logDirSetting);
-            try {
-                Files.createDirectories(logDir);
-            } catch (IOException ex) {
-                LOG.warn("Failed to create GLSP log directory {}: {}", logDir, ex.getMessage());
-                logDir = null;
-            }
-        }
+        Path logDir = prepareLogDirectory(cli.parseLogDir());
 
         LaunchUtil.configureLogger(cli.isConsoleLog(), logDir != null ? logDir.toString() : null,
                 cli.parseLogLevel());
@@ -54,5 +44,35 @@ public final class InterlisGlspServerLauncher {
         ServerModule module = new InterlisServerModule();
         SocketGLSPServerLauncher launcher = new SocketGLSPServerLauncher(module);
         launcher.start(host, port);
+    }
+
+    private static Path prepareLogDirectory(String requestedPath) {
+        Path candidate = null;
+        if (requestedPath != null && !requestedPath.isBlank()) {
+            candidate = Path.of(requestedPath);
+            try {
+                Files.createDirectories(candidate);
+            } catch (IOException ex) {
+                LOG.warn("Failed to create GLSP log directory {}: {}", candidate, ex.getMessage());
+                candidate = null;
+            }
+        }
+
+        if (candidate == null) {
+            Path fallback = Path.of(System.getProperty("java.io.tmpdir"), "interlis-glsp", "logs");
+            try {
+                Files.createDirectories(fallback);
+                candidate = fallback;
+            } catch (IOException ex) {
+                LOG.warn("Falling back to console logging only; unable to create GLSP log directory {}: {}", fallback,
+                        ex.getMessage());
+                candidate = null;
+            }
+        }
+
+        if (candidate != null) {
+            LOG.info("Writing GLSP logs to {}", candidate.toAbsolutePath());
+        }
+        return candidate;
     }
 }
