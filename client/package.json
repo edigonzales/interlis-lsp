@@ -30,7 +30,9 @@
     "vscode": "^1.90.0"
   },
   "activationEvents": [
-    "onLanguage:interlis"
+    "onLanguage:interlis",
+    "onCustomEditor:interlis.glspDiagram",
+    "onCommand:interlis.uml.glsp.show"
   ],
   "contributes": {
     "languages": [
@@ -68,6 +70,10 @@
         "title": "INTERLIS: Show PlantUML class diagram"
       },
       {
+        "command": "interlis.uml.glsp.show",
+        "title": "INTERLIS: Open GLSP class diagram"
+      },
+      {
         "command": "interlis.html.show",
         "title": "INTERLIS: Show documentation as HTML"
       },
@@ -94,6 +100,11 @@
           "default": "%ILI_DIR;https://models.interlis.ch;%JAR_DIR",
           "markdownDescription": "Preferred INTERLIS model repositories as a comma-separated string."
         },
+        "interlisLsp.glsp.jarPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to the INTERLIS GLSP server fat JAR. Leave empty to use the jar bundled with the extension."
+        },
         "interlisLsp.autoShowOutputOnStart": {
           "type": "boolean",
           "default": true,
@@ -107,23 +118,36 @@
       },
       "editor.fontLigatures": true
     },
+    "customEditors": [
+      {
+        "viewType": "interlis.glspDiagram",
+        "displayName": "INTERLIS UML Diagram (GLSP)",
+        "selector": [
+          {
+            "filenamePattern": "*.ili"
+          }
+        ],
+        "priority": "option"
+      }
+    ],
     "themes": [
-    {
-      "label": "INTERLIS Default Colors (dark)",
-      "uiTheme": "vs-dark",
-      "path": "./themes/interlis-color-theme-dark.json"
-    },
-    {
-      "label": "INTERLIS Default Colors (light)",
-      "uiTheme": "vs",
-      "path": "./themes/interlis-color-theme-light.json"
-    }
-  ]
+      {
+        "label": "INTERLIS Default Colors (dark)",
+        "uiTheme": "vs-dark",
+        "path": "./themes/interlis-color-theme-dark.json"
+      },
+      {
+        "label": "INTERLIS Default Colors (light)",
+        "uiTheme": "vs",
+        "path": "./themes/interlis-color-theme-light.json"
+      }
+    ]
   },
   "main": "./dist/extension.js",
   "scripts": {
-    "build": "esbuild src/extension.ts --bundle --platform=node --external:vscode --outfile=dist/extension.js",
-    "watch": "esbuild src/extension.ts --bundle --platform=node --external:vscode --outfile=dist/extension.js --watch"
+    "build": "npm run build:webview && esbuild src/extension.ts --bundle --platform=node --external:vscode --outfile=dist/extension.js",
+    "build:webview": "esbuild src/glsp/webview/interlisDiagramStarter.ts --bundle --platform=browser --format=iife --outdir=dist/webview --entry-names=interlisDiagram --chunk-names=interlisDiagram-[hash] --asset-names=assets/[name]-[hash] --loader:.ttf=file --loader:.woff=file --loader:.woff2=file",
+    "watch": "sh -c 'npm run build:webview -- --watch & esbuild src/extension.ts --bundle --platform=node --external:vscode --outfile=dist/extension.js --watch'"
   },
   "devDependencies": {
     "@types/node": "^24.5.2",
@@ -132,6 +156,10 @@
     "typescript": "^5.9.2"
   },
   "dependencies": {
+    "@eclipse-glsp/vscode-integration": "^2.5.0",
+    "@eclipse-glsp/vscode-integration-webview": "^2.5.0",
+    "@vscode/codicons": "^0.0.41",
+    "reflect-metadata": "^0.2.2",
     "vscode-languageclient": "^9.0.1"
   }
 }
