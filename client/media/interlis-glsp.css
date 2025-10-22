@@ -60,7 +60,7 @@ body {
 }
 
 .sprotty-node.interlis-class-node > rect {
-  fill: var(--vscode-sideBar-background, #202020);
+  fill: var(--vscode-editor-inactiveSelectionBackground, #264f78);
   stroke: var(--vscode-focusBorder, #569cd6);
   stroke-width: 1.4px;
   rx: 8px;
@@ -70,6 +70,8 @@ body {
 .sprotty-node.interlis-class-node text {
   fill: var(--vscode-editor-foreground);
   font-weight: 600;
+  dominant-baseline: middle;
+  text-anchor: middle;
 }
 
 .sprotty-node.interlis-placeholder-node > rect {

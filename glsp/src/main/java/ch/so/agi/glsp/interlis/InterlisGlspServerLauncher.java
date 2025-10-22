@@ -53,7 +53,8 @@ public final class InterlisGlspServerLauncher {
             try {
                 Files.createDirectories(candidate);
             } catch (IOException ex) {
-                LOG.warn("Failed to create GLSP log directory {}: {}", candidate, ex.getMessage());
+                LOG.info("Unable to use requested GLSP log directory {} ({}); falling back to a temporary location.",
+                        candidate, ex.getMessage());
                 candidate = null;
             }
         }

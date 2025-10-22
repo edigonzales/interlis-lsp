@@ -82,15 +82,40 @@ public final class InterlisDiagramService {
                         Map.entry("vGap", "24")
                 ));
         List<ClassEntry> classEntries = collectMainModelClasses(td, source);
-        List<GModelElement> classes = classEntries.stream()
-                .map(entry -> new GNodeBuilder("interlis-class")
+        List<GModelElement> classes = new ArrayList<>();
+        if (!classEntries.isEmpty()) {
+            int columns = Math.max(1, (int) Math.ceil(Math.sqrt(classEntries.size())));
+            double columnSpacing = 260;
+            double rowSpacing = 170;
+
+            for (int index = 0; index < classEntries.size(); index++) {
+                ClassEntry entry = classEntries.get(index);
+                int column = index % columns;
+                int row = index / columns;
+
+                double x = column * columnSpacing;
+                double y = row * rowSpacing;
+
+                classes.add(new GNodeBuilder("interlis-class")
                         .id(entry.identifier())
-                        .size(190, 90)
+                        .size(210, 110)
+                        .position(x, y)
                         .layout("vbox")
+                        .layoutOptions(Map.ofEntries(
+                                Map.entry("paddingTop", "12"),
+                                Map.entry("paddingBottom", "12"),
+                                Map.entry("paddingLeft", "12"),
+                                Map.entry("paddingRight", "12"),
+                                Map.entry("hAlign", "center")
+                        ))
                         .addCssClass("interlis-class-node")
-                        .add(new GLabelBuilder().id(entry.identifier() + "_label").text(entry.displayName()).build())
-                        .build())
-                .collect(Collectors.toList());
+                        .add(new GLabelBuilder()
+                                .id(entry.identifier() + "_label")
+                                .text(entry.displayName())
+                                .build())
+                        .build());
+            }
+        }
 
         if (classes.isEmpty()) {
             graph.add(new GNodeBuilder("interlis-placeholder")
