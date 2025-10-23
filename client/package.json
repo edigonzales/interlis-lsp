@@ -137,8 +137,9 @@
   },
   "main": "./dist/extension.js",
   "scripts": {
-    "build": "esbuild src/extension.ts --bundle --platform=node --external:vscode --external:@eclipse-glsp/* --external:@vscode/codicons/* --loader:.css=text --loader:.ttf=file --loader:.svg=dataurl --outfile=dist/extension.js && esbuild src/glsp/interlisGlspWebview.ts --bundle --format=iife --platform=browser --external:@vscode/codicons/dist/codicon.css --outfile=dist/interlis-glsp-webview.js",
-    "watch": "esbuild src/extension.ts --bundle --platform=node --external:vscode --external:@eclipse-glsp/* --external:@vscode/codicons/* --loader:.css=text --loader:.ttf=file --loader:.svg=dataurl --outfile=dist/extension.js --watch"
+    "build": "node ./scripts/build.mjs",
+    "watch": "node ./scripts/build.mjs --watch",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/node": "^24.5.2",
