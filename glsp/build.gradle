@@ -22,8 +22,8 @@ repositories {
 }
 
 dependencies {
-    implementation 'org.eclipse.glsp:org.eclipse.glsp.server:2.3.0'
-    implementation 'org.eclipse.glsp:org.eclipse.glsp.graph:2.3.0'
+    implementation 'org.eclipse.glsp:org.eclipse.glsp.server:2.5.0'
+    implementation 'org.eclipse.glsp:org.eclipse.glsp.graph:2.5.0'
 
     implementation 'com.google.inject:guice:7.0.0'
     implementation 'commons-cli:commons-cli:1.5.0'

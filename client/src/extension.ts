@@ -363,7 +363,7 @@ export async function activate(context: vscode.ExtensionContext) {
       const saveOptions: vscode.SaveDialogOptions = {
         saveLabel: "Export INTERLIS documentation",
         filters: { "Word Document": ["docx"] }
-      };
+      };  
       if (defaultUri) {
         saveOptions.defaultUri = defaultUri;
       }
@@ -395,6 +395,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand("interlis.glsp.open", async () => {
+      console.log("*************** 1");
       const editor = vscode.window.activeTextEditor;
       if (!editor) { vscode.window.showWarningMessage("Open an .ili file first."); return; }
 
@@ -406,7 +407,9 @@ export async function activate(context: vscode.ExtensionContext) {
       }
 
       try {
+        console.log("*************** 2");
         await ensureGlspInfrastructure(context);
+        console.log("*************** 3");
         const column = editor.viewColumn ?? vscode.ViewColumn.Beside;
         await vscode.commands.executeCommand(
           "vscode.openWith",
@@ -414,6 +417,7 @@ export async function activate(context: vscode.ExtensionContext) {
           InterlisGlspEditorProvider.viewType,
           { preview: false, viewColumn: column }
         );
+        console.log("*************** 20");
       } catch (err: any) {
         vscode.window.showErrorMessage(`Failed to open GLSP diagram: ${err?.message ?? err}`);
       }
@@ -426,6 +430,8 @@ async function ensureGlspInfrastructure(context: vscode.ExtensionContext): Promi
     return glspResources;
   }
 
+  console.log("*************** 4");
+
   const configuration = vscode.workspace.getConfiguration("interlisLsp");
   const jarPath = resolveGlspJarPath(context, configuration.get<string>("glsp.jarPath"));
   const port = configuration.get<number>("glsp.port") ?? 5050;
@@ -435,6 +441,8 @@ async function ensureGlspInfrastructure(context: vscode.ExtensionContext): Promi
     executable: jarPath,
     socketConnectionOptions: { host, port }
   });
+
+  console.log("*************** 5");
 
   try {
     await launcher.start();
@@ -449,12 +457,15 @@ async function ensureGlspInfrastructure(context: vscode.ExtensionContext): Promi
     connectionOptions: { host, port }
   });
 
+  console.log("*************** 6");
   try {
     await server.start();
   } catch (error) {
     launcher.dispose();
     throw error;
   }
+
+  console.log("*************** 7");
 
   const connector = new GlspVscodeConnector({
     server,
@@ -463,6 +474,8 @@ async function ensureGlspInfrastructure(context: vscode.ExtensionContext): Promi
       return ensureRequestCarriesSourceUri(candidate);
     }
   });
+
+  console.log("*************** 8");
 
   const provider = new InterlisGlspEditorProvider(context, connector);
 
@@ -474,9 +487,13 @@ async function ensureGlspInfrastructure(context: vscode.ExtensionContext): Promi
     { supportsMultipleEditorsPerDocument: true, webviewOptions: { retainContextWhenHidden: true } }
   );
 
+  console.log("*************** 9");
+
   context.subscriptions.push(launcher, server, connector, registration);
 
   glspResources = { launcher, server, connector, provider };
+
+  console.log("*************** 10");
   return glspResources;
 }
 
