@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -139,7 +140,7 @@ public class InterlisDiagramService {
 
         List<ClassInfo> classes = new ArrayList<>();
         List<Model> orderedModels = Arrays.stream(models)
-            .sorted(Comparator.comparing(Model::getName, InterlisDiagramService::caseInsensitive))
+            .sorted(Comparator.comparing(model -> caseInsensitive(model.getName())))
             .collect(Collectors.toList());
 
         for (Model model : orderedModels) {
@@ -166,12 +167,14 @@ public class InterlisDiagramService {
             return Collections.emptyList();
         }
         List<T> elements = new ArrayList<>();
-        for (Object child : container) {
+        Iterator<?> iterator = container.iterator();
+        while (iterator.hasNext()) {
+            Object child = iterator.next();
             if (type.isInstance(child)) {
                 elements.add(type.cast(child));
             }
         }
-        elements.sort(Comparator.comparing(Element::getName, InterlisDiagramService::caseInsensitive));
+        elements.sort(Comparator.comparing(element -> caseInsensitive(element.getName())));
         return elements;
     }
 
