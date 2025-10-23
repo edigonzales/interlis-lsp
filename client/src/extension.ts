@@ -410,12 +410,11 @@ export async function activate(context: vscode.ExtensionContext) {
         console.log("*************** 2");
         await ensureGlspInfrastructure(context);
         console.log("*************** 3");
-        const column = editor.viewColumn ?? vscode.ViewColumn.Beside;
         await vscode.commands.executeCommand(
           "vscode.openWith",
           document.uri,
           InterlisGlspEditorProvider.viewType,
-          { preview: false, viewColumn: column }
+          { preview: false, viewColumn: vscode.ViewColumn.Beside }
         );
         console.log("*************** 20");
       } catch (err: any) {
