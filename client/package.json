@@ -31,7 +31,8 @@
   },
   "activationEvents": [
     "onLanguage:interlis",
-    "onCommand:interlis.glsp.open"
+    "onCommand:interlis.glsp.open",
+    "onCustomEditor:interlis.glsp.diagram"
   ],
   "contributes": {
     "languages": [
@@ -79,6 +80,18 @@
       {
         "command": "interlis.glsp.open",
         "title": "INTERLIS: Open GLSP class diagram"
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "interlis.glsp.diagram",
+        "displayName": "INTERLIS GLSP Class Diagram",
+        "selector": [
+          {
+            "filenamePattern": "*.ili"
+          }
+        ],
+        "priority": "option"
       }
     ],
     "configuration": {
