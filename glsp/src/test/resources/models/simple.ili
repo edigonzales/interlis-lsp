@@ -1,0 +1,13 @@
+INTERLIS 2.3;
+
+MODEL SimpleModel (en)
+  TOPIC TopicA =
+    CLASS ClassA =
+    END ClassA;
+    CLASS ClassB =
+    END ClassB;
+  END TopicA;
+
+  CLASS RootClass =
+  END RootClass;
+END SimpleModel.

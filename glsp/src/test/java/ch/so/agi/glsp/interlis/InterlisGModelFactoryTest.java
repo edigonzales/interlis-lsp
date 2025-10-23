@@ -3,16 +3,19 @@ package ch.so.agi.glsp.interlis;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.Optional;
+
 import org.eclipse.glsp.graph.GGraph;
-import org.eclipse.glsp.graph.GLabel;
-import org.eclipse.glsp.graph.GModelElement;
-import org.eclipse.glsp.graph.GNode;
+import org.eclipse.glsp.graph.builder.impl.GGraphBuilder;
 import org.eclipse.glsp.server.model.DefaultGModelState;
 import org.eclipse.glsp.server.model.GModelState;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import ch.so.agi.glsp.interlis.model.InterlisDiagramService;
 
 class InterlisGModelFactoryTest {
 
@@ -25,30 +28,23 @@ class InterlisGModelFactoryTest {
     }
 
     @Test
-    void createGModel_populatesGraphWithPlaceholderClass() {
-        InterlisGModelFactory factory = new InterlisGModelFactory(modelState);
+    void createGModel_usesDiagramServiceGraphWhenAvailable() {
+        GGraph expected = new GGraphBuilder()
+            .id("test-graph")
+            .type(InterlisGlspTypes.DIAGRAM_TYPE)
+            .build();
+        StubDiagramService service = new StubDiagramService(Optional.of(expected));
+        InterlisGModelFactory factory = new InterlisGModelFactory(modelState, service);
 
         factory.createGModel();
 
         GGraph graph = assertInstanceOf(GGraph.class, modelState.getRoot());
-        assertEquals(InterlisGlspTypes.GRAPH_ID, graph.getId());
-        assertEquals(InterlisGlspTypes.DIAGRAM_TYPE, graph.getType());
-        assertEquals(1, graph.getChildren().size());
-
-        GModelElement element = graph.getChildren().get(0);
-        GNode classNode = assertInstanceOf(GNode.class, element);
-        assertEquals(InterlisGlspTypes.CLASS_NODE_ID, classNode.getId());
-        assertEquals(InterlisGlspTypes.CLASS_NODE_TYPE, classNode.getType());
-        assertTrue(classNode.getChildren().size() >= 1);
-
-        GLabel classLabel = assertInstanceOf(GLabel.class, classNode.getChildren().get(0));
-        assertEquals(InterlisGlspTypes.CLASS_LABEL_ID, classLabel.getId());
-        assertEquals("INTERLIS Class", classLabel.getText());
+        assertSame(expected, graph);
     }
 
     @Test
     void createGModel_preservesSourceUriProperty() {
-        InterlisGModelFactory factory = new InterlisGModelFactory(modelState);
+        InterlisGModelFactory factory = new InterlisGModelFactory(modelState, new StubDiagramService(Optional.empty()));
 
         factory.createGModel();
 
@@ -58,5 +54,31 @@ class InterlisGModelFactoryTest {
 
         assertNotNull(sourceUri);
         assertEquals("file:///models/placeholder.ili", sourceUri);
+    }
+
+    @Test
+    void createGModel_fallsBackToEmptyGraphWhenServiceReturnsNothing() {
+        InterlisGModelFactory factory = new InterlisGModelFactory(modelState, new StubDiagramService(Optional.empty()));
+
+        factory.createGModel();
+
+        GGraph graph = assertInstanceOf(GGraph.class, modelState.getRoot());
+        assertEquals(InterlisGlspTypes.GRAPH_ID, graph.getId());
+        assertEquals(InterlisGlspTypes.DIAGRAM_TYPE, graph.getType());
+        assertTrue(graph.getChildren().isEmpty());
+    }
+
+    private static final class StubDiagramService extends InterlisDiagramService {
+
+        private final Optional<GGraph> graph;
+
+        StubDiagramService(final Optional<GGraph> graph) {
+            this.graph = graph;
+        }
+
+        @Override
+        public Optional<GGraph> loadDiagram(final java.nio.file.Path sourceFile) {
+            return graph;
+        }
     }
 }

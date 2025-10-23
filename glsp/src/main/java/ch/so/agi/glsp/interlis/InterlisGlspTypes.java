@@ -7,9 +7,7 @@ public final class InterlisGlspTypes {
     public static final String DIAGRAM_TYPE = "interlis-class-diagram";
     public static final String GRAPH_ID = "interlis-class-graph";
     public static final String CLASS_NODE_TYPE = "node:interlis-class";
-    public static final String CLASS_NODE_ID = "interlis-class-node";
     public static final String CLASS_LABEL_TYPE = "label:interlis-class";
-    public static final String CLASS_LABEL_ID = "interlis-class-label";
     public static final String CSS_CLASS_NODE = "interlis-class";
     public static final String CSS_CLASS_LABEL = "interlis-class-label";
 

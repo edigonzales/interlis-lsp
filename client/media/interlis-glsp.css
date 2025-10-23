@@ -42,5 +42,101 @@ body {
 
 .glsp-container .tool-palette,
 .glsp-container .command-palette {
-  font-family: var(--vscode-editor-font-family, var(--vscode-font-family));
+  font-family: var(--vscode-font-family, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif);
+}
+
+.glsp-container .tool-palette {
+  background-color: #1f1f23;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.glsp-container .tool-palette .palette-header {
+  padding: 0.75rem 1rem;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.2));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.glsp-container .tool-palette .palette-header .header-tools {
+  gap: 0.35rem;
+}
+
+.glsp-container .tool-palette .palette-header .header-tools i {
+  border-radius: 4px;
+  padding: 0.35rem;
+}
+
+.glsp-container .tool-palette .palette-header .header-tools i:hover:not(.clicked) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.glsp-container .tool-palette .palette-header .header-tools .clicked {
+  background: rgba(126, 203, 255, 0.18);
+  color: #d7f1ff;
+}
+
+.glsp-container .tool-palette .palette-body {
+  background: rgba(28, 28, 34, 0.92);
+  padding: 0.5rem 0;
+}
+
+.glsp-container .tool-palette .tool-group {
+  background: transparent;
+  padding: 0.25rem 0.75rem 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.glsp-container .tool-palette .tool-group:last-child {
+  margin-bottom: 0;
+}
+
+.glsp-container .tool-palette .group-header {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(219, 225, 234, 0.7);
+  margin-bottom: 0.35rem;
+  padding: 0 0.5rem;
+}
+
+.glsp-container .tool-palette .tool-button {
+  border-radius: 6px;
+  padding: 0.45rem 0.65rem;
+  background: transparent;
+  color: #e6e8ed;
+  font-size: 0.9rem;
+  gap: 0.5rem;
+  min-height: unset;
+  line-height: 1.4;
+}
+
+.glsp-container .tool-palette .tool-button i {
+  font-size: 0.9rem;
+}
+
+.glsp-container .tool-palette .tool-button:hover:not(.clicked) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.glsp-container .tool-palette .tool-button.clicked {
+  background: rgba(126, 203, 255, 0.18);
+  color: #d7f1ff;
+}
+
+.glsp-container .tool-palette .collapsible-palette {
+  max-height: none;
+}
+
+.glsp-container .tool-palette .search-input {
+  margin: 0 0.75rem 0.5rem;
+  border-radius: 6px;
+  padding: 0.35rem 0.5rem;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f5f7fb;
 }
