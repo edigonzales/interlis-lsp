@@ -1,0 +1,46 @@
+.root,
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: transparent;
+}
+
+.glsp-diagram {
+  background-color: transparent;
+}
+
+.glsp-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.glsp-container svg {
+  flex: 1;
+}
+
+.sprotty-node.interlis-class > rect,
+.sprotty-node.interlis-class > g > rect {
+  fill: #ff6b6b;
+  stroke: #8b0000;
+  stroke-width: 3px;
+  rx: 8px;
+  ry: 8px;
+}
+
+.sprotty-label.interlis-class-label > text,
+.interlis-class-label text {
+  fill: #8b0000;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.glsp-container .tool-palette,
+.glsp-container .command-palette {
+  font-family: var(--vscode-editor-font-family, var(--vscode-font-family));
+}

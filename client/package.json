@@ -30,7 +30,8 @@
     "vscode": "^1.90.0"
   },
   "activationEvents": [
-    "onLanguage:interlis"
+    "onLanguage:interlis",
+    "onCommand:interlis.glsp.open"
   ],
   "contributes": {
     "languages": [
@@ -74,6 +75,10 @@
       {
         "command": "interlis.docx.export",
         "title": "INTERLIS: Export documentation as DOCX"
+      },
+      {
+        "command": "interlis.glsp.open",
+        "title": "INTERLIS: Open GLSP class diagram"
       }
     ],
     "configuration": {
@@ -98,6 +103,16 @@
           "type": "boolean",
           "default": true,
           "description": "Show the INTERLIS LSP output channel when the extension activates."
+        },
+        "interlisLsp.glsp.jarPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to the INTERLIS GLSP fat JAR. Leave empty to use the jar bundled with the extension."
+        },
+        "interlisLsp.glsp.port": {
+          "type": "number",
+          "default": 5050,
+          "markdownDescription": "Port used by the local INTERLIS GLSP server process."
         }
       }
     },
@@ -108,22 +123,22 @@
       "editor.fontLigatures": true
     },
     "themes": [
-    {
-      "label": "INTERLIS Default Colors (dark)",
-      "uiTheme": "vs-dark",
-      "path": "./themes/interlis-color-theme-dark.json"
-    },
-    {
-      "label": "INTERLIS Default Colors (light)",
-      "uiTheme": "vs",
-      "path": "./themes/interlis-color-theme-light.json"
-    }
-  ]
+      {
+        "label": "INTERLIS Default Colors (dark)",
+        "uiTheme": "vs-dark",
+        "path": "./themes/interlis-color-theme-dark.json"
+      },
+      {
+        "label": "INTERLIS Default Colors (light)",
+        "uiTheme": "vs",
+        "path": "./themes/interlis-color-theme-light.json"
+      }
+    ]
   },
   "main": "./dist/extension.js",
   "scripts": {
-    "build": "esbuild src/extension.ts --bundle --platform=node --external:vscode --outfile=dist/extension.js",
-    "watch": "esbuild src/extension.ts --bundle --platform=node --external:vscode --outfile=dist/extension.js --watch"
+    "build": "esbuild src/extension.ts --bundle --platform=node --external:vscode --external:@eclipse-glsp/* --external:@vscode/codicons/* --loader:.css=text --loader:.ttf=file --loader:.svg=dataurl --outfile=dist/extension.js && esbuild src/glsp/interlisGlspWebview.ts --bundle --format=iife --platform=browser --external:@vscode/codicons/dist/codicon.css --outfile=dist/interlis-glsp-webview.js",
+    "watch": "esbuild src/extension.ts --bundle --platform=node --external:vscode --external:@eclipse-glsp/* --external:@vscode/codicons/* --loader:.css=text --loader:.ttf=file --loader:.svg=dataurl --outfile=dist/extension.js --watch"
   },
   "devDependencies": {
     "@types/node": "^24.5.2",
@@ -132,6 +147,14 @@
     "typescript": "^5.9.2"
   },
   "dependencies": {
-    "vscode-languageclient": "^9.0.1"
+    "@eclipse-glsp/client": "^2.5.0",
+    "@eclipse-glsp/protocol": "^2.5.0",
+    "@eclipse-glsp/vscode-integration": "^2.3.0",
+    "@eclipse-glsp/vscode-integration-webview": "^2.5.0",
+    "@vscode/codicons": "^0.0.36",
+    "inversify": "^6.2.2",
+    "reflect-metadata": "^0.2.2",
+    "vscode-languageclient": "^9.0.1",
+    "vscode-messenger": "^0.4.5"
   }
 }
