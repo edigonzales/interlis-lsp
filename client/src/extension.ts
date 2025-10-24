@@ -22,6 +22,7 @@ interface GlspResources {
 }
 
 let glspResources: GlspResources | undefined;
+let glspInitialization: Promise<GlspResources> | undefined;
 
 type PendingCaret = { version: number; position: vscode.Position };
 
@@ -130,6 +131,12 @@ export async function activate(context: vscode.ExtensionContext) {
   client = new LanguageClient("interlisLsp", "INTERLIS Language Server", serverOptions, clientOptions);
   context.subscriptions.push(client);
   await client.start();
+
+  try {
+    await ensureGlspInfrastructure(context);
+  } catch (error: any) {
+    console.error("Failed to initialize INTERLIS GLSP support", error);
+  }
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeTextDocument(event => {
@@ -410,7 +417,6 @@ export async function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand("interlis.glsp.open", async () => {
-      console.log("*************** 1");
       const editor = vscode.window.activeTextEditor;
       if (!editor) { vscode.window.showWarningMessage("Open an .ili file first."); return; }
 
@@ -421,16 +427,13 @@ export async function activate(context: vscode.ExtensionContext) {
       }
 
       try {
-        console.log("*************** 2");
         await ensureGlspInfrastructure(context);
-        console.log("*************** 3");
         await vscode.commands.executeCommand(
           "vscode.openWith",
           document.uri,
           InterlisGlspEditorProvider.viewType,
           { preview: false, viewColumn: vscode.ViewColumn.Beside }
         );
-        console.log("*************** 20");
       } catch (err: any) {
         vscode.window.showErrorMessage(`Failed to open GLSP diagram: ${err?.message ?? err}`);
       }
@@ -443,71 +446,70 @@ async function ensureGlspInfrastructure(context: vscode.ExtensionContext): Promi
     return glspResources;
   }
 
-  console.log("*************** 4");
-
-  const configuration = vscode.workspace.getConfiguration("interlisLsp");
-  const jarPath = resolveGlspJarPath(context, configuration.get<string>("glsp.jarPath"));
-  const port = configuration.get<number>("glsp.port") ?? 5050;
-  const host = "127.0.0.1";
-
-  const launcher = new GlspSocketServerLauncher({
-    executable: jarPath,
-    socketConnectionOptions: { host, port }
-  });
-
-  console.log("*************** 5");
-
-  try {
-    await launcher.start();
-  } catch (error) {
-    launcher.dispose();
-    throw error;
+  if (glspInitialization) {
+    return glspInitialization;
   }
 
-  const server = new SocketGlspVscodeServer({
-    clientId: "interlis-glsp-client",
-    clientName: "INTERLIS GLSP",
-    connectionOptions: { host, port }
-  });
+  glspInitialization = (async () => {
+    const configuration = vscode.workspace.getConfiguration("interlisLsp");
+    const jarPath = resolveGlspJarPath(context, configuration.get<string>("glsp.jarPath"));
+    const port = configuration.get<number>("glsp.port") ?? 5050;
+    const host = "127.0.0.1";
 
-  console.log("*************** 6");
-  try {
-    await server.start();
-  } catch (error) {
-    launcher.dispose();
-    throw error;
-  }
+    const launcher = new GlspSocketServerLauncher({
+      executable: jarPath,
+      socketConnectionOptions: { host, port }
+    });
 
-  console.log("*************** 7");
-
-  const connector = new GlspVscodeConnector({
-    server,
-    onBeforePropagateMessageToServer: (original, processed) => {
-      const candidate = processed ?? original;
-      return ensureRequestCarriesSourceUri(candidate);
+    try {
+      await launcher.start();
+    } catch (error) {
+      launcher.dispose();
+      throw error;
     }
-  });
 
-  console.log("*************** 8");
+    const server = new SocketGlspVscodeServer({
+      clientId: "interlis-glsp-client",
+      clientName: "INTERLIS GLSP",
+      connectionOptions: { host, port }
+    });
 
-  const provider = new InterlisGlspEditorProvider(context, connector);
+    try {
+      await server.start();
+    } catch (error) {
+      launcher.dispose();
+      throw error;
+    }
 
-  configureDefaultCommands({ extensionContext: context, diagramPrefix: "interlis.glsp", connector });
+    const connector = new GlspVscodeConnector({
+      server,
+      onBeforePropagateMessageToServer: (original, processed) => {
+        const candidate = processed ?? original;
+        return ensureRequestCarriesSourceUri(candidate);
+      }
+    });
 
-  const registration = vscode.window.registerCustomEditorProvider(
-    InterlisGlspEditorProvider.viewType,
-    provider,
-    { supportsMultipleEditorsPerDocument: true, webviewOptions: { retainContextWhenHidden: true } }
-  );
+    const provider = new InterlisGlspEditorProvider(context, connector);
 
-  console.log("*************** 9");
+    configureDefaultCommands({ extensionContext: context, diagramPrefix: "interlis.glsp", connector });
 
-  context.subscriptions.push(launcher, server, connector, registration);
+    const registration = vscode.window.registerCustomEditorProvider(
+      InterlisGlspEditorProvider.viewType,
+      provider,
+      { supportsMultipleEditorsPerDocument: true, webviewOptions: { retainContextWhenHidden: true } }
+    );
 
-  glspResources = { launcher, server, connector, provider };
+    context.subscriptions.push(launcher, server, connector, registration);
 
-  console.log("*************** 10");
-  return glspResources;
+    glspResources = { launcher, server, connector, provider };
+    return glspResources;
+  })();
+
+  try {
+    return await glspInitialization;
+  } finally {
+    glspInitialization = undefined;
+  }
 }
 
 function ensureRequestCarriesSourceUri(message: unknown): unknown {

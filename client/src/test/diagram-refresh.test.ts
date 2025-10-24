@@ -16,6 +16,11 @@ describe('diagram-refresh helpers', () => {
       expect(isInterlisDocument({ languageId: 'plaintext', uri })).to.be.true;
     });
 
+    it('accepts documents with uppercase .ILI extensions', () => {
+      const uppercase = { fsPath: '/tmp/EXAMPLE.ILI' } as unknown as vscode.Uri;
+      expect(isInterlisDocument({ languageId: 'plaintext', uri: uppercase })).to.be.true;
+    });
+
     it('rejects non-interlis documents', () => {
       const otherUri = { fsPath: '/tmp/example.txt' } as unknown as vscode.Uri;
       expect(isInterlisDocument({ languageId: 'plaintext', uri: otherUri })).to.be.false;
@@ -25,9 +30,11 @@ describe('diagram-refresh helpers', () => {
   describe('refreshDiagramForDocument', () => {
     it('dispatches a RequestModelAction for every matching client', () => {
       const dispatched: RequestModelAction[] = [];
+      const recipients: (string | undefined)[] = [];
       const dispatcher = {
-        dispatchAction: (action: unknown) => {
+        dispatchAction: (action: unknown, clientId?: string) => {
           dispatched.push(action as RequestModelAction);
+          recipients.push(clientId);
         }
       };
       const registry = {
@@ -39,6 +46,7 @@ describe('diagram-refresh helpers', () => {
 
       expect(count).to.equal(2);
       expect(dispatched).to.have.lengthOf(2);
+      expect(recipients).to.deep.equal(['a', 'b']);
       dispatched.forEach(action => {
         expect(action.kind).to.equal(RequestModelAction.KIND);
         expect(action.options).to.deep.equal({ sourceUri: 'file:///tmp/example.ili' });
