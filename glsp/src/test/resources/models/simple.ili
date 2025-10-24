@@ -1,13 +1,27 @@
 INTERLIS 2.3;
 
 MODEL SimpleModel (en) AT "http://example.org/SimpleModel" VERSION "2024-01-01" =
+  DOMAIN Status = (Draft, Published);
+
   CLASS RootClass (ABSTRACT) =
+    Identifier : MANDATORY TEXT*12;
   END RootClass;
 
   TOPIC TopicA =
-    CLASS ClassA =
+    DOMAIN Color = (Red, Green);
+
+    STRUCTURE Address =
+      Street : TEXT*80;
+    END Address;
+
+    CLASS ClassA EXTENDS RootClass =
+      Name : MANDATORY TEXT*30;
+      FavoriteColor : Color;
+    MANDATORY CONSTRAINT INTERLIS.len(Name) > 0;
     END ClassA;
+
     CLASS ClassB =
+      Status : Status;
     END ClassB;
   END TopicA;
 END SimpleModel.
