@@ -94,7 +94,11 @@ const glspOptions = {
   bundle: true,
   platform: 'browser',
   format: 'iife',
-  external: ['@vscode/codicons/dist/codicon.css'],
+  loader: {
+    '.css': 'text',
+    '.ttf': 'file',
+    '.svg': 'dataurl'
+  },
   outfile: 'dist/interlis-glsp-webview.js'
 };
 

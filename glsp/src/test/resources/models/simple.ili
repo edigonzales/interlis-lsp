@@ -1,0 +1,13 @@
+INTERLIS 2.3;
+
+MODEL SimpleModel (en) AT "http://example.org/SimpleModel" VERSION "2024-01-01" =
+  CLASS RootClass (ABSTRACT) =
+  END RootClass;
+
+  TOPIC TopicA =
+    CLASS ClassA =
+    END ClassA;
+    CLASS ClassB =
+    END ClassB;
+  END TopicA;
+END SimpleModel.

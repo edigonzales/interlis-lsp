@@ -7,6 +7,9 @@ import org.eclipse.glsp.server.features.core.model.SourceModelStorage;
 import org.eclipse.glsp.server.model.DefaultGModelState;
 import org.eclipse.glsp.server.model.GModelState;
 
+import ch.so.agi.glsp.interlis.model.InterlisDiagramService;
+import com.google.inject.Scopes;
+
 /**
  * Configures the GLSP services that build and maintain the INTERLIS class diagram.
  */
@@ -30,6 +33,12 @@ public class InterlisDiagramModule extends DiagramModule {
     @Override
     protected Class<? extends GModelState> bindGModelState() {
         return DefaultGModelState.class;
+    }
+
+    @Override
+    protected void configure() {
+        super.configure();
+        bind(InterlisDiagramService.class).in(Scopes.SINGLETON);
     }
 
     @Override
