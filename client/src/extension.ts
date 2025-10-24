@@ -580,23 +580,31 @@ class InterlisGlspEditorProvider extends GlspEditorProvider implements DiagramCl
     const scriptUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.context.extensionUri, "dist", "interlis-glsp-webview.js")
     );
-    const baseStyleUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, "media", "glsp", "glsp-vscode.css")
+    const umlStyleUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, "media", "css", "uml-sprotty.css")
     );
-    const customStyleUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, "media", "interlis-glsp.css")
+    const classIconUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, "media", "icons", "Class.gif")
     );
-    const codiconStyleUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, "media", "glsp", "codicon.css")
+    const propertyIconUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, "media", "icons", "Property.gif")
+    );
+    const enumerationIconUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, "media", "icons", "Enumeration.gif")
+    );
+    const associationIconUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, "media", "icons", "Association.gif")
     );
     const nonce = getNonce();
 
     webview.html = this.renderHtml(
       clientId,
       scriptUri,
-      baseStyleUri,
-      customStyleUri,
-      codiconStyleUri,
+      umlStyleUri,
+      classIconUri,
+      propertyIconUri,
+      enumerationIconUri,
+      associationIconUri,
       nonce,
       webview.cspSource
     );
@@ -605,9 +613,11 @@ class InterlisGlspEditorProvider extends GlspEditorProvider implements DiagramCl
   private renderHtml(
     clientId: string,
     scriptUri: vscode.Uri,
-    baseStyleUri: vscode.Uri,
-    customStyleUri: vscode.Uri,
-    codiconStyleUri: vscode.Uri,
+    umlStyleUri: vscode.Uri,
+    classIconUri: vscode.Uri,
+    propertyIconUri: vscode.Uri,
+    enumerationIconUri: vscode.Uri,
+    associationIconUri: vscode.Uri,
     nonce: string,
     cspSource: string
   ): string {
@@ -617,13 +627,42 @@ class InterlisGlspEditorProvider extends GlspEditorProvider implements DiagramCl
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource} 'unsafe-inline'; img-src ${cspSource} https: data:; script-src 'nonce-${nonce}'; font-src ${cspSource} https: data:;">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet" href="${codiconStyleUri}">
-  <link rel="stylesheet" href="${baseStyleUri}">
-  <link rel="stylesheet" href="${customStyleUri}">
+  <link rel="stylesheet" href="${umlStyleUri}">
   <title>INTERLIS GLSP Diagram</title>
+  <style nonce="${nonce}">
+    html, body { height: 100%; }
+    body { margin: 0; background-color: transparent; }
+    .glsp-container { width: 100%; height: 100%; display: flex; flex-direction: column; }
+    .glsp-container svg { flex: 1; }
+    .glsp-container.uml-theme {
+      --uml-class-icon: url('${classIconUri}');
+      --uml-property-icon: url('${propertyIconUri}');
+      --uml-enumeration-icon: url('${enumerationIconUri}');
+      --uml-association-icon: url('${associationIconUri}');
+    }
+  </style>
 </head>
 <body>
-  <div id="${clientId}_container" class="glsp-container"></div>
+  <div id="${clientId}_container" class="glsp-container uml-theme"></div>
+  <script nonce="${nonce}">
+    (function() {
+      const container = document.getElementById('${clientId}_container');
+      if (!container) { return; }
+      const applyTheme = () => {
+        const body = document.body;
+        container.classList.remove('uml-light-theme', 'uml-dark-theme');
+        if (body.classList.contains('vscode-dark') || body.classList.contains('vscode-high-contrast')) {
+          container.classList.add('uml-dark-theme');
+        } else {
+          container.classList.add('uml-light-theme');
+        }
+      };
+      const observer = new MutationObserver(applyTheme);
+      observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+      applyTheme();
+      window.addEventListener('unload', () => observer.disconnect());
+    })();
+  </script>
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;
