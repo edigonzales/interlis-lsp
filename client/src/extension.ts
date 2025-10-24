@@ -5,6 +5,7 @@ import { LanguageClient, LanguageClientOptions, Executable, ServerOptions, State
 import { GlspEditorProvider, GlspVscodeConnector, configureDefaultCommands } from "@eclipse-glsp/vscode-integration";
 import { GlspSocketServerLauncher, SocketGlspVscodeServer } from "@eclipse-glsp/vscode-integration/node";
 import { ActionMessage, RequestModelAction } from "@eclipse-glsp/protocol";
+import { isInterlisDocument, refreshDiagramForDocument, type DiagramClientRegistry } from "./glsp/diagram-refresh";
 
 let client: LanguageClient | undefined;
 let revealOutputOnNextLog = false;
@@ -153,6 +154,20 @@ export async function activate(context: vscode.ExtensionContext) {
       const selection = new vscode.Selection(position, position);
       active.selection = selection;
       active.revealRange(new vscode.Range(position, position));
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.workspace.onDidSaveTextDocument(document => {
+      if (!glspResources) {
+        return;
+      }
+
+      if (!isInterlisDocument(document)) {
+        return;
+      }
+
+      refreshDiagramForDocument(glspResources.connector, glspResources.provider, document.uri);
     })
   );
 
@@ -400,8 +415,7 @@ export async function activate(context: vscode.ExtensionContext) {
       if (!editor) { vscode.window.showWarningMessage("Open an .ili file first."); return; }
 
       const document = editor.document;
-      const isInterlis = document.languageId === "interlis" || document.uri.fsPath.toLowerCase().endsWith(".ili");
-      if (!isInterlis) {
+      if (!isInterlisDocument(document)) {
         vscode.window.showWarningMessage("INTERLIS GLSP diagrams are only available for .ili files.");
         return;
       }
@@ -512,7 +526,7 @@ function ensureRequestCarriesSourceUri(message: unknown): unknown {
   return message;
 }
 
-class InterlisGlspEditorProvider extends GlspEditorProvider {
+class InterlisGlspEditorProvider extends GlspEditorProvider implements DiagramClientRegistry {
   public static readonly viewType = "interlis.glsp.diagram";
 
   private readonly context: vscode.ExtensionContext;
@@ -529,6 +543,17 @@ class InterlisGlspEditorProvider extends GlspEditorProvider {
 
   getDocumentUri(clientId: string): vscode.Uri | undefined {
     return this.clientDocuments.get(clientId);
+  }
+
+  public getClientIdsForDocument(documentUri: vscode.Uri): readonly string[] {
+    const target = documentUri.toString();
+    const matches: string[] = [];
+    for (const [clientId, uri] of this.clientDocuments.entries()) {
+      if (uri.toString() === target) {
+        matches.push(clientId);
+      }
+    }
+    return matches;
   }
 
   public setUpWebview(
