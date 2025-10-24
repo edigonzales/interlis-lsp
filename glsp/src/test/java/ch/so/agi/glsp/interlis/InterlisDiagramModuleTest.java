@@ -21,9 +21,23 @@ class InterlisDiagramModuleTest {
 
         List<ShapeTypeHint> shapeHints = configuration.getShapeTypeHints();
 
-        assertEquals(1, shapeHints.size());
-        assertEquals(InterlisGlspTypes.CLASS_NODE_TYPE, shapeHints.get(0).getElementTypeId());
-        assertTrue(configuration.getEdgeTypeHints().isEmpty());
+        assertEquals(4, shapeHints.size());
+        assertTrue(shapeHints.stream()
+            .map(ShapeTypeHint::getElementTypeId)
+            .toList()
+            .containsAll(List.of(
+                InterlisGlspTypes.CLASS_NODE_TYPE,
+                InterlisGlspTypes.STRUCTURE_NODE_TYPE,
+                InterlisGlspTypes.VIEW_NODE_TYPE,
+                InterlisGlspTypes.ENUMERATION_NODE_TYPE)));
+
+        assertEquals(2, configuration.getEdgeTypeHints().size());
+        assertTrue(configuration.getEdgeTypeHints().stream()
+            .map(edgeHint -> edgeHint.getElementTypeId())
+            .toList()
+            .containsAll(List.of(
+                InterlisGlspTypes.INHERITANCE_EDGE_TYPE,
+                InterlisGlspTypes.ASSOCIATION_EDGE_TYPE)));
     }
 
     @Test
