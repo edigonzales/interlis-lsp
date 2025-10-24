@@ -28,12 +28,18 @@ public class InterlisDiagramConfiguration implements DiagramConfiguration {
 
     @Override
     public List<ShapeTypeHint> getShapeTypeHints() {
-        return List.of(createDefaultShapeTypeHint(InterlisGlspTypes.CLASS_NODE_TYPE));
+        return List.of(
+            createDefaultShapeTypeHint(InterlisGlspTypes.CLASS_NODE_TYPE),
+            createDefaultShapeTypeHint(InterlisGlspTypes.STRUCTURE_NODE_TYPE),
+            createDefaultShapeTypeHint(InterlisGlspTypes.VIEW_NODE_TYPE),
+            createDefaultShapeTypeHint(InterlisGlspTypes.ENUMERATION_NODE_TYPE));
     }
 
     @Override
     public List<EdgeTypeHint> getEdgeTypeHints() {
-        return List.of();
+        return List.of(
+            new EdgeTypeHint(InterlisGlspTypes.INHERITANCE_EDGE_TYPE, false, false, false, List.of(), List.of()),
+            new EdgeTypeHint(InterlisGlspTypes.ASSOCIATION_EDGE_TYPE, false, false, false, List.of(), List.of()));
     }
 
     @Override
