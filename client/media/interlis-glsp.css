@@ -48,7 +48,7 @@ svg {
   flex: 1;
 }
 
-.sprotty-node.interlis-topic > rect {
+.interlis-node.interlis-topic > rect {
   fill: var(--interlis-topic-fill);
   stroke: var(--interlis-topic-border);
   stroke-width: 1.1px;
@@ -57,10 +57,10 @@ svg {
   filter: var(--interlis-drop-shadow);
 }
 
-.sprotty-node.interlis-class > rect,
-.sprotty-node.interlis-structure > rect,
-.sprotty-node.interlis-view > rect,
-.sprotty-node.interlis-enumeration > rect {
+.interlis-node.interlis-class > rect,
+.interlis-node.interlis-structure > rect,
+.interlis-node.interlis-view > rect,
+.interlis-node.interlis-enumeration > rect {
   fill: var(--interlis-node-fill);
   stroke: var(--interlis-node-border);
   stroke-width: 1.2px;
@@ -69,7 +69,7 @@ svg {
   filter: var(--interlis-drop-shadow);
 }
 
-.sprotty-node.interlis-enumeration > rect {
+.interlis-node.interlis-enumeration > rect {
   fill: var(--interlis-enumeration-fill);
 }
 

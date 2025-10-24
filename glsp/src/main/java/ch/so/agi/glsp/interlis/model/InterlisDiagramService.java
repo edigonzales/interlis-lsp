@@ -157,6 +157,7 @@ public class InterlisDiagramService {
         GNodeBuilder builder = new GNodeBuilder()
             .id(topic.id())
             .type(InterlisGlspTypes.TOPIC_NODE_TYPE)
+            .addCssClass(InterlisGlspTypes.CSS_NODE_BASE)
             .addCssClass(InterlisGlspTypes.CSS_TOPIC_NODE)
             .layout(GConstants.Layout.VBOX)
             .position(x, y)
@@ -209,6 +210,7 @@ public class InterlisDiagramService {
         GNodeBuilder builder = new GNodeBuilder()
             .id(info.id())
             .type(info.kind().nodeType())
+            .addCssClass(InterlisGlspTypes.CSS_NODE_BASE)
             .addCssClass(info.kind().cssClass())
             .layout(GConstants.Layout.VBOX)
             .size(CLASS_NODE_WIDTH, CLASS_NODE_HEIGHT);

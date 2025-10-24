@@ -34,6 +34,9 @@ class InterlisDiagramServiceTest {
         GNode modelTopic = findTopicNode(graph, "SimpleModel");
         GNode topicATopic = findTopicNode(graph, "SimpleModel::TopicA");
 
+        assertTrue(modelTopic.getCssClasses().contains(InterlisGlspTypes.CSS_NODE_BASE));
+        assertTrue(topicATopic.getCssClasses().contains(InterlisGlspTypes.CSS_NODE_BASE));
+
         List<GNode> modelChildren = topicContentNodes(modelTopic);
         Set<String> modelNames = modelChildren.stream()
             .map(node -> findLabelText(node, InterlisGlspTypes.NAME_LABEL_TYPE).orElse(""))
@@ -41,6 +44,9 @@ class InterlisDiagramServiceTest {
         assertEquals(Set.of("RootClass", "Status"), modelNames);
 
         GNode rootClassNode = findNodeByName(modelChildren, "RootClass");
+        assertTrue(rootClassNode.getCssClasses().containsAll(List.of(
+            InterlisGlspTypes.CSS_NODE_BASE,
+            InterlisGlspTypes.CSS_CLASS_NODE)));
         List<String> rootClassLabels = collectLabels(rootClassNode).stream()
             .map(GLabel::getText)
             .toList();

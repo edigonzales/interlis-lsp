@@ -27,6 +27,7 @@ public final class InterlisGlspTypes {
     public static final String CONSTRAINT_LABEL_TYPE = "label:interlis-constraint";
     public static final String ENUMERATION_LITERAL_LABEL_TYPE = "label:interlis-enumeration-literal";
 
+    public static final String CSS_NODE_BASE = "interlis-node";
     public static final String CSS_TOPIC_NODE = "interlis-topic";
     public static final String CSS_CLASS_NODE = "interlis-class";
     public static final String CSS_STRUCTURE_NODE = "interlis-structure";

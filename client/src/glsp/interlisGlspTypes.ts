@@ -18,6 +18,7 @@ export const InterlisGlspTypes = {
   attributeLabelType: "label:interlis-attribute",
   constraintLabelType: "label:interlis-constraint",
   enumerationLiteralLabelType: "label:interlis-enumeration-literal",
+  cssNodeBase: "interlis-node",
   cssTopicNode: "interlis-topic",
   cssClassNode: "interlis-class",
   cssStructureNode: "interlis-structure",
