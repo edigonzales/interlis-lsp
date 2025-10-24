@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.eclipse.glsp.server.diagram.DiagramConfiguration;
 import org.eclipse.glsp.server.features.core.model.GModelFactory;
@@ -16,13 +18,21 @@ import org.junit.jupiter.api.Test;
 class InterlisDiagramModuleTest {
 
     @Test
-    void configurationProvidesClassShapeHint() {
+    void configurationProvidesShapeHintsForInterlisTypes() {
         DiagramConfiguration configuration = new InterlisDiagramConfiguration();
 
         List<ShapeTypeHint> shapeHints = configuration.getShapeTypeHints();
 
-        assertEquals(1, shapeHints.size());
-        assertEquals(InterlisGlspTypes.CLASS_NODE_TYPE, shapeHints.get(0).getElementTypeId());
+        assertEquals(5, shapeHints.size());
+        Set<String> hintTypes = shapeHints.stream()
+            .map(ShapeTypeHint::getElementTypeId)
+            .collect(Collectors.toSet());
+
+        assertTrue(hintTypes.contains(InterlisGlspTypes.TOPIC_NODE_TYPE));
+        assertTrue(hintTypes.contains(InterlisGlspTypes.CLASS_NODE_TYPE));
+        assertTrue(hintTypes.contains(InterlisGlspTypes.STRUCTURE_NODE_TYPE));
+        assertTrue(hintTypes.contains(InterlisGlspTypes.VIEW_NODE_TYPE));
+        assertTrue(hintTypes.contains(InterlisGlspTypes.ENUMERATION_NODE_TYPE));
         assertTrue(configuration.getEdgeTypeHints().isEmpty());
     }
 
