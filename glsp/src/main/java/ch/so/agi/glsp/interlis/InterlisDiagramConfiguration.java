@@ -28,7 +28,7 @@ public class InterlisDiagramConfiguration implements DiagramConfiguration {
 
     @Override
     public List<ShapeTypeHint> getShapeTypeHints() {
-        return List.of(createDefaultShapeTypeHint(InterlisGlspTypes.CLASS_NODE_TYPE));
+        return List.of(createDefaultShapeTypeHint(InterlisGlspTypes.NODE_TYPE_VIEWABLE));
     }
 
     @Override
