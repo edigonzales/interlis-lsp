@@ -22,7 +22,7 @@ class InterlisDiagramModuleTest {
         List<ShapeTypeHint> shapeHints = configuration.getShapeTypeHints();
 
         assertEquals(1, shapeHints.size());
-        assertEquals(InterlisGlspTypes.CLASS_NODE_TYPE, shapeHints.get(0).getElementTypeId());
+        assertEquals(InterlisGlspTypes.NODE_TYPE_VIEWABLE, shapeHints.get(0).getElementTypeId());
         assertTrue(configuration.getEdgeTypeHints().isEmpty());
     }
 
