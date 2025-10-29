@@ -106,4 +106,47 @@ class CommandHandlersTest {
         assertEquals(ResponseErrorCode.InternalError.getValue(), ree.getResponseError().getCode());
         assertTrue(ree.getMessage().contains(nonexistent.getFileName().toString()));
     }
+
+    @Test
+    void exportGraphmlReturnsGraphmlFromModel() throws Exception {
+        Path iliFile = tempDir.resolve("GraphExport.ili");
+        Files.writeString(iliFile, "INTERLIS 2.3;\n" +
+                "MODEL GraphExport (en)\n" +
+                "AT \"http://example.com/GraphExport.ili\"\n" +
+                "VERSION \"2024-01-01\" =\n" +
+                "  TOPIC TopicX =\n" +
+                "    CLASS Thing =\n" +
+                "      name : TEXT;\n" +
+                "    END Thing;\n" +
+                "  END TopicX;\n" +
+                "END GraphExport.\n");
+
+        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(new ClientSettings(), iliFile.toString());
+        assertNotNull(outcome.getTransferDescription(), outcome.getLogText());
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        CommandHandlers handlers = new CommandHandlers(server);
+
+        CompletableFuture<String> future = handlers.exportGraphml(iliFile.toString());
+        String graphml = future.get(30, TimeUnit.SECONDS);
+
+        assertTrue(graphml.startsWith("<?xml version=\"1.0\""));
+        assertTrue(graphml.contains("Thing"));
+        assertTrue(graphml.contains("graphml"));
+    }
+
+    @Test
+    void exportGraphmlFailsWithResponseErrorWhenCompilationFails() {
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        CommandHandlers handlers = new CommandHandlers(server);
+
+        Path nonexistent = tempDir.resolve("MissingGraph.ili");
+        CompletableFuture<String> future = handlers.exportGraphml(nonexistent.toUri().toString());
+
+        ExecutionException exec = assertThrows(ExecutionException.class, () -> future.get(30, TimeUnit.SECONDS));
+        Throwable cause = exec.getCause();
+        ResponseErrorException ree = assertInstanceOf(ResponseErrorException.class, cause);
+        assertEquals(ResponseErrorCode.InternalError.getValue(), ree.getResponseError().getCode());
+        assertTrue(ree.getMessage().contains(nonexistent.getFileName().toString()));
+    }
 }
