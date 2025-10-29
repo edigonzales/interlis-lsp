@@ -171,6 +171,36 @@ public class CommandHandlers {
         }
     }
 
+    public CompletableFuture<String> exportGraphml(String fileUriOrPath) {
+        if (server.getClient() != null) {
+            server.getClient().logMessage(new MessageParams(
+                MessageType.Log, "exportGraphml called for " + fileUriOrPath));
+        }
+
+        String filesystemPath = InterlisTextDocumentService.toFilesystemPathIfPossible(fileUriOrPath);
+
+        ClientSettings cfg = server.getClientSettings();
+        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(cfg, filesystemPath);
+        List<Diagnostic> diagnostics = DiagnosticsMapper.toDiagnostics(outcome.getMessages());
+        server.publishDiagnostics(fileUriOrPath, diagnostics);
+        server.clearOutput();
+        server.logToClient(outcome.getLogText());
+
+        String displayPath = firstNonBlank(filesystemPath, fileUriOrPath);
+
+        TransferDescription td = outcome.getTransferDescription();
+        if (td == null) {
+            return CompletableFuture.failedFuture(compilerFailure(displayPath, outcome));
+        }
+
+        try {
+            String graphml = Ili2GraphML.render(td);
+            return CompletableFuture.completedFuture(graphml);
+        } catch (Exception e) {
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+
     private static String firstNonBlank(String a, String b) {
         if (a != null && !a.isBlank()) {
             return a;
