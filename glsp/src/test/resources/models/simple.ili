@@ -1,0 +1,34 @@
+INTERLIS 2.3;
+
+MODEL SimpleModel (en) AT "http://example.org/SimpleModel" VERSION "2024-01-01" =
+  DOMAIN
+    Color = (red, green, blue);
+
+  CLASS RootClass (ABSTRACT) =
+    Identifier : TEXT*20;
+    Count : 1 .. 5;
+    MANDATORY CONSTRAINT Count >= 1;
+  END RootClass;
+
+  TOPIC TopicA =
+    STRUCTURE Address =
+      Street : MANDATORY TEXT*80;
+    END Address;
+
+    CLASS ClassB =
+      Shade : Color;
+    END ClassB;
+
+    CLASS ClassA EXTENDS RootClass =
+      Name : MANDATORY TEXT*80;
+      Location : Address;
+    MANDATORY CONSTRAINT DEFINED (Location);
+    END ClassA;
+
+    ASSOCIATION A2B =
+      a -- {0..*} ClassA;
+      b -- {1} ClassB;
+    END A2B;
+
+  END TopicA;
+END SimpleModel.
