@@ -1,0 +1,23 @@
+INTERLIS 2.3;
+
+MODEL SimpleModel (en) AT "http://example.org/SimpleModel" VERSION "2024-01-01" =
+  DOMAIN Status = (Pending, Active, Closed);
+
+  CLASS RootClass (ABSTRACT) =
+    Identifier : TEXT*12;
+    status : Status;
+    MANDATORY CONSTRAINT status == #Active;
+  END RootClass;
+
+  TOPIC TopicA =
+    CLASS ClassA EXTENDS RootClass =
+      attrA : TEXT*20;
+    END ClassA;
+
+    STRUCTURE HelperStruct =
+      helper : MANDATORY TEXT*20;
+    END HelperStruct;
+
+    DOMAIN Category = (A, B, C);
+  END TopicA;
+END SimpleModel.

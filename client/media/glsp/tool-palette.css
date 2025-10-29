@@ -1,0 +1,80 @@
+/********************************************************************************
+ * Copyright (c) 2020-2022 EclipseSource and others.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License v. 2.0 which is available at
+ * http://www.eclipse.org/legal/epl-2.0.
+ *
+ * This Source Code may also be made available under the following Secondary
+ * Licenses when the conditions for such availability set forth in the Eclipse
+ * Public License v. 2.0 are satisfied: GNU General Public License, version 2
+ * with the GNU Classpath Exception which is available at
+ * https://www.gnu.org/software/classpath/license.html.
+ *
+ * SPDX-License-Identifier: EPL-2.0 OR GPL-2.0 WITH Classpath-exception-2.0
+ ********************************************************************************/
+
+.tool-palette {
+    box-shadow: 0px 1px 6px var(--vscode-widget-shadow);
+    font-size: var(--vscode-ui-font-size1);
+}
+
+.tool-palette :focus-visible {
+    outline: none;
+}
+
+.tool-group {
+    background: var(--vscode-settings-dropdownBackground);
+}
+
+.tool-palette .palette-header {
+    background: var(--vscode-settings-dropdownBackground);
+    color: var(--vscode-titleBar-activeForeground);
+    border: 0;
+    box-shadow: none;
+    border-top: 2px solid var(--vscode-focusBorder);
+}
+
+.tool-palette .palette-header .header-tools i {
+    border: none;
+}
+
+.tool-palette .palette-header .header-tools i:hover:not(.clicked) {
+    background: var(--vscode-menubar-selectionBackground);
+}
+
+.tool-palette .palette-header .header-tools .clicked {
+    background: var(--vscode-inputOption-activeBackground);
+}
+
+.tool-palette .palette-body {
+    border: 0;
+    box-shadow: none;
+    background: var(--vscode-list-focusBackground);
+    color: var(--vscode-titleBar-activeForeground);
+}
+
+.tool-palette .palette-body .group-header {
+    background: var(--vscode-editorHoverWidget-statusBarBackground);
+    color: var(--vscode-titleBar-activeForeground);
+    border: 0;
+}
+
+.tool-button {
+    background: var(--vscode-settings-dropdownBackground);
+    color: var(--vscode-titleBar-activeForeground);
+}
+
+.tool-palette .palette-body .tool-button:hover:not(.clicked) {
+    background: var(--vscode-menubar-selectionBackground);
+}
+
+.tool-palette .tool-button.clicked {
+    background: var(--vscode-inputOption-activeBackground);
+}
+
+.search-input {
+    background: var(--vscode-input-background);
+    color: var(--vscode-input-foreground);
+    border: var(--vscode-border-width) solid var(--vscode-input-border);
+}
