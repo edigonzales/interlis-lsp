@@ -78,12 +78,61 @@ class CommandHandlersTest {
     }
 
     @Test
+    void exportGraphmlReturnsDiagramText() throws Exception {
+        Path iliFile = tempDir.resolve("SimpleGraph.ili");
+        Files.writeString(iliFile, "INTERLIS 2.3;\n" +
+                "MODEL SimpleGraph (en)\n" +
+                "AT \"http://example.com/SimpleGraph.ili\"\n" +
+                "VERSION \"2024-01-01\" =\n" +
+                "  TOPIC SimpleTopic =\n" +
+                "    CLASS NodeA =\n" +
+                "    END NodeA;\n" +
+                "    CLASS NodeB =\n" +
+                "    END NodeB;\n" +
+                "    ASSOCIATION Connects =\n" +
+                "      a -- {0..*} NodeA;\n" +
+                "      b -- {1} NodeB;\n" +
+                "    END Connects;\n" +
+                "  END SimpleTopic;\n" +
+                "END SimpleGraph.\n");
+
+        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(new ClientSettings(), iliFile.toString());
+        assertNotNull(outcome.getTransferDescription(), outcome.getLogText());
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        CommandHandlers handlers = new CommandHandlers(server);
+
+        CompletableFuture<String> future = handlers.exportGraphml(iliFile.toString());
+        String graphml = future.get(30, TimeUnit.SECONDS);
+
+        assertNotNull(graphml);
+        assertTrue(graphml.contains("<graphml"));
+        assertTrue(graphml.contains("NodeA"));
+        assertTrue(graphml.contains("NodeB"));
+    }
+
+    @Test
     void exportDocxFailsWithResponseErrorWhenCompilationFails() {
         InterlisLanguageServer server = new InterlisLanguageServer();
         CommandHandlers handlers = new CommandHandlers(server);
 
         Path nonexistent = tempDir.resolve("Missing.ili");
         CompletableFuture<String> future = handlers.exportDocx(nonexistent.toUri().toString(), null);
+
+        ExecutionException exec = assertThrows(ExecutionException.class, () -> future.get(30, TimeUnit.SECONDS));
+        Throwable cause = exec.getCause();
+        ResponseErrorException ree = assertInstanceOf(ResponseErrorException.class, cause);
+        assertEquals(ResponseErrorCode.InternalError.getValue(), ree.getResponseError().getCode());
+        assertTrue(ree.getMessage().contains(nonexistent.getFileName().toString()));
+    }
+
+    @Test
+    void exportGraphmlFailsWithResponseErrorWhenCompilationFails() {
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        CommandHandlers handlers = new CommandHandlers(server);
+
+        Path nonexistent = tempDir.resolve("MissingGraph.ili");
+        CompletableFuture<String> future = handlers.exportGraphml(nonexistent.toUri().toString());
 
         ExecutionException exec = assertThrows(ExecutionException.class, () -> future.get(30, TimeUnit.SECONDS));
         Throwable cause = exec.getCause();

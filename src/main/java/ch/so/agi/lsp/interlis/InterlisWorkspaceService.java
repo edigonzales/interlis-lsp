@@ -76,6 +76,23 @@ public class InterlisWorkspaceService implements WorkspaceService {
         return CompletableFuture.completedFuture(null);
     }
 
+    @JsonRequest(InterlisLanguageServer.REQ_EXPORT_GRAPHML)
+    public CompletableFuture<String> exportGraphml(Object rawParams) {
+        DocumentExportParams params = coerceExportParams(rawParams);
+        if (params == null) {
+            return invalidParams("Expected parameters with uri or path");
+        }
+
+        String candidate = firstNonBlank(params.getPath(), params.getUri());
+        String normalized = normalizePath(candidate);
+        if (normalized == null) {
+            return invalidParams("Expected uri or path to be provided");
+        }
+
+        LOG.info("graphml export called with: {}", normalized);
+        return handlers.exportGraphml(normalized);
+    }
+
     @JsonRequest(InterlisLanguageServer.REQ_EXPORT_DOCX)
     public CompletableFuture<String> exportDocx(Object rawParams) {
         DocumentExportParams params = coerceExportParams(rawParams);

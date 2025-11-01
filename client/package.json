@@ -72,6 +72,10 @@
         "title": "INTERLIS: Show documentation as HTML"
       },
       {
+        "command": "interlis.graphml.export",
+        "title": "INTERLIS: Export UML as GraphML"
+      },
+      {
         "command": "interlis.docx.export",
         "title": "INTERLIS: Export documentation as DOCX"
       }
