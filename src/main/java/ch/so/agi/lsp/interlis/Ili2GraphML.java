@@ -47,13 +47,7 @@ public final class Ili2GraphML {
                 if ("<root>".equals(ns.label)) {
                     return;
                 }
-                sb.append("    <!-- Namespace: ").append(escapeXml(ns.label)).append(" -->\n");
-                for (String fqn : ns.nodeOrder) {
-                    Node node = d.nodes.get(fqn);
-                    if (node != null && !nodeIds.containsKey(node.fqn)) {
-                        appendNode(sb, node, ns.label);
-                    }
-                }
+                appendTopicGroup(sb, d, ns);
             });
 
             Namespace root = d.namespaces.get("<root>");
@@ -64,7 +58,7 @@ public final class Ili2GraphML {
                 for (String fqn : root.nodeOrder) {
                     Node node = d.nodes.get(fqn);
                     if (node != null && !nodeIds.containsKey(node.fqn)) {
-                        appendNode(sb, node, "<root>");
+                        appendNode(sb, node, "    ");
                     }
                 }
             }
@@ -72,7 +66,7 @@ public final class Ili2GraphML {
             // Ensure all nodes are emitted even if not referenced in namespaces (safety net)
             d.nodes.values().forEach(node -> {
                 if (!nodeIds.containsKey(node.fqn)) {
-                    appendNode(sb, node, "<root>");
+                    appendNode(sb, node, "    ");
                 }
             });
 
@@ -88,16 +82,54 @@ public final class Ili2GraphML {
             return sb.toString();
         }
 
-        private void appendNode(StringBuilder sb, Node node, String namespaceLabel) {
+        private void appendTopicGroup(StringBuilder sb, Diagram d, Namespace ns) {
+            String groupId = nextNodeId();
+            String topicLabel = topicName(ns.label);
+
+            sb.append("    <node id=\"").append(groupId).append("\" yfiles.foldertype=\"group\">\n");
+            sb.append("      <data key=\"d0\">\n");
+            sb.append("        <y:GroupNode>\n");
+            sb.append("          <y:Geometry height=\"400.0\" width=\"400.0\" x=\"0.0\" y=\"0.0\"/>\n");
+            sb.append("          <y:Fill color=\"#FFFFFF\" transparent=\"false\"/>\n");
+            sb.append("          <y:BorderStyle color=\"#000000\" type=\"line\" width=\"1.0\"/>\n");
+            sb.append("          <y:NodeLabel alignment=\"center\" autoSizePolicy=\"content\" fontFamily=\"Dialog\" fontSize=\"13\" fontStyle=\"bold\" hasBackgroundColor=\"false\" hasLineColor=\"false\" modelName=\"internal\" modelPosition=\"t\" visible=\"true\">")
+                    .append(escapeXml(topicLabel)).append("</y:NodeLabel>\n");
+            sb.append("          <y:State closed=\"false\"/>\n");
+            sb.append("          <y:Insets bottom=\"15\" left=\"15\" right=\"15\" top=\"45\"/>\n");
+            sb.append("        </y:GroupNode>\n");
+            sb.append("      </data>\n");
+            sb.append("      <graph edgedefault=\"directed\" id=\"").append(groupId).append(":\">\n");
+
+            for (String fqn : ns.nodeOrder) {
+                Node node = d.nodes.get(fqn);
+                if (node != null && !nodeIds.containsKey(node.fqn)) {
+                    appendNode(sb, node, "        ");
+                }
+            }
+
+            sb.append("      </graph>\n");
+            sb.append("    </node>\n");
+        }
+
+        private String nextNodeId() {
+            return "n" + (nodeCounter++);
+        }
+
+        private static String topicName(String namespaceLabel) {
+            int idx = namespaceLabel.indexOf("::");
+            return idx >= 0 ? namespaceLabel.substring(idx + 2) : namespaceLabel;
+        }
+
+        private void appendNode(StringBuilder sb, Node node, String indent) {
             String id = nodeIds.computeIfAbsent(node.fqn, k -> "n" + (nodeCounter++));
 
-            sb.append("    <node id=\"").append(id).append("\">\n");
-            sb.append("      <data key=\"d0\">\n");
-            sb.append("        <y:UMLClassNode>\n");
-            sb.append("          <y:Geometry height=\"120.0\" width=\"180.0\" x=\"0.0\" y=\"0.0\"/>\n");
-            sb.append("          <y:Fill color=\"").append(determineFillColor(node)).append("\" transparent=\"false\"/>\n");
-            sb.append("          <y:BorderStyle color=\"#000000\" type=\"line\" width=\"1.0\"/>\n");
-            sb.append("          <y:NodeLabel alignment=\"center\" autoSizePolicy=\"content\" fontFamily=\"Dialog\" fontSize=\"12\" fontStyle=\"plain\" hasBackgroundColor=\"false\" hasLineColor=\"false\" modelName=\"sandwich\" modelPosition=\"n\" visible=\"true\">")
+            sb.append(indent).append("<node id=\"").append(id).append("\">\n");
+            sb.append(indent).append("  <data key=\"d0\">\n");
+            sb.append(indent).append("    <y:UMLClassNode>\n");
+            sb.append(indent).append("      <y:Geometry height=\"120.0\" width=\"180.0\" x=\"0.0\" y=\"0.0\"/>\n");
+            sb.append(indent).append("      <y:Fill color=\"").append(determineFillColor(node)).append("\" transparent=\"false\"/>\n");
+            sb.append(indent).append("      <y:BorderStyle color=\"#000000\" type=\"line\" width=\"1.0\"/>\n");
+            sb.append(indent).append("      <y:NodeLabel alignment=\"center\" autoSizePolicy=\"content\" fontFamily=\"Dialog\" fontSize=\"12\" fontStyle=\"plain\" hasBackgroundColor=\"false\" hasLineColor=\"false\" modelName=\"sandwich\" modelPosition=\"n\" visible=\"true\">")
                     .append(escapeXml(node.displayName)).append("</y:NodeLabel>\n");
 
             String stereotypeText = formatStereotypes(node.stereotypes);
@@ -105,15 +137,15 @@ public final class Ili2GraphML {
             String attributesText = joinWithNewlines(node.attributes);
             String methodsText = joinWithNewlines(node.methods);
 
-            sb.append("          <y:UML clipContent=\"true\" constraint=\"")
+            sb.append(indent).append("      <y:UML clipContent=\"true\" constraint=\"")
                     .append(escapeXml(constraintText)).append("\" omitDetails=\"false\" stereotype=\"")
                     .append(escapeXml(stereotypeText)).append("\" use3DEffect=\"false\">\n");
-            sb.append("            <y:AttributeLabel>").append(escapeXml(attributesText)).append("</y:AttributeLabel>\n");
-            sb.append("            <y:MethodLabel>").append(escapeXml(methodsText)).append("</y:MethodLabel>\n");
-            sb.append("          </y:UML>\n");
-            sb.append("        </y:UMLClassNode>\n");
-            sb.append("      </data>\n");
-            sb.append("    </node>\n");
+            sb.append(indent).append("        <y:AttributeLabel>").append(escapeXml(attributesText)).append("</y:AttributeLabel>\n");
+            sb.append(indent).append("        <y:MethodLabel>").append(escapeXml(methodsText)).append("</y:MethodLabel>\n");
+            sb.append(indent).append("      </y:UML>\n");
+            sb.append(indent).append("    </y:UMLClassNode>\n");
+            sb.append(indent).append("  </data>\n");
+            sb.append(indent).append("</node>\n");
         }
 
         private void appendInheritance(StringBuilder sb, Inheritance inheritance) {
@@ -161,15 +193,15 @@ public final class Ili2GraphML {
 
         private static String determineFillColor(Node node) {
             if (node.stereotypes.contains("Enumeration")) {
-                return "#EB937E";
+                return "#ff9933";
             }
             if (node.stereotypes.contains("Structure")) {
-                return "#f7f8fa";
+                return "#ffcc00";
             }
             if (node.stereotypes.contains("Abstract")) {
-                return "#A9DDDF";
+                return "#99ccff";
             }
-            return "#add1b4";
+            return "#04b889";
         }
 
         private static String formatStereotypes(Set<String> stereotypes) {
