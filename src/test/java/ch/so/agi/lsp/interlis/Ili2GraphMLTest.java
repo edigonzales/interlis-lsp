@@ -1,5 +1,6 @@
 package ch.so.agi.lsp.interlis;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -23,16 +24,19 @@ class Ili2GraphMLTest {
                 "MODEL GraphModel (en)\n" +
                 "AT \"http://example.com/GraphModel.ili\"\n" +
                 "VERSION \"2024-01-01\" =\n" +
-                "  TOPIC Demo =\n" +
+                "  TOPIC Demo (ABSTRACT) =\n" +
                 "    STRUCTURE Address =\n" +
                 "      Street : TEXT*40;\n" +
                 "    END Address;\n" +
                 "    CLASS Person =\n" +
                 "      Name : MANDATORY TEXT*40;\n" +
                 "      Home : Address;\n" +
+                "      MANDATORY CONSTRAINT Name <> \"\";\n" +
                 "    END Person;\n" +
                 "    CLASS Employee EXTENDS Person =\n" +
                 "    END Employee;\n" +
+                "    CLASS AbstractThing (ABSTRACT) =\n" +
+                "    END AbstractThing;\n" +
                 "    CLASS Company =\n" +
                 "      Title : TEXT*80;\n" +
                 "    END Company;\n" +
@@ -53,10 +57,17 @@ class Ili2GraphMLTest {
         assertTrue(graphml.contains("<graphml"));
         assertTrue(graphml.contains("Person"));
         assertTrue(graphml.contains("Address"));
-        assertTrue(graphml.contains("&lt;&lt;Structure&gt;&gt;"));
+        assertTrue(graphml.contains("Structure"));
+        assertFalse(graphml.contains("&lt;&lt;Structure&gt;&gt;"));
         assertTrue(graphml.contains("Name[1] : String"));
+        assertTrue(graphml.contains("Constraint1()"));
         assertTrue(graphml.contains("0..* ⟷ 1"));
         assertTrue(graphml.contains("worker–employer"));
+        assertTrue(graphml.contains("color=\"#f7f8fa\""));
+        assertTrue(graphml.contains("color=\"#add1b4\""));
+        assertTrue(graphml.contains("color=\"#A9DDDF\""));
+        assertTrue(graphml.contains("constraint=\"abstract\""));
+        assertTrue(graphml.contains("constraint=\"\""));
     }
 }
 

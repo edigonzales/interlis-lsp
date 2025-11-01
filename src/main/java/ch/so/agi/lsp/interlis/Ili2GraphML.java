@@ -95,13 +95,13 @@ public final class Ili2GraphML {
             sb.append("      <data key=\"d0\">\n");
             sb.append("        <y:UMLClassNode>\n");
             sb.append("          <y:Geometry height=\"120.0\" width=\"180.0\" x=\"0.0\" y=\"0.0\"/>\n");
-            sb.append("          <y:Fill color=\"#FFFFFF\" transparent=\"false\"/>\n");
+            sb.append("          <y:Fill color=\"").append(determineFillColor(node)).append("\" transparent=\"false\"/>\n");
             sb.append("          <y:BorderStyle color=\"#000000\" type=\"line\" width=\"1.0\"/>\n");
             sb.append("          <y:NodeLabel alignment=\"center\" autoSizePolicy=\"content\" fontFamily=\"Dialog\" fontSize=\"12\" fontStyle=\"plain\" hasBackgroundColor=\"false\" hasLineColor=\"false\" modelName=\"sandwich\" modelPosition=\"n\" visible=\"true\">")
                     .append(escapeXml(node.displayName)).append("</y:NodeLabel>\n");
 
             String stereotypeText = formatStereotypes(node.stereotypes);
-            String constraintText = "<root>".equals(namespaceLabel) ? node.fqn : namespaceLabel.replace("::", " → ");
+            String constraintText = node.stereotypes.contains("Abstract") ? "abstract" : "";
             String attributesText = joinWithNewlines(node.attributes);
             String methodsText = joinWithNewlines(node.methods);
 
@@ -159,6 +159,19 @@ public final class Ili2GraphML {
             sb.append("    </edge>\n");
         }
 
+        private static String determineFillColor(Node node) {
+            if (node.stereotypes.contains("Enumeration")) {
+                return "#EB937E";
+            }
+            if (node.stereotypes.contains("Structure")) {
+                return "#f7f8fa";
+            }
+            if (node.stereotypes.contains("Abstract")) {
+                return "#A9DDDF";
+            }
+            return "#add1b4";
+        }
+
         private static String formatStereotypes(Set<String> stereotypes) {
             if (stereotypes == null || stereotypes.isEmpty()) {
                 return "";
@@ -168,7 +181,7 @@ public final class Ili2GraphML {
                 if (sb.length() > 0) {
                     sb.append(' ');
                 }
-                sb.append("<<").append(stereo).append(">>");
+                sb.append(stereo);
             }
             return sb.toString();
         }
