@@ -138,7 +138,7 @@ public final class Ili2GraphML {
             String methodsText = joinWithNewlines(node.methods);
 
             sb.append(indent).append("      <y:UML clipContent=\"true\" constraint=\"")
-                    .append(escapeXml(constraintText)).append("\" omitDetails=\"false\" stereotype=\"")
+                    .append(/*escapeXml(constraintText)*/"").append("\" omitDetails=\"false\" stereotype=\"")
                     .append(escapeXml(stereotypeText)).append("\" use3DEffect=\"false\">\n");
             sb.append(indent).append("        <y:AttributeLabel>").append(escapeXml(attributesText)).append("</y:AttributeLabel>\n");
             sb.append(indent).append("        <y:MethodLabel>").append(escapeXml(methodsText)).append("</y:MethodLabel>\n");
