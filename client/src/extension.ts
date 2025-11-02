@@ -2,6 +2,10 @@ import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
 import { LanguageClient, LanguageClientOptions, Executable, ServerOptions, State } from "vscode-languageclient/node";
+import { GlspEditorProvider, GlspVscodeConnector, configureDefaultCommands } from "@eclipse-glsp/vscode-integration";
+import { GlspSocketServerLauncher, SocketGlspVscodeServer } from "@eclipse-glsp/vscode-integration/node";
+import { ActionMessage, RequestModelAction } from "@eclipse-glsp/protocol";
+import { isInterlisDocument, refreshDiagramForDocument, type DiagramClientRegistry } from "./glsp/diagram-refresh";
 
 let client: LanguageClient | undefined;
 let revealOutputOnNextLog = false;
@@ -9,6 +13,16 @@ const CARET_SENTINEL = "__INTERLIS_AUTOCLOSE_CARET__";
 let umlPanel: vscode.WebviewPanel | undefined;
 let htmlPanel: vscode.WebviewPanel | undefined;
 let lastDiagramSource: vscode.Uri | undefined;
+
+interface GlspResources {
+  launcher: GlspSocketServerLauncher;
+  server: SocketGlspVscodeServer;
+  connector: GlspVscodeConnector;
+  provider: InterlisGlspEditorProvider;
+}
+
+let glspResources: GlspResources | undefined;
+let glspInitialization: Promise<GlspResources> | undefined;
 
 type PendingCaret = { version: number; position: vscode.Position };
 
@@ -118,6 +132,12 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(client);
   await client.start();
 
+  try {
+    await ensureGlspInfrastructure(context);
+  } catch (error: any) {
+    console.error("Failed to initialize INTERLIS GLSP support", error);
+  }
+
   context.subscriptions.push(
     vscode.workspace.onDidChangeTextDocument(event => {
       const key = event.document.uri.toString();
@@ -141,6 +161,20 @@ export async function activate(context: vscode.ExtensionContext) {
       const selection = new vscode.Selection(position, position);
       active.selection = selection;
       active.revealRange(new vscode.Range(position, position));
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.workspace.onDidSaveTextDocument(document => {
+      if (!glspResources) {
+        return;
+      }
+
+      if (!isInterlisDocument(document)) {
+        return;
+      }
+
+      refreshDiagramForDocument(glspResources.connector, glspResources.provider, document.uri);
     })
   );
 
@@ -399,7 +433,7 @@ export async function activate(context: vscode.ExtensionContext) {
       const saveOptions: vscode.SaveDialogOptions = {
         saveLabel: "Export INTERLIS documentation",
         filters: { "Word Document": ["docx"] }
-      };
+      };  
       if (defaultUri) {
         saveOptions.defaultUri = defaultUri;
       }
@@ -428,6 +462,220 @@ export async function activate(context: vscode.ExtensionContext) {
       }
     })
   );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("interlis.glsp.open", async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) { vscode.window.showWarningMessage("Open an .ili file first."); return; }
+
+      const document = editor.document;
+      if (!isInterlisDocument(document)) {
+        vscode.window.showWarningMessage("INTERLIS GLSP diagrams are only available for .ili files.");
+        return;
+      }
+
+      try {
+        await ensureGlspInfrastructure(context);
+        await vscode.commands.executeCommand(
+          "vscode.openWith",
+          document.uri,
+          InterlisGlspEditorProvider.viewType,
+          { preview: false, viewColumn: vscode.ViewColumn.Beside }
+        );
+      } catch (err: any) {
+        vscode.window.showErrorMessage(`Failed to open GLSP diagram: ${err?.message ?? err}`);
+      }
+    })
+  );
+}
+
+async function ensureGlspInfrastructure(context: vscode.ExtensionContext): Promise<GlspResources> {
+  if (glspResources) {
+    return glspResources;
+  }
+
+  if (glspInitialization) {
+    return glspInitialization;
+  }
+
+  glspInitialization = (async () => {
+    const configuration = vscode.workspace.getConfiguration("interlisLsp");
+    const jarPath = resolveGlspJarPath(context, configuration.get<string>("glsp.jarPath"));
+    const port = configuration.get<number>("glsp.port") ?? 5050;
+    const host = "127.0.0.1";
+
+    const launcher = new GlspSocketServerLauncher({
+      executable: jarPath,
+      socketConnectionOptions: { host, port }
+    });
+
+    try {
+      await launcher.start();
+    } catch (error) {
+      launcher.dispose();
+      throw error;
+    }
+
+    const server = new SocketGlspVscodeServer({
+      clientId: "interlis-glsp-client",
+      clientName: "INTERLIS GLSP",
+      connectionOptions: { host, port }
+    });
+
+    try {
+      await server.start();
+    } catch (error) {
+      launcher.dispose();
+      throw error;
+    }
+
+    const connector = new GlspVscodeConnector({
+      server,
+      onBeforePropagateMessageToServer: (original, processed) => {
+        const candidate = processed ?? original;
+        return ensureRequestCarriesSourceUri(candidate);
+      }
+    });
+
+    const provider = new InterlisGlspEditorProvider(context, connector);
+
+    configureDefaultCommands({ extensionContext: context, diagramPrefix: "interlis.glsp", connector });
+
+    const registration = vscode.window.registerCustomEditorProvider(
+      InterlisGlspEditorProvider.viewType,
+      provider,
+      { supportsMultipleEditorsPerDocument: true, webviewOptions: { retainContextWhenHidden: true } }
+    );
+
+    context.subscriptions.push(launcher, server, connector, registration);
+
+    glspResources = { launcher, server, connector, provider };
+    return glspResources;
+  })();
+
+  try {
+    return await glspInitialization;
+  } finally {
+    glspInitialization = undefined;
+  }
+}
+
+function ensureRequestCarriesSourceUri(message: unknown): unknown {
+  if (!glspResources) {
+    return message;
+  }
+
+  if (ActionMessage.is(message) && RequestModelAction.is(message.action)) {
+    const documentUri = glspResources.provider.getDocumentUri(message.clientId);
+    if (documentUri) {
+      const options = { ...(message.action.options ?? {}), sourceUri: documentUri.toString() };
+      return { ...message, action: { ...message.action, options } };
+    }
+  }
+
+  return message;
+}
+
+class InterlisGlspEditorProvider extends GlspEditorProvider implements DiagramClientRegistry {
+  public static readonly viewType = "interlis.glsp.diagram";
+
+  private readonly context: vscode.ExtensionContext;
+  private readonly clientDocuments = new Map<string, vscode.Uri>();
+
+  constructor(context: vscode.ExtensionContext, connector: GlspVscodeConnector) {
+    super(connector);
+    this.context = context;
+  }
+
+  get diagramType(): string {
+    return "interlis-class-diagram";
+  }
+
+  getDocumentUri(clientId: string): vscode.Uri | undefined {
+    return this.clientDocuments.get(clientId);
+  }
+
+  public getClientIdsForDocument(documentUri: vscode.Uri): readonly string[] {
+    const target = documentUri.toString();
+    const matches: string[] = [];
+    for (const [clientId, uri] of this.clientDocuments.entries()) {
+      if (uri.toString() === target) {
+        matches.push(clientId);
+      }
+    }
+    return matches;
+  }
+
+  public setUpWebview(
+    document: vscode.CustomDocument,
+    webviewPanel: vscode.WebviewPanel,
+    _token: vscode.CancellationToken,
+    clientId: string
+  ): void {
+    this.clientDocuments.set(clientId, document.uri);
+    webviewPanel.onDidDispose(() => this.clientDocuments.delete(clientId));
+
+    const webview = webviewPanel.webview;
+    webview.options = {
+      enableScripts: true,
+      localResourceRoots: [
+        vscode.Uri.joinPath(this.context.extensionUri, "dist"),
+        vscode.Uri.joinPath(this.context.extensionUri, "media"),
+        vscode.Uri.joinPath(this.context.extensionUri, "media", "glsp")
+      ]
+    };
+
+    const scriptUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, "dist", "interlis-glsp-webview.js")
+    );
+    const baseStyleUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, "media", "glsp", "glsp-vscode.css")
+    );
+    const customStyleUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, "media", "interlis-glsp.css")
+    );
+    const codiconStyleUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, "media", "glsp", "codicon.css")
+    );
+    const nonce = getNonce();
+
+    webview.html = this.renderHtml(
+      clientId,
+      scriptUri,
+      baseStyleUri,
+      customStyleUri,
+      codiconStyleUri,
+      nonce,
+      webview.cspSource
+    );
+  }
+
+  private renderHtml(
+    clientId: string,
+    scriptUri: vscode.Uri,
+    baseStyleUri: vscode.Uri,
+    customStyleUri: vscode.Uri,
+    codiconStyleUri: vscode.Uri,
+    nonce: string,
+    cspSource: string
+  ): string {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource} 'unsafe-inline'; img-src ${cspSource} https: data:; script-src 'nonce-${nonce}'; font-src ${cspSource} https: data:;">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="${codiconStyleUri}">
+  <link rel="stylesheet" href="${baseStyleUri}">
+  <link rel="stylesheet" href="${customStyleUri}">
+  <title>INTERLIS GLSP Diagram</title>
+</head>
+<body>
+  <div id="${clientId}_container" class="glsp-container"></div>
+  <script nonce="${nonce}" src="${scriptUri}"></script>
+</body>
+</html>`;
+  }
 }
 
 function resolveJarPath(context: vscode.ExtensionContext, configured: string | undefined): string {
@@ -458,6 +706,34 @@ function resolveJarPath(context: vscode.ExtensionContext, configured: string | u
   throw new Error(message);
 }
 
+function resolveGlspJarPath(context: vscode.ExtensionContext, configured: string | undefined): string {
+  const override = configured?.trim();
+  if (override) {
+    return override;
+  }
+
+  const serverDir = context.asAbsolutePath("server");
+  const bundled = path.join(serverDir, "interlis-glsp-all.jar");
+  if (fs.existsSync(bundled)) {
+    return bundled;
+  }
+
+  if (fs.existsSync(serverDir)) {
+    const jar = fs.readdirSync(serverDir)
+      .filter(file => file.startsWith("interlis-glsp") && file.endsWith("-all.jar"))
+      .map(file => path.join(serverDir, file))
+      .sort()
+      .pop();
+    if (jar && fs.existsSync(jar)) {
+      return jar;
+    }
+  }
+
+  const message = "INTERLIS GLSP fat JAR not found. Configure `interlisLsp.glsp.jarPath` in the extension settings.";
+  vscode.window.showErrorMessage(message);
+  throw new Error(message);
+}
+
 function resolveJavaPath(context: vscode.ExtensionContext, configured: string | undefined): string {
   const override = configured?.trim();
   if (override) {
@@ -481,6 +757,15 @@ function resolveJavaPath(context: vscode.ExtensionContext, configured: string | 
   const message = "Bundled Java runtime not found. Configure `interlisLsp.javaPath` in the extension settings.";
   vscode.window.showErrorMessage(message);
   throw new Error(message);
+}
+
+function getNonce(): string {
+  const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let result = "";
+  for (let i = 0; i < 32; i++) {
+    result += characters.charAt(Math.floor(Math.random() * characters.length));
+  }
+  return result;
 }
 
 async function ensurePanelVisible(preserveEditorFocus = true) {
