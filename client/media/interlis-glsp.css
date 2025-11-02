@@ -1,0 +1,290 @@
+:root,
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: transparent;
+  font-family: var(--vscode-font-family, 'Segoe UI', 'Inter', 'Roboto', sans-serif);
+  color: #e9edf7;
+}
+
+.glsp-diagram {
+  background: linear-gradient(160deg, rgba(19, 23, 36, 0.96), rgba(19, 23, 36, 0.85));
+}
+
+.glsp-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.glsp-container svg {
+  flex: 1;
+}
+
+.sprotty-node.interlis-topic > rect,
+.sprotty-node.interlis-topic > g > rect {
+  fill: rgba(48, 70, 100, 0.45);
+  stroke: rgba(108, 182, 255, 0.65);
+  stroke-width: 2.5px;
+  rx: 12px;
+  ry: 12px;
+}
+
+.sprotty-label.interlis-topic-label text {
+  fill: #d1e9ff;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sprotty-node.interlis-class > rect,
+.sprotty-node.interlis-class > g > rect,
+.sprotty-node.interlis-structure > rect,
+.sprotty-node.interlis-structure > g > rect,
+.sprotty-node.interlis-view > rect,
+.sprotty-node.interlis-view > g > rect,
+.sprotty-node.interlis-enumeration > rect,
+.sprotty-node.interlis-enumeration > g > rect {
+  rx: 16px;
+  ry: 16px;
+  stroke-width: 2.5px;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.35));
+}
+
+.sprotty-node.interlis-class > rect,
+.sprotty-node.interlis-class > g > rect {
+  fill: linear-gradient(180deg, rgba(42, 52, 78, 0.9), rgba(32, 41, 60, 0.92));
+  stroke: #63c9ff;
+}
+
+.sprotty-node.interlis-structure > rect,
+.sprotty-node.interlis-structure > g > rect {
+  fill: linear-gradient(180deg, rgba(54, 46, 76, 0.92), rgba(38, 33, 57, 0.94));
+  stroke: #b787ff;
+}
+
+.sprotty-node.interlis-view > rect,
+.sprotty-node.interlis-view > g > rect {
+  fill: linear-gradient(180deg, rgba(36, 63, 76, 0.92), rgba(28, 49, 58, 0.96));
+  stroke: #6fe6c8;
+}
+
+.sprotty-node.interlis-enumeration > rect,
+.sprotty-node.interlis-enumeration > g > rect {
+  fill: linear-gradient(180deg, rgba(76, 54, 36, 0.92), rgba(56, 41, 27, 0.95));
+  stroke: #ffb86c;
+}
+
+.sprotty-label.interlis-stereotype text {
+  fill: #a9bbd6;
+  font-size: 12px;
+  font-style: italic;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sprotty-label.interlis-name text {
+  fill: #f4f7ff;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.sprotty-compartment.interlis-attributes,
+.sprotty-compartment.interlis-constraints {
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 8px 16px 14px;
+}
+
+.sprotty-compartment.interlis-attributes {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.sprotty-compartment.interlis-constraints {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.sprotty-compartment.interlis-attributes text,
+.interlis-attribute-label text {
+  fill: #d7e2f3;
+  font-size: 13px;
+  font-family: var(--vscode-editor-font-family, 'JetBrains Mono', 'Fira Code', monospace);
+}
+
+.sprotty-compartment.interlis-constraints text,
+.interlis-constraint-label text {
+  fill: #c5d6ff;
+  font-size: 12px;
+  font-style: italic;
+}
+
+.sprotty-node.interlis-enumeration .interlis-attributes text {
+  fill: #ffe7bf;
+  font-family: var(--vscode-font-family, 'Segoe UI', 'Inter', sans-serif);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.sprotty-node.interlis-structure .interlis-name text {
+  fill: #f0d6ff;
+}
+
+.sprotty-node.interlis-view .interlis-name text {
+  fill: #caf7ea;
+}
+
+.glsp-container .tool-palette,
+.glsp-container .command-palette {
+  font-family: var(--vscode-font-family, 'Segoe UI', 'Inter', sans-serif);
+}
+
+.glsp-container .tool-palette {
+  background: rgba(19, 23, 36, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.glsp-container .tool-palette .palette-header {
+  padding: 0.85rem 1.1rem;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.25));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.glsp-container .tool-palette .palette-header .header-tools {
+  gap: 0.45rem;
+}
+
+.glsp-container .tool-palette .palette-header .header-tools i {
+  border-radius: 6px;
+  padding: 0.4rem;
+  transition: background 0.2s ease;
+}
+
+.glsp-container .tool-palette .palette-header .header-tools i:hover:not(.clicked) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.glsp-container .tool-palette .palette-header .header-tools .clicked {
+  background: rgba(126, 203, 255, 0.25);
+  color: #d7f1ff;
+}
+
+.glsp-container .tool-palette .palette-body {
+  background: rgba(15, 18, 27, 0.98);
+  padding: 0.65rem 0 0.5rem;
+}
+
+.glsp-container .tool-palette .tool-group {
+  padding: 0.4rem 0.85rem 0.55rem;
+  margin-bottom: 0.5rem;
+}
+
+.glsp-container .tool-palette .tool-group:last-child {
+  margin-bottom: 0;
+}
+
+.glsp-container .tool-palette .group-header {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(214, 221, 235, 0.72);
+  margin-bottom: 0.4rem;
+  padding: 0 0.65rem;
+}
+
+.glsp-container .tool-palette .tool-button {
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem;
+  background: transparent;
+  color: #ecf1ff;
+  font-size: 0.92rem;
+  gap: 0.6rem;
+  line-height: 1.4;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.glsp-container .tool-palette .tool-button:hover:not(.clicked) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.glsp-container .tool-palette .tool-button.clicked {
+  background: rgba(103, 191, 255, 0.28);
+  color: #e9f7ff;
+}
+
+.glsp-container .tool-palette .tool-button i {
+  font-family: 'codicon';
+  font-style: normal;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.glsp-container .tool-palette .tool-button i.codicon-symbol-class::before {
+  content: "\ueb44";
+}
+
+.glsp-container .tool-palette .tool-button i.codicon-symbol-structure::before {
+  content: "\uea95";
+}
+
+.glsp-container .tool-palette .tool-button i.codicon-symbol-enum::before {
+  content: "\uea5f";
+}
+
+.glsp-container .tool-palette .tool-button i.codicon-symbol-method::before {
+  content: "\ueaa5";
+}
+
+.glsp-container .tool-palette .tool-button i.codicon-symbol-namespace::before,
+.glsp-container .tool-palette .tool-button i.codicon-repo::before {
+  content: "\uea62";
+}
+
+.glsp-container .tool-palette .search-input {
+  margin: 0 0.9rem 0.6rem;
+  border-radius: 8px;
+  padding: 0.4rem 0.55rem;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #f5f7fb;
+}
+
+.glsp-container .command-palette {
+  background: rgba(12, 14, 22, 0.96);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.4);
+}
+
+.glsp-container .command-palette .command-entry {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glsp-container .command-palette .command-entry:last-child {
+  border-bottom: none;
+}
+
+.glsp-container .command-palette .command-entry:hover {
+  background: rgba(126, 203, 255, 0.18);
+}
+
+.glsp-container .command-palette .command-label {
+  color: #f2f6ff;
+}
+
+.glsp-container .command-palette .command-shortcut {
+  color: rgba(201, 212, 235, 0.8);
+}

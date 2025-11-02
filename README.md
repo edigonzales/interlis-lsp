@@ -24,6 +24,7 @@ repo/
 ├── build.gradle            # Gradle build orchestrating the Java server & tests
 ├── src/main/java           # LSP implementation (lsp4j based)
 ├── src/test/java           # Unit & integration tests
+├── glsp/                   # GLSP server (websocket) built with Gradle
 ├── client/                 # VS Code extension (TypeScript + esbuild)
 └── build/                  # Gradle output (fat jar, test reports, etc.)
 ```
@@ -31,6 +32,40 @@ repo/
 - The Java LSP is packaged as a fat JAR via the `shadowJar` Gradle task.
 - The VS Code extension embeds the server JAR and platform-specific JREs so that teams can distribute a single `.vsix` with no external dependencies. 🚀
 - The extension and server communicate over stdio using `vscode-languageclient`.
+
+### GLSP class responsibilities
+
+The GLSP server that renders INTERLIS UML class diagrams lives in [`glsp/`](glsp/). Each class has a single responsibility so
+the pipeline from `.ili` file to rendered diagram is easy to reason about:
+
+| Class | Role |
+| --- | --- |
+| [`InterlisGlspServerLauncher`](glsp/src/main/java/ch/so/agi/glsp/interlis/InterlisGlspServerLauncher.java) | Starts the GLSP server on a websocket endpoint so that VS Code can connect to it. |
+| [`InterlisGlspServerModule`](glsp/src/main/java/ch/so/agi/glsp/interlis/InterlisGlspServerModule.java) | Registers the INTERLIS diagram module with the GLSP dependency injector. |
+| [`InterlisDiagramModule`](glsp/src/main/java/ch/so/agi/glsp/interlis/InterlisDiagramModule.java) | Wires concrete implementations (configuration, storage, model factory) into the GLSP runtime. |
+| [`InterlisDiagramConfiguration`](glsp/src/main/java/ch/so/agi/glsp/interlis/InterlisDiagramConfiguration.java) | Declares metadata about the diagram such as node types and layout hints. |
+| [`InterlisSourceModelStorage`](glsp/src/main/java/ch/so/agi/glsp/interlis/InterlisSourceModelStorage.java) | Persists the URI of the `.ili` source file so later services can read from disk when building the diagram. |
+| [`InterlisGModelFactory`](glsp/src/main/java/ch/so/agi/glsp/interlis/InterlisGModelFactory.java) | Produces the graphical model (currently a single placeholder class node) that GLSP clients render. |
+| [`InterlisGlspTypes`](glsp/src/main/java/ch/so/agi/glsp/interlis/InterlisGlspTypes.java) | Centralizes the string identifiers for GLSP node types, CSS classes, and diagram IDs. |
+
+On the VS Code side, [`InterlisGlspEditorProvider`](client/src/extension.ts) registers a custom editor that spins up the
+[`GlspVscodeConnector`](https://github.com/eclipse-glsp/glsp-vscode-integration) with our CSS bundle. The command
+`INTERLIS: Open GLSP class diagram` opens the diagram beside the default text editor so authors can switch between textual and
+graphical representations effortlessly.
+
+### Building & testing the GLSP server
+
+The GLSP project intentionally omits a Gradle wrapper so downstream forks can avoid binary files. Use a locally installed
+Gradle distribution when working inside [`glsp/`](glsp/):
+
+```bash
+cd glsp
+gradle build   # compiles the shaded server JAR
+gradle test    # runs the GLSP-focused unit tests
+```
+
+The shaded JAR (`build/libs/interlis-glsp-<version>-all.jar`) prints a descriptive error to the console if the server fails to
+start—for example when a port is already taken.
 
 ## Language server capabilities
 
