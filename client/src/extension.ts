@@ -334,6 +334,54 @@ export async function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
+    vscode.commands.registerCommand("interlis.graphml.export", async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) { vscode.window.showWarningMessage("Open an .ili file first."); return; }
+
+      const documentUri = editor.document.uri;
+      const fileUri = documentUri.toString();
+
+      let defaultUri: vscode.Uri | undefined;
+      if (documentUri.scheme === "file") {
+        const folder = path.dirname(documentUri.fsPath);
+        const base = path.basename(documentUri.fsPath, path.extname(documentUri.fsPath));
+        defaultUri = vscode.Uri.file(path.join(folder, `${base}.graphml`));
+      }
+
+      const saveOptions: vscode.SaveDialogOptions = {
+        saveLabel: "Export INTERLIS UML (GraphML)",
+        filters: { "GraphML": ["graphml"] }
+      };
+      if (defaultUri) {
+        saveOptions.defaultUri = defaultUri;
+      }
+
+      const target = await vscode.window.showSaveDialog(saveOptions);
+      if (!target) {
+        return;
+      }
+
+      try {
+        const graphml = await client!.sendRequest<string>("interlis/exportGraphml", { uri: fileUri });
+        if (!graphml) {
+          throw new Error("Server returned an empty document");
+        }
+
+        const bytes = Buffer.from(graphml, "utf8");
+        await vscode.workspace.fs.writeFile(target, bytes);
+
+        if (target.scheme === "file") {
+          vscode.window.showInformationMessage(`Saved GraphML UML diagram to ${target.fsPath}`);
+        } else {
+          vscode.window.showInformationMessage("Saved GraphML UML diagram.");
+        }
+      } catch (err: any) {
+        vscode.window.showErrorMessage(`Failed to export GraphML UML diagram: ${err?.message ?? err}`);
+      }
+    })
+  );
+
+  context.subscriptions.push(
     vscode.commands.registerCommand("interlis.docx.export", async () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor) { vscode.window.showWarningMessage("Open an .ili file first."); return; }
