@@ -1,0 +1,53 @@
+plugins {
+    id 'java'
+    id 'application'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+}
+
+apply from: "${rootDir}/../gradle/versioning.gradle"
+
+group = 'ch.so.agi.glsp.interlis'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    sourceCompatibility = '21'
+    targetCompatibility = '21'
+}
+
+repositories {
+    mavenCentral()
+    maven { url "https://jars.sogeo.services/mirror" }
+}
+
+dependencies {
+    implementation 'org.eclipse.glsp:org.eclipse.glsp.server:2.5.0'
+    implementation 'org.eclipse.glsp:org.eclipse.glsp.graph:2.5.0'
+
+    implementation 'com.google.inject:guice:7.0.0'
+    implementation 'commons-cli:commons-cli:1.5.0'
+
+    implementation 'ch.interlis:ili2c-tool:5.6.6'
+    implementation 'ch.interlis:ili2c-core:5.6.6'
+    implementation 'ch.ehi:ehibasics:1.4.1'
+    implementation 'ch.interlis:iox-ili:1.24.1'
+
+    implementation 'org.slf4j:slf4j-api:2.0.17'
+    runtimeOnly 'org.slf4j:slf4j-simple:2.0.17'
+    runtimeOnly  "org.apache.logging.log4j:log4j-to-slf4j:2.25.2"
+
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+application {
+    mainClass = 'ch.so.agi.glsp.interlis.InterlisGlspServerLauncher'
+}
+
+tasks.named('shadowJar') {
+    archiveBaseName = 'interlis-glsp'
+}
