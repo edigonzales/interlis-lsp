@@ -1,0 +1,48 @@
+@import 'colors/colors.css';
+@import 'colors/uml-dark.theme.css';
+@import 'colors/uml-light.theme.css';
+
+@import 'papyrus/variables.css';
+@import 'papyrus/classes.css';
+
+@import 'common.css';
+
+@import 'base/graph.css';
+@import 'base/animations.css';
+@import 'base/edge.css';
+@import 'base/node.css';
+@import 'base/text.css';
+@import 'base/marker.css';
+@import 'base/processors.css';
+
+@import 'extensions/uml-edit-label.css';
+@import 'extensions/uml-tool-palette.css';
+@import 'extensions/uml-editor-panel.css';
+@import 'extensions/uml-property-palette.css';
+@import 'extensions/uml-toast.css';
+@import 'extensions/shift-tool.css';
+
+@import 'diagram/package/style.css';
+@import 'diagram//sequence/sequence-diagram.css';
+
+.sprotty text {
+    fill: var(--uml-label);
+    font-size: 100%;
+}
+
+.sprotty-missing {
+    stroke-width: 1;
+    stroke: var(--uml-error);
+    fill: var(--uml-error);
+    font-size: 14pt;
+    text-anchor: middle;
+}
+
+.sprotty-popup-title {
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.sprotty-popup-body > p {
+    margin-bottom: 2px;
+}
