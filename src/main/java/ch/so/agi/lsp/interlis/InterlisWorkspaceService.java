@@ -23,6 +23,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
+import ch.so.agi.glsp.interlis.InterlisGlspServer;
+
 public class InterlisWorkspaceService implements WorkspaceService {
     private static final Logger LOG = LoggerFactory.getLogger(InterlisWorkspaceService.class);
     
@@ -125,6 +127,16 @@ public class InterlisWorkspaceService implements WorkspaceService {
 
         LOG.info("html export called with: {}", normalized);
         return handlers.exportHtml(normalized, params.getTitle());
+    }
+
+    @JsonRequest(InterlisLanguageServer.REQ_GLSP_INFO)
+    public CompletableFuture<GlspInfo> glspInfo() {
+        InterlisGlspServer glsp = server.getGlspServer();
+        if (glsp == null) {
+            return CompletableFuture.completedFuture(new GlspInfo("", 0, "", false));
+        }
+        return CompletableFuture.completedFuture(
+                new GlspInfo(glsp.getHost(), glsp.getPort(), glsp.getEndpointPath(), glsp.isStarted()));
     }
 
     private DocumentExportParams coerceExportParams(Object rawParams) {
@@ -409,6 +421,36 @@ public class InterlisWorkspaceService implements WorkspaceService {
             }
         }
         return null;
+    }
+
+    public static final class GlspInfo {
+        private final String host;
+        private final int port;
+        private final String path;
+        private final boolean running;
+
+        public GlspInfo(String host, int port, String path, boolean running) {
+            this.host = host != null ? host : "";
+            this.port = port;
+            this.path = path != null ? path : "";
+            this.running = running;
+        }
+
+        public String getHost() {
+            return host;
+        }
+
+        public int getPort() {
+            return port;
+        }
+
+        public String getPath() {
+            return path;
+        }
+
+        public boolean isRunning() {
+            return running;
+        }
     }
 
     public static class DocumentExportParams {
