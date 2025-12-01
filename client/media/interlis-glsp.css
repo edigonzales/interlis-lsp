@@ -1,0 +1,228 @@
+html,
+body,
+.root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: transparent;
+  font-family: var(--vscode-font-family, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif);
+  color: #1f2933;
+}
+
+.glsp-diagram {
+  background-color: transparent;
+}
+
+.glsp-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.glsp-container svg {
+  flex: 1;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────── */
+/* Node chrome                                                                  */
+/* ───────────────────────────────────────────────────────────────────────────── */
+
+.sprotty-node.interlis-node {
+  filter: drop-shadow(0 6px 12px rgba(15, 54, 96, 0.18));
+}
+
+.sprotty-node.interlis-node > rect,
+.sprotty-node.interlis-node > g > rect {
+  fill: #ffffff;
+  stroke: #2d6cdf;
+  stroke-width: 1.6px;
+  rx: 8px;
+  ry: 8px;
+}
+
+.sprotty-node.interlis-structure > rect,
+.sprotty-node.interlis-structure > g > rect {
+  fill: #f6faff;
+}
+
+.sprotty-node.interlis-view > rect,
+.sprotty-node.interlis-view > g > rect {
+  fill: #f1f7ff;
+}
+
+.sprotty-node.interlis-enumeration > rect,
+.sprotty-node.interlis-enumeration > g > rect {
+  fill: #fdf7ff;
+}
+
+.sprotty-node.interlis-abstract > rect,
+.sprotty-node.interlis-abstract > g > rect {
+  stroke-dasharray: 6 4;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────── */
+/* Compartments                                                                 */
+/* ───────────────────────────────────────────────────────────────────────────── */
+
+.sprotty-compartment.interlis-header > rect {
+  fill: #e6f0ff;
+  stroke: none;
+  rx: 8px;
+  ry: 8px;
+}
+
+.sprotty-compartment.interlis-header text {
+  fill: #1f2933;
+}
+
+.sprotty-compartment.interlis-attributes > rect,
+.sprotty-compartment.interlis-constraints > rect {
+  fill: transparent;
+  stroke: #d5e2f6;
+  stroke-width: 1px;
+}
+
+.sprotty-compartment.interlis-attributes text,
+.sprotty-compartment.interlis-constraints text {
+  fill: #25304a;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────── */
+/* Labels                                                                       */
+/* ───────────────────────────────────────────────────────────────────────────── */
+
+.interlis-stereotype-label text {
+  fill: #4768b5;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.interlis-name-label text {
+  fill: #13294b;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.interlis-attribute-label text,
+.interlis-constraint-label text {
+  font-size: 13px;
+  font-weight: 400;
+  fill: #1f2933;
+}
+
+.interlis-constraint-label text {
+  font-style: italic;
+  fill: #334a78;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────── */
+/* Tool palette                                                                 */
+/* ───────────────────────────────────────────────────────────────────────────── */
+
+.glsp-container .tool-palette,
+.glsp-container .command-palette {
+  font-family: var(--vscode-font-family, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif);
+}
+
+.glsp-container .tool-palette {
+  background: #f7f9fc;
+  border: 1px solid #d4e2f8;
+  border-radius: 10px;
+  box-shadow: 0 12px 24px rgba(44, 86, 140, 0.12);
+  overflow: hidden;
+}
+
+.glsp-container .tool-palette .palette-header {
+  padding: 0.75rem 1rem;
+  background: linear-gradient(180deg, #ffffff 0%, #e9f1ff 100%);
+  border-bottom: 1px solid #d4e2f8;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #1f2933;
+}
+
+.glsp-container .tool-palette .palette-header .header-tools {
+  gap: 0.35rem;
+}
+
+.glsp-container .tool-palette .palette-header .header-tools i {
+  border-radius: 4px;
+  padding: 0.35rem;
+  color: #1f4ea8;
+}
+
+.glsp-container .tool-palette .palette-header .header-tools i:hover:not(.clicked) {
+  background: rgba(45, 108, 223, 0.12);
+}
+
+.glsp-container .tool-palette .palette-header .header-tools .clicked {
+  background: rgba(45, 108, 223, 0.2);
+  color: #10347a;
+}
+
+.glsp-container .tool-palette .palette-body {
+  background: #f7f9fc;
+  padding: 0.5rem 0;
+}
+
+.glsp-container .tool-palette .tool-group {
+  padding: 0.35rem 0.85rem 0.6rem;
+  margin-bottom: 0.35rem;
+}
+
+.glsp-container .tool-palette .tool-group:last-child {
+  margin-bottom: 0;
+}
+
+.glsp-container .tool-palette .group-header {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #5a719d;
+  margin-bottom: 0.4rem;
+  padding: 0 0.35rem;
+}
+
+.glsp-container .tool-palette .tool-button {
+  border-radius: 6px;
+  padding: 0.45rem 0.65rem;
+  background: transparent;
+  color: #1f2933;
+  font-size: 0.92rem;
+  gap: 0.5rem;
+  min-height: unset;
+  line-height: 1.4;
+}
+
+.glsp-container .tool-palette .tool-button i {
+  font-size: 0.95rem;
+  color: #2d6cdf;
+}
+
+.glsp-container .tool-palette .tool-button:hover:not(.clicked) {
+  background: rgba(45, 108, 223, 0.12);
+}
+
+.glsp-container .tool-palette .tool-button.clicked {
+  background: rgba(45, 108, 223, 0.2);
+  color: #0f2a66;
+}
+
+.glsp-container .tool-palette .collapsible-palette {
+  max-height: none;
+}
+
+.glsp-container .tool-palette .search-input {
+  margin: 0 0.75rem 0.65rem;
+  border-radius: 6px;
+  padding: 0.4rem 0.55rem;
+  background: #ffffff;
+  border: 1px solid #c2d5f5;
+  color: #1f2933;
+}
