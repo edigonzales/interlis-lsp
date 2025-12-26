@@ -117,24 +117,33 @@ public class Ili2cUtil {
             return "";
         }
         
+        CompilationOutcome outcome = compile(settings, sourceFile);
+        TransferDescription td = outcome != null ? outcome.getTransferDescription() : null;
+        return prettyPrint(td, sourceFile);
+    }
+
+    public static String prettyPrint(TransferDescription td, String sourceFile) throws IOException {
+        if (sourceFile == null) {
+            return "";
+        }
+        
         Path targetFile = Files.createTempFile("", ".ili");
-        OutputStreamWriter target = new OutputStreamWriter(new FileOutputStream(targetFile.toAbsolutePath().toString()), "UTF-8");
-        
-        TransferDescription desc = new TransferDescription();
-        // TODO Do we want to use a cache again?
-        TransferDescription td = compile(settings, sourceFile).getTransferDescription();
-        
         if (td == null) {
-            LOG.error("td is null");
             return null;
         }
         
-        for (Model model : td.getModelsFromLastFile()) {
-            desc.add(model);
+        TransferDescription desc = new TransferDescription();
+        // TODO Do we want to use a cache again?
+        try (OutputStreamWriter target = new OutputStreamWriter(
+                new FileOutputStream(targetFile.toAbsolutePath().toString()), StandardCharsets.UTF_8)) {
+
+            for (Model model : td.getModelsFromLastFile()) {
+                desc.add(model);
+            }
+            
+            Interlis2Generator gen = new Interlis2Generator();
+            gen.generate(target, desc, false); // emitPredefined = config.isIncPredefModel() ?
         }
-        
-        Interlis2Generator gen = new Interlis2Generator();
-        gen.generate(target, desc, false); // emitPredefined = config.isIncPredefModel() ?
         
         String formattedBody = Files.readString(targetFile);            
         return formattedBody;

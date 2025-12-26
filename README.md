@@ -1,5 +1,10 @@
 # INTERLIS Language Server & VS Code Extension 🧩
 
+## todo documentation
+- lsp debug in vscode: https://chatgpt.com/codex/tasks/task_e_693a978dd550832894d81b25295bc541
+
+
+
 A monorepo that ships the INTERLIS-focused Language Server Protocol (LSP) implementation together with the accompanying VS Code extension. This document is aimed at developers who want to extend, debug, or package the tooling. For an end-user feature tour head over to the [client README](client/README.md). 💡
 
 ## Table of contents
