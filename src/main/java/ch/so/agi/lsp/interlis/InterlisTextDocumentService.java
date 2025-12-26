@@ -97,7 +97,18 @@ public class InterlisTextDocumentService implements TextDocumentService {
             String originalText = readDocument(uri);
 
             ClientSettings cfg = server.getClientSettings();
-            String formattedText = Ili2cUtil.prettyPrint(cfg, pathOrUri);
+
+            Ili2cUtil.CompilationOutcome outcome = compilationCache.get(pathOrUri);
+            if (outcome == null) {
+                outcome = compiler.apply(cfg, pathOrUri);
+                compilationCache.put(pathOrUri, outcome);
+            }
+
+            String formattedText = Ili2cUtil.prettyPrint(outcome != null ? outcome.getTransferDescription() : null, pathOrUri);
+            if (formattedText == null) {
+                publishFormattingDiagnostics(uri, outcome);
+                return CompletableFuture.completedFuture(Collections.emptyList());
+            }
 
             if (formattedText != null && !formattedText.equals(originalText)) {
                 TextEdit edit = new TextEdit(fullDocumentRange(originalText), formattedText);
@@ -306,5 +317,17 @@ public class InterlisTextDocumentService implements TextDocumentService {
         Position start = new Position(0, 0);
         Position end = new Position(line, column);
         return new Range(start, end);
+    }
+
+    private void publishFormattingDiagnostics(String documentUri, Ili2cUtil.CompilationOutcome outcome) {
+        if (documentUri == null || outcome == null || outcome.getMessages() == null || outcome.getMessages().isEmpty()) {
+            return;
+        }
+
+        try {
+            server.publishDiagnostics(documentUri, DiagnosticsMapper.toDiagnostics(outcome.getMessages()));
+        } catch (Exception ex) {
+            LOG.debug("Unable to publish formatting diagnostics for {}", documentUri, ex);
+        }
     }
 }
