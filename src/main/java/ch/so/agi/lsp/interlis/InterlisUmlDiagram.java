@@ -259,8 +259,8 @@ final class InterlisUmlDiagram {
                 Table aTbl = (Table) aEnd;
                 Table bTbl = (Table) bEnd;
 
-                String left = fqnOf(m, containerOf(aTbl), aTbl);
-                String right = fqnOf(m, containerOf(bTbl), bTbl);
+                String left = fqnOf(aTbl);
+                String right = fqnOf(bTbl);
 
                 // Ensure external placeholders for associations if endpoints not in last-file models
                 if (!belongsToLastFile(aTbl, lastModelSet))
