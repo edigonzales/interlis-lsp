@@ -222,7 +222,7 @@ jobs:
           declare -A PLATFORM_MAP=(
             ["ubuntu-24.04"]="linux-x64"
             ["ubuntu-24.04-arm"]="linux-arm64"
-            ["macos-13"]="darwin-x64"
+            ["macos-15-intel"]="darwin-x64"
             ["macos-14"]="darwin-arm64"
             ["windows-2022"]="win32-x64"
           )
