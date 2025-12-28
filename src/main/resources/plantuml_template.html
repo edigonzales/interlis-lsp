@@ -119,7 +119,7 @@
 </head>
 <body>
 
-<div class="page">
+<div class="page source-collapsed">
   <div class="diagram-pane">
     <div class="diagram-wrap">
       <div class="diagram-toolbar">
@@ -128,7 +128,7 @@
         <button type="button" data-a="fit">Fit</button>
         <a href="${plantUmlPngUrl}" target="_blank" rel="noreferrer">Open PNG</a>
         <a href="${plantUmlSvgUrl}" target="_blank" rel="noreferrer" download>Download SVG</a>
-        <button type="button" data-a="toggle-source" aria-expanded="true">Hide code</button>
+        <button type="button" data-a="toggle-source" aria-expanded="false">Show code</button>
       </div>
       <div class="diagram-scroll">
         <div class="diagram-content" id="diagramContent">
@@ -179,7 +179,7 @@
     }
   }
 
-  setSourceCollapsed(false);
+  setSourceCollapsed(true);
 
   if (toolbar) {
     toolbar.addEventListener('click', function (e) {
