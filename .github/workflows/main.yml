@@ -293,6 +293,29 @@ jobs:
           echo "Bundled assets:"
           find client/server -maxdepth 2 -mindepth 1 -type d | sort
 
+      - name: Download ili2gpkg
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORKDIR="client/ili2gpkg"
+          mkdir -p "$WORKDIR"
+
+          TMP_ZIP="$(mktemp --suffix=.zip)"
+          curl -L --fail "https://downloads.interlis.ch/ili2gpkg/ili2gpkg-5.5.1.zip" -o "$TMP_ZIP"
+
+          unzip -q "$TMP_ZIP" -d "$WORKDIR"
+
+          jar_path=$(find "$WORKDIR" -maxdepth 2 -type f -name "ili2gpkg-5.5.1.jar" | head -n1)
+          if [ -z "$jar_path" ]; then
+            echo "::error::ili2gpkg-5.5.1.jar not found after unzip"
+            find "$WORKDIR" -maxdepth 3 -type f
+            exit 1
+          fi
+
+          mv "$jar_path" "$WORKDIR/ili2gpkg.jar"
+          rm -f "$TMP_ZIP"
+          echo "ili2gpkg assets staged in $WORKDIR"
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
