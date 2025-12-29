@@ -86,12 +86,12 @@ export function registerIli2GpkgCommands(context: vscode.ExtensionContext, javaP
     await removeIfExists(logPath);
     ili2dbOutput.clear();
 
-    const args: string[] = ["-jar", jarPath, "--config", options.configPath, "--dbfile", options.dbfile];
+    const args: string[] = ["-jar", jarPath, "--metaConfig", options.configPath, "--dbfile", options.dbfile];
     if (options.models) {
       args.push("--models", options.models);
     }
     if (options.modeldir) {
-      args.push("--modeldir", options.modeldir);
+      args.push("--modeldir", `"${options.modeldir}"`);
     }
     args.push("--log", logPath, "--schemaimport");
 
