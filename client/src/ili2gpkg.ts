@@ -6,18 +6,14 @@ import { spawn } from "child_process";
 import { resolveIli2GpkgJarPath } from "./configuration";
 
 type Ili2GpkgOptions = {
+  configPath: string;
   dbfile: string;
-  defaultSrsCode?: string;
-  createEnumTabs: boolean;
-  nameByTopic: boolean;
-  createFk: boolean;
-  createGeomIdx: boolean;
-  createUnique: boolean;
   models?: string;
   modeldir?: string;
 };
 
 const STATE_KEY = "ili2gpkg.lastOptions";
+const DEFAULT_CONFIG_RELATIVE_PATH = path.join("resources", "ili2gpkg", "default-config.ini");
 
 export function registerIli2GpkgCommands(context: vscode.ExtensionContext, javaPath: string) {
   const ili2dbOutput = vscode.window.createOutputChannel("ILI2DB");
@@ -32,13 +28,12 @@ export function registerIli2GpkgCommands(context: vscode.ExtensionContext, javaP
       return;
     }
 
-    const lastOptions = context.globalState.get<Ili2GpkgOptions>(STATE_KEY) ?? {
-      createEnumTabs: false,
-      nameByTopic: false,
-      createFk: false,
-      createGeomIdx: false,
-      createUnique: false
-    };
+    const bundledConfigPath = resolveBundledConfigPath(context);
+    if (!bundledConfigPath) {
+      return;
+    }
+
+    const lastOptions = context.globalState.get<Ili2GpkgOptions>(STATE_KEY);
 
     const activeEditor = vscode.window.activeTextEditor;
     const activeUri = activeEditor?.document.uri;
@@ -53,41 +48,22 @@ export function registerIli2GpkgCommands(context: vscode.ExtensionContext, javaP
       : undefined;
 
     const defaults: Ili2GpkgOptions = {
-      ...lastOptions,
-      models: activeModelName ?? lastOptions.models ?? "",
-      modeldir: computedModelDir ?? lastOptions.modeldir ?? modelRepositories,
-      dbfile: lastOptions.dbfile ?? (activeDir ? path.join(activeDir, "interlis.gpkg") : "")
+      configPath: lastOptions?.configPath ?? bundledConfigPath,
+      dbfile: lastOptions?.dbfile ?? (activeDir ? path.join(activeDir, "interlis.gpkg") : ""),
+      models: activeModelName ?? lastOptions?.models ?? "",
+      modeldir: computedModelDir ?? lastOptions?.modeldir ?? modelRepositories
     };
 
-    const dbfile = await promptString("GeoPackage file name", defaults.dbfile, true);
+    const configPath = await pickConfigFile(defaults.configPath, bundledConfigPath);
+    if (!configPath) {
+      return;
+    }
+
+    const dbfile = await pickDbFile(defaults.dbfile);
     if (!dbfile) {
       return;
     }
 
-    const defaultSrsCode = await promptString("Default SRS code", defaults.defaultSrsCode ?? "", false);
-    if (defaultSrsCode === undefined) {
-      return;
-    }
-    const createEnumTabs = await promptBoolean("Create enum tables (--createEnumTabs)", defaults.createEnumTabs);
-    if (createEnumTabs === undefined) {
-      return;
-    }
-    const nameByTopic = await promptBoolean("Name tables by topic (--nameByTopic)", defaults.nameByTopic);
-    if (nameByTopic === undefined) {
-      return;
-    }
-    const createFk = await promptBoolean("Create foreign keys (--createFk)", defaults.createFk);
-    if (createFk === undefined) {
-      return;
-    }
-    const createGeomIdx = await promptBoolean("Create geometry index (--createGeomIdx)", defaults.createGeomIdx);
-    if (createGeomIdx === undefined) {
-      return;
-    }
-    const createUnique = await promptBoolean("Create unique constraints (--createUnique)", defaults.createUnique);
-    if (createUnique === undefined) {
-      return;
-    }
     const models = await promptString("Models (--models)", defaults.models ?? "", false);
     if (models === undefined) {
       return;
@@ -98,42 +74,19 @@ export function registerIli2GpkgCommands(context: vscode.ExtensionContext, javaP
     }
 
     const options: Ili2GpkgOptions = {
+      configPath,
       dbfile,
-      defaultSrsCode: defaultSrsCode?.trim() || undefined,
-      createEnumTabs,
-      nameByTopic,
-      createFk,
-      createGeomIdx,
-      createUnique,
       models: models?.trim() || undefined,
       modeldir: modeldir?.trim() || undefined
     };
 
     await context.globalState.update(STATE_KEY, options);
 
-    const logPath = path.join(os.tmpdir(), `ili2gpkg-${Date.now()}.log`);
+    const logPath = computeLogPath(dbfile);
     await removeIfExists(logPath);
     ili2dbOutput.clear();
 
-    const args: string[] = ["-jar", jarPath, "--dbfile", options.dbfile];
-    if (options.defaultSrsCode) {
-      args.push("--defaultSrsCode", options.defaultSrsCode);
-    }
-    if (options.createEnumTabs) {
-      args.push("--createEnumTabs");
-    }
-    if (options.nameByTopic) {
-      args.push("--nameByTopic");
-    }
-    if (options.createFk) {
-      args.push("--createFk");
-    }
-    if (options.createGeomIdx) {
-      args.push("--createGeomIdx");
-    }
-    if (options.createUnique) {
-      args.push("--createUnique");
-    }
+    const args: string[] = ["-jar", jarPath, "--config", options.configPath, "--dbfile", options.dbfile];
     if (options.models) {
       args.push("--models", options.models);
     }
@@ -179,6 +132,15 @@ export function registerIli2GpkgCommands(context: vscode.ExtensionContext, javaP
   context.subscriptions.push(disposable);
 }
 
+function resolveBundledConfigPath(context: vscode.ExtensionContext): string | undefined {
+  const resolved = context.asAbsolutePath(DEFAULT_CONFIG_RELATIVE_PATH);
+  if (!fs.existsSync(resolved)) {
+    vscode.window.showErrorMessage("The bundled ili2gpkg default configuration is missing.");
+    return undefined;
+  }
+  return resolved;
+}
+
 async function promptString(placeHolder: string, value: string, required: boolean): Promise<string | undefined> {
   return vscode.window.showInputBox({
     prompt: placeHolder,
@@ -187,18 +149,51 @@ async function promptString(placeHolder: string, value: string, required: boolea
   });
 }
 
-async function promptBoolean(placeHolder: string, value: boolean): Promise<boolean | undefined> {
-  const items = [
-    { label: "Yes", value: true },
-    { label: "No", value: false }
-  ];
-  const picked = await vscode.window.showQuickPick(items, {
-    placeHolder,
-    canPickMany: false,
-    activeItem: items.find(item => item.value === value)
+async function pickConfigFile(lastPath: string, fallbackPath: string): Promise<string | undefined> {
+  const defaultUri = fs.existsSync(lastPath)
+    ? vscode.Uri.file(lastPath)
+    : fs.existsSync(fallbackPath)
+      ? vscode.Uri.file(fallbackPath)
+      : undefined;
+
+  const selection = await vscode.window.showOpenDialog({
+    canSelectFiles: true,
+    canSelectMany: false,
+    filters: { "ili2gpkg config": ["ini"] },
+    openLabel: "Use ini file",
+    title: "Select ili2gpkg configuration (.ini)",
+    defaultUri
   });
 
-  return picked?.value;
+  if (selection?.[0]) {
+    return selection[0].fsPath;
+  }
+
+  return fs.existsSync(fallbackPath) ? fallbackPath : undefined;
+}
+
+async function pickDbFile(previousPath?: string): Promise<string | undefined> {
+  const defaultUri = previousPath ? vscode.Uri.file(previousPath) : undefined;
+  const saveUri = await vscode.window.showSaveDialog({
+    defaultUri,
+    filters: {
+      "GeoPackage": ["gpkg"],
+      "SQLite": ["sqlite", "db"],
+      "All files": ["*"]
+    },
+    title: "Select GeoPackage file",
+    saveLabel: "Use this file"
+  });
+
+  return saveUri?.fsPath;
+}
+
+function computeLogPath(dbfile: string): string {
+  const directory = path.dirname(dbfile);
+  if (directory && fs.existsSync(directory)) {
+    return path.join(directory, `ili2gpkg-${Date.now()}.log`);
+  }
+  return path.join(os.tmpdir(), `ili2gpkg-${Date.now()}.log`);
 }
 
 function quoteArg(arg: string): string {
