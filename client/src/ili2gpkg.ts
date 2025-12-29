@@ -157,9 +157,6 @@ export function registerIli2GpkgCommands(context: vscode.ExtensionContext, javaP
     try {
       const child = spawn(javaPath, args, { cwd: executionCwd });
 
-      child.stdout.on("data", data => ili2dbOutput.append(data.toString()));
-      child.stderr.on("data", data => ili2dbOutput.append(data.toString()));
-
       exitCode = await new Promise(resolve => {
         child.on("error", () => resolve(-1));
         child.on("close", code => resolve(code ?? -1));
