@@ -30,7 +30,8 @@
     "vscode": "^1.90.0"
   },
   "activationEvents": [
-    "onLanguage:interlis"
+    "onLanguage:interlis",
+    "onCommand:interlis.ili2gpkg.createSchema"
   ],
   "contributes": {
     "languages": [
@@ -78,6 +79,10 @@
       {
         "command": "interlis.docx.export",
         "title": "INTERLIS: Export documentation as DOCX"
+      },
+      {
+        "command": "interlis.ili2gpkg.createSchema",
+        "title": "ili2gpkg: Create empty GeoPackage"
       }
     ],
     "configuration": {
@@ -102,6 +107,10 @@
           "type": "boolean",
           "default": true,
           "description": "Show the INTERLIS LSP output channel when the extension activates."
+        },
+        "ili2gpkg.jarPath": {
+          "type": "string",
+          "markdownDescription": "Path to the ili2gpkg jar. Leave empty to use a jar placed inside the extension's `ili2gpkg` directory."
         }
       }
     },
