@@ -1,5 +1,10 @@
 package ch.so.agi.lsp.interlis;
 
+import ch.so.agi.lsp.interlis.compiler.CompilationCache;
+import ch.so.agi.lsp.interlis.compiler.Ili2cUtil;
+import ch.so.agi.lsp.interlis.server.InterlisLanguageServer;
+import ch.so.agi.lsp.interlis.text.DocumentTracker;
+import ch.so.agi.lsp.interlis.text.InterlisDefinitionFinder;
 import ch.interlis.ili2c.metamodel.TransferDescription;
 import org.junit.jupiter.api.Test;
 
@@ -89,4 +94,3 @@ class CompilationCacheTest {
     }
 
 }
-
