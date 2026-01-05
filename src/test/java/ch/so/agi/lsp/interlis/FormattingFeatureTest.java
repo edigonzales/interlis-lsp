@@ -1,5 +1,7 @@
 package ch.so.agi.lsp.interlis;
 
+import ch.so.agi.lsp.interlis.server.InterlisLanguageServer;
+import ch.so.agi.lsp.interlis.text.InterlisTextDocumentService;
 import org.eclipse.lsp4j.DocumentFormattingParams;
 import org.eclipse.lsp4j.InitializeParams;
 import org.eclipse.lsp4j.InitializeResult;

@@ -1,5 +1,6 @@
 package ch.so.agi.lsp.interlis;
 
+import ch.so.agi.lsp.interlis.export.html.MermaidHtmlRenderer;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
