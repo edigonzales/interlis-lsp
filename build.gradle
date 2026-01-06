@@ -54,7 +54,7 @@ test {
 }
 
 application {
-    mainClass = 'ch.so.agi.lsp.interlis.LspServerLauncher'
+    mainClass = 'ch.so.agi.lsp.interlis.server.LspServerLauncher'
 }
 
 /*

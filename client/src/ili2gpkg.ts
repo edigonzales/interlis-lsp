@@ -95,7 +95,8 @@ export function registerIli2GpkgCommands(context: vscode.ExtensionContext, javaP
     }
     args.push("--log", logPath, "--schemaimport");
 
-    const commandPreview = [javaPath, ...args.map(quoteArg)].join(" ");
+    //const commandPreview = [javaPath, ...args.map(quoteArg)].join(" ");
+    const commandPreview = [javaPath, ...args].join(" ");
     const confirmation = await vscode.window.showInformationMessage(
       "Review ili2gpkg command",
       { modal: true, detail: commandPreview },
