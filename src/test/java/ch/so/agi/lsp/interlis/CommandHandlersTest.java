@@ -1,5 +1,10 @@
 package ch.so.agi.lsp.interlis;
 
+import ch.so.agi.lsp.interlis.compiler.Ili2cUtil;
+import ch.so.agi.lsp.interlis.export.html.InterlisHtmlExporter;
+import ch.so.agi.lsp.interlis.server.ClientSettings;
+import ch.so.agi.lsp.interlis.server.InterlisLanguageServer;
+import ch.so.agi.lsp.interlis.workspace.CommandHandlers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;

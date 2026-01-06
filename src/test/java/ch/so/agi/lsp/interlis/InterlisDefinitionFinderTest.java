@@ -1,5 +1,11 @@
 package ch.so.agi.lsp.interlis;
 
+import ch.so.agi.lsp.interlis.compiler.CompilationCache;
+import ch.so.agi.lsp.interlis.compiler.Ili2cUtil;
+import ch.so.agi.lsp.interlis.server.ClientSettings;
+import ch.so.agi.lsp.interlis.server.InterlisLanguageServer;
+import ch.so.agi.lsp.interlis.text.DocumentTracker;
+import ch.so.agi.lsp.interlis.text.InterlisDefinitionFinder;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.TextDocumentIdentifier;

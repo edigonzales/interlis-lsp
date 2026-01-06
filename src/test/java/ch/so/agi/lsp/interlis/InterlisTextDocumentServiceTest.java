@@ -1,5 +1,11 @@
 package ch.so.agi.lsp.interlis;
 
+import ch.so.agi.lsp.interlis.compiler.CompilationCache;
+import ch.so.agi.lsp.interlis.compiler.Ili2cUtil;
+import ch.so.agi.lsp.interlis.server.ClientSettings;
+import ch.so.agi.lsp.interlis.server.InterlisLanguageServer;
+import ch.so.agi.lsp.interlis.text.InterlisDocumentSymbolCollector;
+import ch.so.agi.lsp.interlis.text.InterlisTextDocumentService;
 import ch.interlis.ili2c.metamodel.AttributeDef;
 import ch.interlis.ili2c.metamodel.DataModel;
 import ch.interlis.ili2c.metamodel.Model;

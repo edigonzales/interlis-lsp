@@ -1,5 +1,6 @@
 package ch.so.agi.lsp.interlis;
 
+import ch.so.agi.lsp.interlis.text.InterlisAutoCloser;
 import org.eclipse.lsp4j.DocumentOnTypeFormattingParams;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;

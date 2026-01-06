@@ -1,5 +1,8 @@
 package ch.so.agi.lsp.interlis;
 
+import ch.so.agi.lsp.interlis.compiler.Ili2cUtil;
+import ch.so.agi.lsp.interlis.diagram.Ili2GraphML;
+import ch.so.agi.lsp.interlis.server.ClientSettings;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -72,4 +75,3 @@ class Ili2GraphMLTest {
         assertTrue(graphml.contains(">Demo</y:NodeLabel>"));
     }
 }
-

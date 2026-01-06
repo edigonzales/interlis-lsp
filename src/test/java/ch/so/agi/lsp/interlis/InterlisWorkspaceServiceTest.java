@@ -1,5 +1,6 @@
 package ch.so.agi.lsp.interlis;
 
+import ch.so.agi.lsp.interlis.workspace.InterlisWorkspaceService;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.lang.reflect.Method;
