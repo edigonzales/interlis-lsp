@@ -66,22 +66,21 @@ export function resolveJavaPath(context: vscode.ExtensionContext, configured: st
 }
 
 export function resolveIli2GpkgJarPath(context: vscode.ExtensionContext, configured: string | undefined): string {
-  
-  console.log("**** " + configured);
+  //console.log("**** " + configured);
   const override = configured?.trim();
   if (override) {
     return override;
   }
 
   const toolsDir = context.asAbsolutePath("ili2gpkg");
-  console.log("****2 " + toolsDir);
+  //console.log("****2 " + toolsDir);
 
   const defaultJar = path.join(toolsDir, "ili2gpkg.jar");
   if (fs.existsSync(defaultJar)) {
     return defaultJar;
   }
 
-  console.log("****3 ");
+  //console.log("****3 ");
 
   if (fs.existsSync(toolsDir)) {
     const jar = fs.readdirSync(toolsDir)
