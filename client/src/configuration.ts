@@ -66,16 +66,22 @@ export function resolveJavaPath(context: vscode.ExtensionContext, configured: st
 }
 
 export function resolveIli2GpkgJarPath(context: vscode.ExtensionContext, configured: string | undefined): string {
+  
+  console.log("**** " + configured);
   const override = configured?.trim();
   if (override) {
     return override;
   }
 
   const toolsDir = context.asAbsolutePath("ili2gpkg");
+  console.log("****2 " + toolsDir);
+
   const defaultJar = path.join(toolsDir, "ili2gpkg.jar");
   if (fs.existsSync(defaultJar)) {
     return defaultJar;
   }
+
+  console.log("****3 ");
 
   if (fs.existsSync(toolsDir)) {
     const jar = fs.readdirSync(toolsDir)
@@ -88,7 +94,7 @@ export function resolveIli2GpkgJarPath(context: vscode.ExtensionContext, configu
     }
   }
 
-  const message = "ili2gpkg JAR not found. Configure `ili2gpkg.jarPath` in the extension settings.";
+  const message = "ili2gpkg JAR not found. Configure `interlisLsp.ili2gpkgJarPath` in the extension settings.";
   vscode.window.showErrorMessage(message);
   throw new Error(message);
 }

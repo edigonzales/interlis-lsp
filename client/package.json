@@ -25,7 +25,7 @@
     "prettyprint",
     "uml"
   ],
-  "version": "0.0.21",
+  "version": "0.0.22",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -103,14 +103,15 @@
           "default": "%ILI_DIR;https://models.interlis.ch;%JAR_DIR",
           "markdownDescription": "Preferred INTERLIS model repositories as a comma-separated string."
         },
+        "interlisLsp.ili2gpkgJarPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to the ili2gpkg jar. Leave empty to use a jar placed inside the extensions ili2gpkg directory."
+        },        
         "interlisLsp.autoShowOutputOnStart": {
           "type": "boolean",
           "default": true,
-          "description": "Show the INTERLIS LSP output channel when the extension activates."
-        },
-        "ili2gpkg.jarPath": {
-          "type": "string",
-          "markdownDescription": "Path to the ili2gpkg jar. Leave empty to use a jar placed inside the extension's `ili2gpkg` directory."
+          "markdownDescription": "Show the INTERLIS LSP output channel when the extension activates."
         }
       }
     },

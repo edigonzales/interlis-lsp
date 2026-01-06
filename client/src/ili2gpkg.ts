@@ -20,10 +20,10 @@ export function registerIli2GpkgCommands(context: vscode.ExtensionContext, javaP
   context.subscriptions.push(ili2dbOutput);
 
   const disposable = vscode.commands.registerCommand("interlis.ili2gpkg.createSchema", async () => {
-    const ili2gpkgConfig = vscode.workspace.getConfiguration("ili2gpkg");
+    const ili2gpkgConfig = vscode.workspace.getConfiguration("interlisLsp");
     let jarPath: string;
     try {
-      jarPath = resolveIli2GpkgJarPath(context, ili2gpkgConfig.get<string>("jarPath"));
+      jarPath = resolveIli2GpkgJarPath(context, ili2gpkgConfig.get<string>("ili2gpkgJarPath"));
     } catch (err) {
       return;
     }
