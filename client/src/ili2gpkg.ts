@@ -91,7 +91,7 @@ export function registerIli2GpkgCommands(context: vscode.ExtensionContext, javaP
       args.push("--models", options.models);
     }
     if (options.modeldir) {
-      args.push("--modeldir", `"${options.modeldir}"`);
+      args.push("--modeldir", options.modeldir);
     }
     args.push("--log", logPath, "--schemaimport");
 
