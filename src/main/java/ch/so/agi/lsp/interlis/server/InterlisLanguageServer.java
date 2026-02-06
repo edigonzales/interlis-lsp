@@ -1,5 +1,6 @@
 package ch.so.agi.lsp.interlis.server;
 
+import ch.so.agi.lsp.interlis.glsp.GlspEndpoint;
 import ch.so.agi.lsp.interlis.text.InterlisTextDocumentService;
 import ch.so.agi.lsp.interlis.workspace.InterlisWorkspaceService;
 import org.eclipse.lsp4j.*;
@@ -19,10 +20,13 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
     private final InterlisWorkspaceService workspaceService;
     
     private final AtomicReference<ClientSettings> clientSettings = new AtomicReference<>(new ClientSettings());
+    private final AtomicReference<GlspEndpoint> glspEndpoint = new AtomicReference<>();
 
     public static final String CMD_COMPILE = "interlis.compile"; // workspace/executeCommand
     public static final String CMD_GENERATE_UML = "interlis.uml";
     public static final String CMD_GENERATE_PLANTUML = "interlis.uml.plant";
+    public static final String REQ_GLSP_ENDPOINT = "interlis/glspEndpoint";
+    public static final String REQ_DIAGRAM_MODEL = "interlis/diagramModel";
     public static final String REQ_EXPORT_GRAPHML = "interlis/exportGraphml";
     public static final String REQ_EXPORT_DOCX = "interlis/exportDocx";
     public static final String REQ_EXPORT_HTML = "interlis/exportHtml";
@@ -139,5 +143,13 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
         for (int i = 0; i < text.length(); i += CHUNK) {
             client.log(new InterlisLanguageClient.LogParams(text.substring(i, Math.min(text.length(), i + CHUNK))));
         }    
+    }
+
+    public GlspEndpoint getGlspEndpoint() {
+        return glspEndpoint.get();
+    }
+
+    public void setGlspEndpoint(GlspEndpoint endpoint) {
+        glspEndpoint.set(endpoint);
     }
 }

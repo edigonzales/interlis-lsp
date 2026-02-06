@@ -104,6 +104,8 @@ Custom JSON-RPC requests handled with `@JsonRequest`:
 
 | Request | VS Code caller | Description |
 | --- | --- | --- |
+| `interlis/glspEndpoint` | Custom editor bootstrap `interlis.diagramEditor` | Returns websocket host/port/path + diagram type for the embedded GLSP runtime. |
+| `interlis/diagramModel` | Internal diagram pipeline | Returns a structured UML graph model (containers, nodes, edges) derived from `TransferDescription`. |
 | `interlis/exportGraphml` | `interlis.graphml.export` | Returns a GraphML UML class diagram as UTF-8 text. |
 | `interlis/exportDocx` | `interlis.docx.export` | Returns a Base64 DOCX payload derived from the compiled model. |
 | `interlis/exportHtml` | `interlis.html.show` | Returns rendered HTML documentation for previews. |

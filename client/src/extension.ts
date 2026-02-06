@@ -3,6 +3,12 @@ import { LanguageClient, LanguageClientOptions, Executable, ServerOptions, State
 import * as path from "path";
 import { registerIli2GpkgCommands } from "./ili2gpkg";
 import { resolveJavaPath, resolveServerJarPath } from "./configuration";
+import {
+  forgetAutoOpenedDiagram,
+  maybeAutoOpenDiagram,
+  registerInterlisDiagramCommands,
+  registerInterlisDiagramEditor
+} from "./diagram/diagramEditor";
 
 let client: LanguageClient | undefined;
 let revealOutputOnNextLog = false;
@@ -10,6 +16,7 @@ const CARET_SENTINEL = "__INTERLIS_AUTOCLOSE_CARET__";
 let umlPanel: vscode.WebviewPanel | undefined;
 let htmlPanel: vscode.WebviewPanel | undefined;
 let lastDiagramSource: vscode.Uri | undefined;
+const autoOpenedDiagramUris = new Set<string>();
 
 type PendingCaret = { version: number; position: vscode.Position };
 
@@ -108,6 +115,12 @@ export async function activate(context: vscode.ExtensionContext) {
   client = new LanguageClient("interlisLsp", "INTERLIS Language Server", serverOptions, clientOptions);
   context.subscriptions.push(client);
   await client.start();
+  try {
+    await registerInterlisDiagramEditor(context, () => client);
+    registerInterlisDiagramCommands(context);
+  } catch (err: any) {
+    vscode.window.showErrorMessage(`INTERLIS GLSP diagram integration failed to start: ${err?.message ?? err}`);
+  }
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeTextDocument(event => {
@@ -134,6 +147,20 @@ export async function activate(context: vscode.ExtensionContext) {
       active.revealRange(new vscode.Range(position, position));
     })
   );
+
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor(editor => {
+      void maybeAutoOpenDiagram(editor, autoOpenedDiagramUris);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.workspace.onDidCloseTextDocument(document => {
+      forgetAutoOpenedDiagram(document, autoOpenedDiagramUris);
+    })
+  );
+
+  void maybeAutoOpenDiagram(vscode.window.activeTextEditor, autoOpenedDiagramUris);
 
   // Register notification handlers ONCE, immediately
   let handlersRegistered = false;

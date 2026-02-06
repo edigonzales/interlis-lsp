@@ -1,5 +1,7 @@
 package ch.so.agi.lsp.interlis.workspace;
 
+import ch.so.agi.lsp.interlis.diagram.InterlisDiagramModel;
+import ch.so.agi.lsp.interlis.glsp.GlspEndpoint;
 import ch.so.agi.lsp.interlis.server.ClientSettings;
 import ch.so.agi.lsp.interlis.server.InterlisLanguageServer;
 import org.eclipse.lsp4j.ExecuteCommandParams;
@@ -93,6 +95,32 @@ public class InterlisWorkspaceService implements WorkspaceService {
 
         LOG.info("graphml export called with: {}", normalized);
         return handlers.exportGraphml(normalized);
+    }
+
+    @JsonRequest(InterlisLanguageServer.REQ_GLSP_ENDPOINT)
+    public CompletableFuture<GlspEndpoint> glspEndpoint() {
+        GlspEndpoint endpoint = server.getGlspEndpoint();
+        if (endpoint == null) {
+            return internalErrorGeneric("Embedded GLSP endpoint is not available.");
+        }
+        return CompletableFuture.completedFuture(endpoint);
+    }
+
+    @JsonRequest(InterlisLanguageServer.REQ_DIAGRAM_MODEL)
+    public CompletableFuture<InterlisDiagramModel.DiagramModel> exportDiagramModel(Object rawParams) {
+        DocumentExportParams params = coerceExportParams(rawParams);
+        if (params == null) {
+            return invalidParamsGeneric("Expected parameters with uri or path");
+        }
+
+        String candidate = firstNonBlank(params.getPath(), params.getUri());
+        String normalized = normalizePath(candidate);
+        if (normalized == null) {
+            return invalidParamsGeneric("Expected uri or path to be provided");
+        }
+
+        LOG.info("diagram model export called with: {}", normalized);
+        return handlers.exportDiagramModel(normalized);
     }
 
     @JsonRequest(InterlisLanguageServer.REQ_EXPORT_DOCX)
@@ -395,8 +423,19 @@ public class InterlisWorkspaceService implements WorkspaceService {
     }
 
     private CompletableFuture<String> invalidParams(String message) {
+        return invalidParamsGeneric(message);
+    }
+
+    private <T> CompletableFuture<T> invalidParamsGeneric(String message) {
         ResponseError err = new ResponseError(ResponseErrorCode.InvalidParams, message, null);
-        CompletableFuture<String> failed = new CompletableFuture<>();
+        CompletableFuture<T> failed = new CompletableFuture<>();
+        failed.completeExceptionally(new ResponseErrorException(err));
+        return failed;
+    }
+
+    private <T> CompletableFuture<T> internalErrorGeneric(String message) {
+        ResponseError err = new ResponseError(ResponseErrorCode.InternalError, message, null);
+        CompletableFuture<T> failed = new CompletableFuture<>();
         failed.completeExceptionally(new ResponseErrorException(err));
         return failed;
     }

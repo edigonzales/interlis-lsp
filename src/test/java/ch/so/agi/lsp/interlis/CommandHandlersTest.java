@@ -1,6 +1,7 @@
 package ch.so.agi.lsp.interlis;
 
 import ch.so.agi.lsp.interlis.compiler.Ili2cUtil;
+import ch.so.agi.lsp.interlis.diagram.InterlisDiagramModel;
 import ch.so.agi.lsp.interlis.export.html.InterlisHtmlExporter;
 import ch.so.agi.lsp.interlis.server.ClientSettings;
 import ch.so.agi.lsp.interlis.server.InterlisLanguageServer;
@@ -114,6 +115,41 @@ class CommandHandlersTest {
         assertTrue(graphml.contains("<graphml"));
         assertTrue(graphml.contains("NodeA"));
         assertTrue(graphml.contains("NodeB"));
+    }
+
+    @Test
+    void exportDiagramModelReturnsContainerizedNodes() throws Exception {
+        Path iliFile = tempDir.resolve("SimpleDiagramModel.ili");
+        Files.writeString(iliFile, "INTERLIS 2.3;\n" +
+                "MODEL SimpleDiagramModel (en)\n" +
+                "AT \"http://example.com/SimpleDiagramModel.ili\"\n" +
+                "VERSION \"2024-01-01\" =\n" +
+                "  TOPIC SimpleTopic =\n" +
+                "    CLASS Person =\n" +
+                "      Name : TEXT*40;\n" +
+                "    END Person;\n" +
+                "  END SimpleTopic;\n" +
+                "END SimpleDiagramModel.\n");
+
+        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(new ClientSettings(), iliFile.toString());
+        assertNotNull(outcome.getTransferDescription(), outcome.getLogText());
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        CommandHandlers handlers = new CommandHandlers(server);
+
+        InterlisDiagramModel.DiagramModel model = handlers.exportDiagramModel(iliFile.toString())
+                .get(30, TimeUnit.SECONDS);
+
+        assertNotNull(model);
+        assertEquals("1", model.getSchemaVersion());
+        assertTrue(model.getContainers().stream().anyMatch(c ->
+                "topic".equals(c.getKind())
+                        && c.getQualifiedName() != null
+                        && c.getQualifiedName().contains("SimpleTopic")));
+        assertTrue(model.getNodes().stream().anyMatch(n ->
+                "Person".equals(n.getLabel())
+                        && n.getContainerId() != null
+                        && !n.getContainerId().isBlank()));
     }
 
     @Test

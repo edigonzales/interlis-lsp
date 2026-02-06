@@ -1,5 +1,7 @@
 package ch.so.agi.lsp.interlis;
 
+import ch.so.agi.lsp.interlis.glsp.GlspEndpoint;
+import ch.so.agi.lsp.interlis.server.InterlisLanguageServer;
 import ch.so.agi.lsp.interlis.workspace.InterlisWorkspaceService;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -49,5 +51,19 @@ class InterlisWorkspaceServiceTest {
         String raw = "{\"uri\":\"file:///tmp/example.ili\"}";
 
         assertEquals("file:///tmp/example.ili", coerce(raw));
+    }
+
+    @Test
+    void glspEndpointReturnsConfiguredEndpoint() throws Exception {
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        server.setGlspEndpoint(new GlspEndpoint("ws", "127.0.0.1", 12345, "glsp", "interlis-uml"));
+        InterlisWorkspaceService service = new InterlisWorkspaceService(server);
+
+        GlspEndpoint endpoint = service.glspEndpoint().get();
+        assertEquals("ws", endpoint.getProtocol());
+        assertEquals("127.0.0.1", endpoint.getHost());
+        assertEquals(12345, endpoint.getPort());
+        assertEquals("glsp", endpoint.getPath());
+        assertEquals("interlis-uml", endpoint.getDiagramType());
     }
 }
