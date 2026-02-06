@@ -2,6 +2,7 @@ import "reflect-metadata";
 import {
   baseViewModule,
   ContainerConfiguration,
+  createDiagramOptionsModule,
   DefaultTypes,
   FeatureModule,
   GEdge,
@@ -9,8 +10,8 @@ import {
   initializeDiagramContainer
 } from "@eclipse-glsp/client";
 import { overrideModelElement, svg } from "@eclipse-glsp/sprotty";
-import { GLSPStarter } from "@eclipse-glsp/vscode-integration-webview";
-import { Container, injectable } from "inversify";
+import { GLSPDiagramIdentifier, GLSPStarter, WebviewGlspClient } from "@eclipse-glsp/vscode-integration-webview";
+import { Container, ContainerModule, injectable } from "inversify";
 
 @injectable()
 class InterlisEdgeView extends GEdgeView {
@@ -64,6 +65,22 @@ const interlisEdgeViewModule = new FeatureModule((bind, unbind, isBound, rebind)
 });
 
 class InterlisGlspWebviewStarter extends GLSPStarter {
+  protected override createDiagramOptionsModule(identifier: GLSPDiagramIdentifier): ContainerModule {
+    const glspClient = new WebviewGlspClient({ id: identifier.diagramType, messenger: this.messenger });
+    return createDiagramOptionsModule(
+      {
+        clientId: identifier.clientId,
+        diagramType: identifier.diagramType,
+        glspClientProvider: async () => glspClient,
+        sourceUri: decodeURIComponent(identifier.uri)
+      },
+      {
+        needsClientLayout: false,
+        needsServerLayout: true
+      }
+    );
+  }
+
   protected override createContainer(...containerConfiguration: ContainerConfiguration): Container {
     return initializeDiagramContainer(
       new Container(),

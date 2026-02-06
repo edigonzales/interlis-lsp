@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 import org.eclipse.glsp.graph.DefaultTypes;
@@ -21,13 +22,18 @@ import org.eclipse.glsp.graph.builder.impl.GGraphBuilder;
 import org.eclipse.glsp.graph.builder.impl.GLabelBuilder;
 import org.eclipse.glsp.graph.builder.impl.GNodeBuilder;
 import org.eclipse.glsp.server.features.core.model.GModelFactory;
+import org.eclipse.glsp.server.layout.LayoutEngine;
 import org.eclipse.glsp.server.model.GModelState;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.inject.Inject;
 
 import ch.so.agi.lsp.interlis.diagram.InterlisDiagramModel;
 
 public class InterlisGlspModelFactory implements GModelFactory {
+    private static final Logger LOG = LoggerFactory.getLogger(InterlisGlspModelFactory.class);
+
     private static final double OUTER_PADDING = 24;
     private static final double MAX_ROW_WIDTH = 2300;
     private static final double CONTAINER_GAP = 28;
@@ -46,6 +52,9 @@ public class InterlisGlspModelFactory implements GModelFactory {
     @Inject
     protected GModelState modelState;
 
+    @Inject
+    protected Optional<LayoutEngine> layoutEngine;
+
     @Override
     public void createGModel() {
         String error = modelState.getProperty(InterlisGlspModelStateKeys.ERROR, String.class).orElse(null);
@@ -59,6 +68,15 @@ public class InterlisGlspModelFactory implements GModelFactory {
                 : buildDiagramGraph(diagramModel);
 
         modelState.updateRoot(graph);
+        if (error == null || error.isBlank()) {
+            layoutEngine.ifPresent(engine -> {
+                try {
+                    engine.layout();
+                } catch (RuntimeException ex) {
+                    LOG.warn("ELK layout failed. Falling back to static coordinates.", ex);
+                }
+            });
+        }
     }
 
     private GGraph buildDiagramGraph(InterlisDiagramModel.DiagramModel diagramModel) {

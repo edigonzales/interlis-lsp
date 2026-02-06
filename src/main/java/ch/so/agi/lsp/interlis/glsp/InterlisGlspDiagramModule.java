@@ -5,6 +5,8 @@ import org.eclipse.glsp.server.diagram.DiagramConfiguration;
 import org.eclipse.glsp.server.features.core.model.GModelFactory;
 import org.eclipse.glsp.server.features.core.model.SourceModelStorage;
 import org.eclipse.glsp.server.gmodel.GModelDiagramModule;
+import org.eclipse.glsp.server.layout.LayoutEngine;
+import org.eclipse.glsp.server.operations.LayoutOperationHandler;
 import org.eclipse.glsp.server.operations.OperationHandler;
 
 public class InterlisGlspDiagramModule extends GModelDiagramModule {
@@ -29,7 +31,12 @@ public class InterlisGlspDiagramModule extends GModelDiagramModule {
     }
 
     @Override
+    protected Class<? extends LayoutEngine> bindLayoutEngine() {
+        return InterlisElkLayoutEngine.class;
+    }
+
+    @Override
     protected void configureOperationHandlers(MultiBinding<OperationHandler<?>> operationHandlers) {
-        // Read-only diagram for now.
+        operationHandlers.add(LayoutOperationHandler.class);
     }
 }

@@ -1,5 +1,6 @@
 import * as path from "path";
 import * as vscode from "vscode";
+import { TriggerLayoutAction } from "@eclipse-glsp/protocol";
 import { GlspEditorProvider, GlspVscodeConnector, SocketGlspVscodeServer } from "@eclipse-glsp/vscode-integration/node";
 import { LanguageClient } from "vscode-languageclient/node";
 
@@ -330,6 +331,24 @@ export function registerInterlisDiagramCommands(context: vscode.ExtensionContext
         return;
       }
       await openInterlisDiagramBeside(editor.document.uri, true);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("interlis.diagram.autoLayout", () => {
+      if (!glspConnector) {
+        vscode.window.showWarningMessage("INTERLIS diagram editor is not ready.");
+        return;
+      }
+
+      const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
+      if (!(activeTab?.input instanceof vscode.TabInputCustom)
+        || activeTab.input.viewType !== DIAGRAM_EDITOR_VIEW_TYPE) {
+        vscode.window.showWarningMessage("Open an INTERLIS diagram editor tab first.");
+        return;
+      }
+
+      glspConnector.dispatchAction(TriggerLayoutAction.create());
     })
   );
 }

@@ -32,7 +32,8 @@
   "activationEvents": [
     "onLanguage:interlis",
     "onCommand:interlis.ili2gpkg.createSchema",
-    "onCommand:interlis.diagram.open"
+    "onCommand:interlis.diagram.open",
+    "onCommand:interlis.diagram.autoLayout"
   ],
   "contributes": {
     "languages": [
@@ -76,6 +77,10 @@
       {
         "command": "interlis.diagram.open",
         "title": "INTERLIS: Open diagram editor"
+      },
+      {
+        "command": "interlis.diagram.autoLayout",
+        "title": "INTERLIS: Auto-layout active diagram"
       },
       {
         "command": "interlis.uml.show",

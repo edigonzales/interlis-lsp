@@ -6,6 +6,7 @@ import java.util.Optional;
 import org.eclipse.glsp.graph.DefaultTypes;
 import org.eclipse.glsp.graph.GraphExtension;
 import org.eclipse.glsp.server.diagram.BaseDiagramConfiguration;
+import org.eclipse.glsp.server.layout.ServerLayoutKind;
 import org.eclipse.glsp.server.types.EdgeTypeHint;
 import org.eclipse.glsp.server.types.ShapeTypeHint;
 
@@ -32,6 +33,11 @@ public class InterlisGlspDiagramConfiguration extends BaseDiagramConfiguration {
         hint.setRoutable(false);
         hint.setDynamic(false);
         return List.of(hint);
+    }
+
+    @Override
+    public ServerLayoutKind getLayoutKind() {
+        return ServerLayoutKind.MANUAL;
     }
 
     @Override
