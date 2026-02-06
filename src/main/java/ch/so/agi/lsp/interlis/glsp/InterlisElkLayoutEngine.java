@@ -17,14 +17,18 @@ import org.eclipse.glsp.layout.ElkLayoutEngine;
 import org.eclipse.glsp.layout.GLSPLayoutConfigurator;
 
 import ch.so.agi.lsp.interlis.diagram.InterlisDiagramModel;
+import ch.so.agi.lsp.interlis.server.ClientSettings;
+import ch.so.agi.lsp.interlis.server.InterlisLanguageServer;
 
 /**
  * Configures ELK Layered for UML-like class diagrams with container nodes.
  */
 public class InterlisElkLayoutEngine extends ElkLayoutEngine {
     public static final String DIRECTION_PROPERTY = "interlis.glsp.layout.direction";
+    public static final String EDGE_ROUTING_PROPERTY = "interlis.glsp.layout.edgeRouting";
 
     private static final Direction DEFAULT_DIRECTION = Direction.RIGHT;
+    private static final EdgeRouting DEFAULT_EDGE_ROUTING = EdgeRouting.ORTHOGONAL;
     private static final int DEFAULT_THOROUGHNESS = 10;
     private static final double ROOT_NODE_NODE_SPACING = 60d;
     private static final double ROOT_EDGE_NODE_SPACING = 30d;
@@ -54,7 +58,7 @@ public class InterlisElkLayoutEngine extends ElkLayoutEngine {
 
     protected void configureRoot(IPropertyHolder rootOptions) {
         rootOptions.setProperty(CoreOptions.ALGORITHM, LayeredOptions.ALGORITHM_ID);
-        rootOptions.setProperty(CoreOptions.EDGE_ROUTING, EdgeRouting.ORTHOGONAL);
+        rootOptions.setProperty(CoreOptions.EDGE_ROUTING, resolveEdgeRouting());
         rootOptions.setProperty(CoreOptions.HIERARCHY_HANDLING, HierarchyHandling.INCLUDE_CHILDREN);
         rootOptions.setProperty(CoreOptions.DIRECTION, resolveDirection());
 
@@ -121,6 +125,34 @@ public class InterlisElkLayoutEngine extends ElkLayoutEngine {
             return Direction.valueOf(configured.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException ex) {
             return DEFAULT_DIRECTION;
+        }
+    }
+
+    protected EdgeRouting resolveEdgeRouting() {
+        String configured = null;
+        InterlisLanguageServer languageServer = InterlisGlspBridge.getLanguageServer();
+        if (languageServer != null) {
+            ClientSettings settings = languageServer.getClientSettings();
+            if (settings != null) {
+                configured = settings.getEdgeRouting();
+            }
+        }
+        if (configured == null || configured.isBlank()) {
+            configured = System.getProperty(EDGE_ROUTING_PROPERTY);
+        }
+
+        EdgeRouting parsed = parseEdgeRouting(configured);
+        return parsed != null ? parsed : DEFAULT_EDGE_ROUTING;
+    }
+
+    protected EdgeRouting parseEdgeRouting(String configured) {
+        if (configured == null || configured.isBlank()) {
+            return null;
+        }
+        try {
+            return EdgeRouting.valueOf(configured.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            return null;
         }
     }
 }

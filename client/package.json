@@ -147,6 +147,21 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "Automatically open the INTERLIS diagram editor beside an opened .ili text editor."
+        },
+        "interlisLsp.diagram.layout.edgeRouting": {
+          "type": "string",
+          "enum": [
+            "ORTHOGONAL",
+            "POLYLINE",
+            "SPLINES"
+          ],
+          "default": "ORTHOGONAL",
+          "markdownDescription": "Edge routing strategy for INTERLIS diagram auto-layout. Changes take effect after running `INTERLIS: Auto-layout active diagram`."
+        },
+        "interlisLsp.diagram.showCardinalities": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show association cardinality labels in INTERLIS diagrams."
         }
       }
     },

@@ -13,7 +13,9 @@ import java.util.Optional;
 import java.util.Set;
 
 import org.eclipse.glsp.graph.DefaultTypes;
+import org.eclipse.glsp.graph.GEdge;
 import org.eclipse.glsp.graph.GGraph;
+import org.eclipse.glsp.graph.GLabel;
 import org.eclipse.glsp.graph.GModelElement;
 import org.eclipse.glsp.graph.builder.impl.GCompartmentBuilder;
 import org.eclipse.glsp.graph.builder.impl.GEdgeBuilder;
@@ -30,6 +32,8 @@ import org.slf4j.LoggerFactory;
 import com.google.inject.Inject;
 
 import ch.so.agi.lsp.interlis.diagram.InterlisDiagramModel;
+import ch.so.agi.lsp.interlis.server.ClientSettings;
+import ch.so.agi.lsp.interlis.server.InterlisLanguageServer;
 
 public class InterlisGlspModelFactory implements GModelFactory {
     private static final Logger LOG = LoggerFactory.getLogger(InterlisGlspModelFactory.class);
@@ -48,6 +52,13 @@ public class InterlisGlspModelFactory implements GModelFactory {
     private static final double NODE_CONTENT_START = 38;
     private static final double NODE_LINE_HEIGHT = 14;
     private static final double SECTION_GAP = 6;
+    private static final double EDGE_LABEL_CHAR_WIDTH = 7.2;
+    private static final double EDGE_LABEL_PADDING_X = 10;
+    private static final double EDGE_LABEL_HEIGHT = 16;
+    private static final double EDGE_LABEL_MIN_WIDTH = 42;
+    private static final double EDGE_LABEL_MAX_WIDTH = 320;
+    private static final double ASSOCIATION_LABEL_FALLBACK_POSITION = 0.5;
+    private static final double ASSOCIATION_LABEL_FALLBACK_OFFSET = 18;
 
     @Inject
     protected GModelState modelState;
@@ -76,6 +87,7 @@ public class InterlisGlspModelFactory implements GModelFactory {
                     LOG.warn("ELK layout failed. Falling back to static coordinates.", ex);
                 }
             });
+            applyAssociationLabelPlacementFallback(graph);
         }
     }
 
@@ -134,6 +146,7 @@ public class InterlisGlspModelFactory implements GModelFactory {
 
         // Render edges after container/class nodes so they stay visible above topic backgrounds.
         Set<String> renderableNodeIds = new LinkedHashSet<>(nodesById.keySet());
+        boolean showCardinalities = resolveClientSettings().isShowCardinalities();
         int edgeIndex = 0;
         for (InterlisDiagramModel.EdgeModel edge : safeList(diagram.getEdges())) {
             if (edge == null || isBlank(edge.getSourceId()) || isBlank(edge.getTargetId())) {
@@ -154,16 +167,16 @@ public class InterlisGlspModelFactory implements GModelFactory {
             edgeBuilder.addCssClass(inheritance ? "interlis-edge-inheritance" : "interlis-edge-association");
 
             if (!inheritance) {
-                if (!isBlank(edge.getSourceCardinality())) {
+                if (showCardinalities && !isBlank(edge.getSourceCardinality())) {
                     edgeBuilder.add(edgeLabel(edgeId + ":source-card", edge.getSourceCardinality(), 0.12, 8,
                             "interlis-edge-cardinality"));
                 }
-                if (!isBlank(edge.getTargetCardinality())) {
+                if (showCardinalities && !isBlank(edge.getTargetCardinality())) {
                     edgeBuilder.add(edgeLabel(edgeId + ":target-card", edge.getTargetCardinality(), 0.88, 8,
                             "interlis-edge-cardinality"));
                 }
                 if (!isBlank(edge.getLabel())) {
-                    edgeBuilder.add(edgeLabel(edgeId + ":label", edge.getLabel(), 0.5, 18, "interlis-edge-label"));
+                    edgeBuilder.add(associationLabel(edgeId + ":label", edge.getLabel()));
                 }
             }
 
@@ -254,6 +267,89 @@ public class InterlisGlspModelFactory implements GModelFactory {
                         .build())
                 .addCssClass(cssClass)
                 .build();
+    }
+
+    private GModelElement associationLabel(String id, String text) {
+        LabelSize size = estimateLabelSize(text);
+        return new GLabelBuilder(DefaultTypes.LABEL)
+                .id(id)
+                .text(text)
+                .size(size.width, size.height)
+                .addCssClass("interlis-edge-label")
+                .build();
+    }
+
+    private void applyAssociationLabelPlacementFallback(GGraph graph) {
+        if (graph == null) {
+            return;
+        }
+
+        for (GModelElement element : safeList(graph.getChildren())) {
+            if (!(element instanceof GEdge edge) || !hasCssClass(edge, "interlis-edge-association")) {
+                continue;
+            }
+
+            for (GModelElement child : safeList(edge.getChildren())) {
+                if (!(child instanceof GLabel label) || !isAssociationNameLabel(label)) {
+                    continue;
+                }
+                if (hasUsableLabelPlacement(label)) {
+                    continue;
+                }
+
+                label.setEdgePlacement(new GEdgePlacementBuilder()
+                        .position(ASSOCIATION_LABEL_FALLBACK_POSITION)
+                        .side("top")
+                        .offset(ASSOCIATION_LABEL_FALLBACK_OFFSET)
+                        .rotate(false)
+                        .build());
+            }
+        }
+    }
+
+    private static boolean isAssociationNameLabel(GLabel label) {
+        String id = label.getId();
+        return id != null && id.endsWith(":label");
+    }
+
+    private static boolean hasUsableLabelPlacement(GLabel label) {
+        if (label.getEdgePlacement() != null) {
+            return true;
+        }
+        if (label.getPosition() == null) {
+            return false;
+        }
+
+        double x = label.getPosition().getX();
+        double y = label.getPosition().getY();
+        if (!Double.isFinite(x) || !Double.isFinite(y)) {
+            return false;
+        }
+
+        return Math.abs(x) >= 0.5 || Math.abs(y) >= 0.5;
+    }
+
+    private static LabelSize estimateLabelSize(String text) {
+        int length = firstNonBlank(text, "").length();
+        double width = Math.max(EDGE_LABEL_MIN_WIDTH, length * EDGE_LABEL_CHAR_WIDTH + EDGE_LABEL_PADDING_X * 2);
+        width = Math.min(width, EDGE_LABEL_MAX_WIDTH);
+        return new LabelSize(width, EDGE_LABEL_HEIGHT);
+    }
+
+    private static boolean hasCssClass(GModelElement element, String cssClass) {
+        if (element == null || cssClass == null || cssClass.isBlank()) {
+            return false;
+        }
+        return element.getCssClasses() != null && element.getCssClasses().contains(cssClass);
+    }
+
+    private static ClientSettings resolveClientSettings() {
+        InterlisLanguageServer languageServer = InterlisGlspBridge.getLanguageServer();
+        if (languageServer == null) {
+            return new ClientSettings();
+        }
+        ClientSettings settings = languageServer.getClientSettings();
+        return settings != null ? settings : new ClientSettings();
     }
 
     private GGraph buildErrorGraph(String sourceUri, String error) {
@@ -493,6 +589,16 @@ public class InterlisGlspModelFactory implements GModelFactory {
 
     private static boolean isRootKind(String kind) {
         return "root".equalsIgnoreCase(firstNonBlank(kind, ""));
+    }
+
+    private static final class LabelSize {
+        final double width;
+        final double height;
+
+        LabelSize(double width, double height) {
+            this.width = width;
+            this.height = height;
+        }
     }
 
     private static final class DiagramLayout {

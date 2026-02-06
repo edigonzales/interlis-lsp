@@ -130,7 +130,7 @@ The embedded GLSP UML diagram now uses server-side ELK (Layered) layout for pack
 Configured root options (see `InterlisElkLayoutEngine`):
 
 - `org.eclipse.elk.algorithm=org.eclipse.elk.layered`
-- `org.eclipse.elk.edgeRouting=ORTHOGONAL`
+- `org.eclipse.elk.edgeRouting=<from settings>` (`ORTHOGONAL` by default)
 - `org.eclipse.elk.hierarchyHandling=INCLUDE_CHILDREN`
 - `org.eclipse.elk.layered.mergeHierarchyEdges=true`
 - `org.eclipse.elk.layered.mergeEdges=true`
@@ -146,6 +146,18 @@ Configured root options (see `InterlisElkLayoutEngine`):
 Package/container defaults:
 
 - `org.eclipse.elk.padding=30` on each container node
+
+Routing variants (VS Code setting):
+
+- `interlisLsp.diagram.layout.edgeRouting=ORTHOGONAL|POLYLINE|SPLINES` (default: `ORTHOGONAL`)
+- Changes apply after running `INTERLIS: Auto-layout active diagram`.
+- Optional fallback if no client setting is present: `-Dinterlis.glsp.layout.edgeRouting=ORTHOGONAL|POLYLINE|SPLINES`
+
+Association labels and cardinalities:
+
+- Association name labels are ELK-managed (no fixed midpoint placement).
+- If ELK does not provide a usable position, the server falls back to midpoint placement (`position=0.5`, `side=top`, `offset=18`).
+- Cardinalities are configurable via `interlisLsp.diagram.showCardinalities` (default: `true`).
 
 Direction tuning:
 

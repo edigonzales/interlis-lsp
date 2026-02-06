@@ -1,12 +1,14 @@
 import * as path from "path";
 import * as vscode from "vscode";
-import { TriggerLayoutAction } from "@eclipse-glsp/protocol";
+import { RequestModelAction, TriggerLayoutAction } from "@eclipse-glsp/protocol";
 import { GlspEditorProvider, GlspVscodeConnector, SocketGlspVscodeServer } from "@eclipse-glsp/vscode-integration/node";
 import { LanguageClient } from "vscode-languageclient/node";
 
 export const DIAGRAM_EDITOR_VIEW_TYPE = "interlis.diagramEditor";
 const GLSP_ENDPOINT_REQUEST = "interlis/glspEndpoint";
 const DEFAULT_DIAGRAM_TYPE = "interlis-uml";
+const LIVE_REFRESH_DEBOUNCE_MS = 400;
+const POST_REFRESH_KICK_DELAYS_MS = [0, 60, 180, 420] as const;
 
 const CFG_AUTO_OPEN_BESIDE = "diagram.autoOpenBeside";
 
@@ -23,6 +25,9 @@ type GlspEndpoint = {
 let glspServer: SocketGlspVscodeServer | undefined;
 let glspConnector: GlspVscodeConnector | undefined;
 let registrationPromise: Promise<void> | undefined;
+let registeredDiagramType = DEFAULT_DIAGRAM_TYPE;
+let lastInterlisSourceUri: vscode.Uri | undefined;
+const pendingRefreshTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 class InterlisGlspEditorProvider extends GlspEditorProvider {
   override diagramType: string;
@@ -249,6 +254,11 @@ class InterlisGlspEditorProvider extends GlspEditorProvider {
           kickLayout();
         }
       });
+      window.addEventListener("message", event => {
+        if (event?.data?.type === "interlis:kickLayout") {
+          [0, 50, 140, 320].forEach(delayMs => setTimeout(kickLayout, delayMs));
+        }
+      });
     })();
   </script>
 </body>
@@ -277,6 +287,7 @@ export async function registerInterlisDiagramEditor(context: vscode.ExtensionCon
     const diagramType = endpoint.diagramType && endpoint.diagramType.trim().length > 0
       ? endpoint.diagramType.trim()
       : DEFAULT_DIAGRAM_TYPE;
+    registeredDiagramType = diagramType;
 
     glspServer = new SocketGlspVscodeServer({
       clientId: "interlis-vscode",
@@ -324,13 +335,14 @@ export async function registerInterlisDiagramEditor(context: vscode.ExtensionCon
 
 export function registerInterlisDiagramCommands(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand("interlis.diagram.open", async () => {
-      const editor = vscode.window.activeTextEditor;
-      if (!editor || editor.document.languageId !== "interlis") {
+    vscode.commands.registerCommand("interlis.diagram.open", async (resource?: unknown) => {
+      const sourceUri = resolveInterlisSourceUri(resource);
+      if (!sourceUri) {
         vscode.window.showWarningMessage("Open an .ili file first.");
         return;
       }
-      await openInterlisDiagramBeside(editor.document.uri, true);
+      lastInterlisSourceUri = sourceUri;
+      await openInterlisDiagramBeside(sourceUri, true);
     })
   );
 
@@ -361,6 +373,7 @@ export async function maybeAutoOpenDiagram(editor: vscode.TextEditor | undefined
   if (!isInterlisFileDocument(document)) {
     return;
   }
+  lastInterlisSourceUri = document.uri;
   if (!isDiagramAutoOpenEnabled()) {
     return;
   }
@@ -382,7 +395,43 @@ export function forgetAutoOpenedDiagram(document: vscode.TextDocument, openedUri
   if (!isInterlisFileDocument(document)) {
     return;
   }
+  cancelScheduledDiagramRefresh(document);
   openedUris.delete(document.uri.toString());
+}
+
+export function scheduleDiagramRefresh(document: vscode.TextDocument): void {
+  if (!isInterlisFileDocument(document)) {
+    return;
+  }
+
+  const key = document.uri.toString();
+  const existing = pendingRefreshTimers.get(key);
+  if (existing) {
+    clearTimeout(existing);
+  }
+
+  const timeout = setTimeout(() => {
+    pendingRefreshTimers.delete(key);
+    refreshDiagramByUri(document.uri);
+  }, LIVE_REFRESH_DEBOUNCE_MS);
+  pendingRefreshTimers.set(key, timeout);
+}
+
+export function refreshDiagramForDocument(document: vscode.TextDocument): void {
+  if (!isInterlisFileDocument(document)) {
+    return;
+  }
+  cancelScheduledDiagramRefresh(document);
+  refreshDiagramByUri(document.uri);
+}
+
+export function cancelScheduledDiagramRefresh(document: vscode.TextDocument): void {
+  const key = document.uri.toString();
+  const existing = pendingRefreshTimers.get(key);
+  if (existing) {
+    clearTimeout(existing);
+    pendingRefreshTimers.delete(key);
+  }
 }
 
 async function openInterlisDiagramBeside(uri: vscode.Uri, preserveFocus: boolean): Promise<void> {
@@ -418,8 +467,109 @@ function isDiagramAutoOpenEnabled(): boolean {
   return vscode.workspace.getConfiguration("interlisLsp").get<boolean>(CFG_AUTO_OPEN_BESIDE) ?? true;
 }
 
+function refreshDiagramByUri(uri: vscode.Uri): boolean {
+  if (!glspConnector) {
+    return false;
+  }
+
+  const clients = findDiagramClients(uri);
+  if (clients.length === 0) {
+    return false;
+  }
+
+  for (const { clientId, client } of clients) {
+    glspConnector.dispatchAction(
+      RequestModelAction.create({
+        options: {
+          sourceUri: uri.toString(),
+          diagramType: registeredDiagramType
+        }
+      }),
+      clientId
+    );
+    sendKickLayoutMessage(client);
+  }
+
+  return true;
+}
+
+function findDiagramClients(uri: vscode.Uri): Array<{ clientId: string; client: ConnectorClientLike }> {
+  if (!glspConnector) {
+    return [];
+  }
+
+  const key = uri.toString();
+  const connector = glspConnector as unknown as { clientMap?: Map<string, ConnectorClientLike> };
+  const clientMap = connector.clientMap;
+  if (!(clientMap instanceof Map)) {
+    return [];
+  }
+
+  const result: Array<{ clientId: string; client: ConnectorClientLike }> = [];
+  for (const [clientId, client] of clientMap.entries()) {
+    if (client?.document?.uri?.toString() === key) {
+      result.push({ clientId, client });
+    }
+  }
+  return result;
+}
+
+function sendKickLayoutMessage(client: ConnectorClientLike): void {
+  const panel = client.webviewEndpoint?.webviewPanel;
+  if (!panel) {
+    return;
+  }
+
+  for (const delayMs of POST_REFRESH_KICK_DELAYS_MS) {
+    setTimeout(() => {
+      void panel.webview.postMessage({ type: "interlis:kickLayout" });
+    }, delayMs);
+  }
+}
+
+type ConnectorClientLike = {
+  clientId: string;
+  document?: { uri?: vscode.Uri };
+  webviewEndpoint?: {
+    webviewPanel?: vscode.WebviewPanel;
+  };
+};
+
+function resolveInterlisSourceUri(resource?: unknown): vscode.Uri | undefined {
+  if (resource instanceof vscode.Uri && isInterlisFileUri(resource)) {
+    return resource;
+  }
+
+  const editor = vscode.window.activeTextEditor;
+  if (editor && isInterlisFileDocument(editor.document)) {
+    return editor.document.uri;
+  }
+
+  const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
+  if (activeTab?.input instanceof vscode.TabInputText && isInterlisFileUri(activeTab.input.uri)) {
+    return activeTab.input.uri;
+  }
+  if (activeTab?.input instanceof vscode.TabInputCustom && isInterlisFileUri(activeTab.input.uri)) {
+    return activeTab.input.uri;
+  }
+
+  for (const visibleEditor of vscode.window.visibleTextEditors) {
+    if (isInterlisFileDocument(visibleEditor.document)) {
+      return visibleEditor.document.uri;
+    }
+  }
+
+  return lastInterlisSourceUri && isInterlisFileUri(lastInterlisSourceUri)
+    ? lastInterlisSourceUri
+    : undefined;
+}
+
 function isInterlisFileDocument(document: vscode.TextDocument): boolean {
-  return document.languageId === "interlis" && document.uri.scheme === "file";
+  return document.languageId === "interlis" && isInterlisFileUri(document.uri);
+}
+
+function isInterlisFileUri(uri: vscode.Uri): boolean {
+  return uri.scheme === "file" && uri.fsPath.toLowerCase().endsWith(".ili");
 }
 
 function normalizePath(value: string): string {

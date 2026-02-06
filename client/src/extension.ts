@@ -4,10 +4,13 @@ import * as path from "path";
 import { registerIli2GpkgCommands } from "./ili2gpkg";
 import { resolveJavaPath, resolveServerJarPath } from "./configuration";
 import {
+  cancelScheduledDiagramRefresh,
   forgetAutoOpenedDiagram,
   maybeAutoOpenDiagram,
+  refreshDiagramForDocument,
   registerInterlisDiagramCommands,
-  registerInterlisDiagramEditor
+  registerInterlisDiagramEditor,
+  scheduleDiagramRefresh
 } from "./diagram/diagramEditor";
 
 let client: LanguageClient | undefined;
@@ -106,7 +109,13 @@ export async function activate(context: vscode.ExtensionContext) {
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ language: "interlis", scheme: "file" }],
     initializationOptions: {
-      modelRepositories: cfg.get<string>("modelRepositories") ?? ""
+      modelRepositories: cfg.get<string>("modelRepositories") ?? "",
+      diagram: {
+        layout: {
+          edgeRouting: cfg.get<string>("diagram.layout.edgeRouting") ?? "ORTHOGONAL"
+        },
+        showCardinalities: cfg.get<boolean>("diagram.showCardinalities") ?? true
+      }
     },
     synchronize: { configurationSection: "interlisLsp" },
     middleware: caretMiddleware,
@@ -128,25 +137,29 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.workspace.onDidChangeTextDocument(event => {
       const key = event.document.uri.toString();
       const pending = pendingCarets.get(key);
-      if (!pending) {
-        return;
+      if (pending) {
+        if (event.document.version >= pending.version) {
+          pendingCarets.delete(key);
+
+          const active = vscode.window.activeTextEditor;
+          if (active && active.document.uri.toString() === key) {
+            const { position } = pending;
+            const selection = new vscode.Selection(position, position);
+            active.selection = selection;
+            active.revealRange(new vscode.Range(position, position));
+          }
+        }
       }
 
-      if (event.document.version < pending.version) {
-        return;
+      if (event.contentChanges.length > 0) {
+        scheduleDiagramRefresh(event.document);
       }
+    })
+  );
 
-      pendingCarets.delete(key);
-
-      const active = vscode.window.activeTextEditor;
-      if (!active || active.document.uri.toString() !== key) {
-        return;
-      }
-
-      const { position } = pending;
-      const selection = new vscode.Selection(position, position);
-      active.selection = selection;
-      active.revealRange(new vscode.Range(position, position));
+  context.subscriptions.push(
+    vscode.workspace.onDidSaveTextDocument(document => {
+      refreshDiagramForDocument(document);
     })
   );
 
@@ -158,6 +171,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.workspace.onDidCloseTextDocument(document => {
+      cancelScheduledDiagramRefresh(document);
       forgetAutoOpenedDiagram(document, autoOpenedDiagramUris);
     })
   );
