@@ -90,7 +90,7 @@ class InterlisGlspEditorProvider extends GlspEditorProvider {
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background: radial-gradient(circle at 0 0, #eef3ff 0, #f6f8fc 380px, #f3f6fa 100%);
+      background: #ffffff;
       color: #1f2733;
       font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
     }
@@ -99,6 +99,7 @@ class InterlisGlspEditorProvider extends GlspEditorProvider {
       height: 100%;
       display: grid;
       grid-template-rows: auto 1fr;
+      background: #ffffff;
     }
     .interlis-header {
       padding: 9px 12px;
@@ -117,6 +118,12 @@ class InterlisGlspEditorProvider extends GlspEditorProvider {
       height: 100%;
       min-height: 0;
       min-width: 0;
+      background: #ffffff;
+    }
+    .interlis-diagram .sprotty,
+    .interlis-diagram .sprotty svg,
+    .interlis-diagram .sprotty-graph {
+      background: #ffffff !important;
     }
     .interlis-container > path.sprotty-node,
     .interlis-container > rect.sprotty-node {
@@ -160,6 +167,16 @@ class InterlisGlspEditorProvider extends GlspEditorProvider {
       fill: #2a3a50;
       pointer-events: none;
     }
+    text.interlis-container-title,
+    text.interlis-class-title,
+    text.interlis-class-stereotype,
+    text.interlis-class-attribute,
+    text.interlis-class-method,
+    text.interlis-error-title,
+    text.interlis-error-message,
+    text.interlis-error-source {
+      text-anchor: start;
+    }
     .interlis-edge-association > path {
       stroke: #2c7f6d;
       stroke-width: 1.45;
@@ -168,8 +185,14 @@ class InterlisGlspEditorProvider extends GlspEditorProvider {
     .interlis-edge-inheritance > path {
       stroke: #6b58c9;
       stroke-width: 1.55;
-      stroke-dasharray: 7 4;
+      stroke-dasharray: none;
       fill: none;
+    }
+    .interlis-edge-inheritance > path.interlis-inheritance-arrow {
+      fill: none;
+      stroke: #6b58c9;
+      stroke-width: 1.55;
+      stroke-linejoin: miter;
     }
     .interlis-edge-label,
     .interlis-edge-cardinality {
@@ -202,6 +225,31 @@ class InterlisGlspEditorProvider extends GlspEditorProvider {
     <div class="interlis-diagram" id="${clientId}_container"></div>
   </div>
   <script nonce="${nonce}" src="${scriptUri}"></script>
+  <script nonce="${nonce}">
+    (() => {
+      const containerId = "${clientId}_container";
+      const kickLayout = () => {
+        const container = document.getElementById(containerId);
+        if (container) {
+          container.classList.add("mouse-enter");
+          container.classList.remove("mouse-leave");
+        }
+        try {
+          window.dispatchEvent(new FocusEvent("focus"));
+        } catch {
+          window.dispatchEvent(new Event("focus"));
+        }
+        window.dispatchEvent(new Event("resize"));
+      };
+
+      [0, 40, 120, 300, 700, 1200].forEach(delayMs => setTimeout(kickLayout, delayMs));
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) {
+          kickLayout();
+        }
+      });
+    })();
+  </script>
 </body>
 </html>`;
   }

@@ -88,6 +88,33 @@ public class InterlisGlspModelFactory implements GModelFactory {
                 .canvasBounds(0, 0, layout.canvasWidth, layout.canvasHeight)
                 .addCssClass("interlis-graph");
 
+        for (ContainerLayout containerLayout : layout.containers) {
+            InterlisDiagramModel.ContainerModel container = containerLayout.container;
+            String containerId = firstNonBlank(container.getId(), "container-" + sanitizeCss(container.getLabel()));
+            String kind = sanitizeCss(firstNonBlank(container.getKind(), "namespace"));
+
+            GNodeBuilder containerBuilder = new GNodeBuilder(DefaultTypes.NODE)
+                    .id(containerId)
+                    .position(containerLayout.x, containerLayout.y)
+                    .size(containerLayout.width, containerLayout.height)
+                    .addCssClass("interlis-container")
+                    .addCssClass("interlis-container-" + kind);
+
+            containerBuilder.add(new GLabelBuilder(DefaultTypes.LABEL)
+                    .id(containerId + ":title")
+                    .text(firstNonBlank(container.getLabel(), container.getQualifiedName(), containerId))
+                    .position(12, 22)
+                    .addCssClass("interlis-container-title")
+                    .build());
+
+            for (NodeLayout nodeLayout : containerLayout.nodes) {
+                containerBuilder.add(buildClassNode(nodeLayout));
+            }
+
+            graphBuilder.add(containerBuilder.build());
+        }
+
+        // Render edges after container/class nodes so they stay visible above topic backgrounds.
         Set<String> renderableNodeIds = new LinkedHashSet<>(nodesById.keySet());
         int edgeIndex = 0;
         for (InterlisDiagramModel.EdgeModel edge : safeList(diagram.getEdges())) {
@@ -123,32 +150,6 @@ public class InterlisGlspModelFactory implements GModelFactory {
             }
 
             graphBuilder.add(edgeBuilder.build());
-        }
-
-        for (ContainerLayout containerLayout : layout.containers) {
-            InterlisDiagramModel.ContainerModel container = containerLayout.container;
-            String containerId = firstNonBlank(container.getId(), "container-" + sanitizeCss(container.getLabel()));
-            String kind = sanitizeCss(firstNonBlank(container.getKind(), "namespace"));
-
-            GNodeBuilder containerBuilder = new GNodeBuilder(DefaultTypes.NODE)
-                    .id(containerId)
-                    .position(containerLayout.x, containerLayout.y)
-                    .size(containerLayout.width, containerLayout.height)
-                    .addCssClass("interlis-container")
-                    .addCssClass("interlis-container-" + kind);
-
-            containerBuilder.add(new GLabelBuilder(DefaultTypes.LABEL)
-                    .id(containerId + ":title")
-                    .text(firstNonBlank(container.getLabel(), container.getQualifiedName(), containerId))
-                    .position(12, 22)
-                    .addCssClass("interlis-container-title")
-                    .build());
-
-            for (NodeLayout nodeLayout : containerLayout.nodes) {
-                containerBuilder.add(buildClassNode(nodeLayout));
-            }
-
-            graphBuilder.add(containerBuilder.build());
         }
 
         return graphBuilder.build();
