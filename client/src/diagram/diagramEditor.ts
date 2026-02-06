@@ -9,6 +9,7 @@ const GLSP_ENDPOINT_REQUEST = "interlis/glspEndpoint";
 const DEFAULT_DIAGRAM_TYPE = "interlis-uml";
 const LIVE_REFRESH_DEBOUNCE_MS = 400;
 const POST_REFRESH_KICK_DELAYS_MS = [0, 60, 180, 420] as const;
+const REFRESH_RETRY_DELAYS_MS = [140, 360, 860] as const;
 
 const CFG_AUTO_OPEN_BESIDE = "diagram.autoOpenBeside";
 
@@ -28,6 +29,7 @@ let registrationPromise: Promise<void> | undefined;
 let registeredDiagramType = DEFAULT_DIAGRAM_TYPE;
 let lastInterlisSourceUri: vscode.Uri | undefined;
 const pendingRefreshTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const pendingRefreshRetryTimers = new Map<string, ReturnType<typeof setTimeout>[]>();
 
 class InterlisGlspEditorProvider extends GlspEditorProvider {
   override diagramType: string;
@@ -60,6 +62,12 @@ class InterlisGlspEditorProvider extends GlspEditorProvider {
     const title = path.basename(document.uri.path || document.uri.fsPath || "model.ili");
     webviewPanel.title = `INTERLIS Diagram: ${title}`;
     webviewPanel.webview.html = this.createWebviewHtml(webview, clientId, title);
+
+    webviewPanel.onDidChangeViewState(event => {
+      if (event.webviewPanel.visible) {
+        sendKickLayoutMessageToPanel(event.webviewPanel);
+      }
+    });
   }
 
   private createWebviewHtml(webview: vscode.Webview, clientId: string, title: string): string {
@@ -347,6 +355,24 @@ export function registerInterlisDiagramCommands(context: vscode.ExtensionContext
   );
 
   context.subscriptions.push(
+    vscode.commands.registerCommand("interlis.diagram.refresh", () => {
+      if (!glspConnector) {
+        vscode.window.showWarningMessage("INTERLIS diagram editor is not ready.");
+        return;
+      }
+
+      const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
+      if (!(activeTab?.input instanceof vscode.TabInputCustom)
+        || activeTab.input.viewType !== DIAGRAM_EDITOR_VIEW_TYPE) {
+        vscode.window.showWarningMessage("Open an INTERLIS diagram editor tab first.");
+        return;
+      }
+
+      refreshDiagramByUri(activeTab.input.uri, false);
+    })
+  );
+
+  context.subscriptions.push(
     vscode.commands.registerCommand("interlis.diagram.autoLayout", () => {
       if (!glspConnector) {
         vscode.window.showWarningMessage("INTERLIS diagram editor is not ready.");
@@ -396,6 +422,7 @@ export function forgetAutoOpenedDiagram(document: vscode.TextDocument, openedUri
     return;
   }
   cancelScheduledDiagramRefresh(document);
+  clearRefreshRetryTimers(document.uri);
   openedUris.delete(document.uri.toString());
 }
 
@@ -432,6 +459,7 @@ export function cancelScheduledDiagramRefresh(document: vscode.TextDocument): vo
     clearTimeout(existing);
     pendingRefreshTimers.delete(key);
   }
+  clearRefreshRetryTimers(document.uri);
 }
 
 async function openInterlisDiagramBeside(uri: vscode.Uri, preserveFocus: boolean): Promise<void> {
@@ -467,15 +495,19 @@ function isDiagramAutoOpenEnabled(): boolean {
   return vscode.workspace.getConfiguration("interlisLsp").get<boolean>(CFG_AUTO_OPEN_BESIDE) ?? true;
 }
 
-function refreshDiagramByUri(uri: vscode.Uri): boolean {
+function refreshDiagramByUri(uri: vscode.Uri, allowRetry = true): boolean {
   if (!glspConnector) {
     return false;
   }
 
   const clients = findDiagramClients(uri);
   if (clients.length === 0) {
+    if (allowRetry) {
+      scheduleRefreshRetry(uri);
+    }
     return false;
   }
+  clearRefreshRetryTimers(uri);
 
   for (const { clientId, client } of clients) {
     glspConnector.dispatchAction(
@@ -519,12 +551,41 @@ function sendKickLayoutMessage(client: ConnectorClientLike): void {
   if (!panel) {
     return;
   }
+  sendKickLayoutMessageToPanel(panel);
+}
 
+function sendKickLayoutMessageToPanel(panel: vscode.WebviewPanel): void {
   for (const delayMs of POST_REFRESH_KICK_DELAYS_MS) {
     setTimeout(() => {
       void panel.webview.postMessage({ type: "interlis:kickLayout" });
     }, delayMs);
   }
+}
+
+function scheduleRefreshRetry(uri: vscode.Uri): void {
+  const key = uri.toString();
+  clearRefreshRetryTimers(uri);
+
+  const timers: ReturnType<typeof setTimeout>[] = [];
+  for (const delayMs of REFRESH_RETRY_DELAYS_MS) {
+    const timer = setTimeout(() => {
+      refreshDiagramByUri(uri, false);
+    }, delayMs);
+    timers.push(timer);
+  }
+  pendingRefreshRetryTimers.set(key, timers);
+}
+
+function clearRefreshRetryTimers(uri: vscode.Uri): void {
+  const key = uri.toString();
+  const retryTimers = pendingRefreshRetryTimers.get(key);
+  if (!retryTimers) {
+    return;
+  }
+  for (const timer of retryTimers) {
+    clearTimeout(timer);
+  }
+  pendingRefreshRetryTimers.delete(key);
 }
 
 type ConnectorClientLike = {

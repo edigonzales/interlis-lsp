@@ -33,7 +33,8 @@
     "onLanguage:interlis",
     "onCommand:interlis.ili2gpkg.createSchema",
     "onCommand:interlis.diagram.open",
-    "onCommand:interlis.diagram.autoLayout"
+    "onCommand:interlis.diagram.autoLayout",
+    "onCommand:interlis.diagram.refresh"
   ],
   "contributes": {
     "languages": [
@@ -81,6 +82,10 @@
       {
         "command": "interlis.diagram.autoLayout",
         "title": "INTERLIS: Auto-layout active diagram"
+      },
+      {
+        "command": "interlis.diagram.refresh",
+        "title": "INTERLIS: Force refresh active diagram"
       },
       {
         "command": "interlis.uml.show",
