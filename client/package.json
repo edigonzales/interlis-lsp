@@ -115,6 +115,14 @@
           "default": "",
           "markdownDescription": "Path to the Java executable. Leave empty to use the platform-specific runtime bundled with the extension."
         },
+        "interlisLsp.server.jvmArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "Additional JVM arguments passed to the language server process (for example -Dinterlis.glsp.debugFile=/tmp/interlis-diagram-debug.json)."
+        },
         "interlisLsp.modelRepositories": {
           "type": "string",
           "default": "%ILI_DIR;https://models.interlis.ch;%JAR_DIR",

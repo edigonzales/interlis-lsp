@@ -153,6 +153,45 @@ class CommandHandlersTest {
     }
 
     @Test
+    void exportDiagramModelWritesDebugDumpWhenEnabled() throws Exception {
+        Path iliFile = tempDir.resolve("SimpleDiagramDebug.ili");
+        Path debugDump = tempDir.resolve("diagram-debug.json");
+        Files.writeString(iliFile, "INTERLIS 2.3;\n" +
+                "MODEL SimpleDiagramDebug (en)\n" +
+                "AT \"http://example.com/SimpleDiagramDebug.ili\"\n" +
+                "VERSION \"2024-01-01\" =\n" +
+                "  TOPIC SimpleTopic =\n" +
+                "    CLASS Person =\n" +
+                "      Name : TEXT*40;\n" +
+                "    END Person;\n" +
+                "  END SimpleTopic;\n" +
+                "END SimpleDiagramDebug.\n");
+
+        String previous = System.getProperty("interlis.glsp.debugFile");
+        System.setProperty("interlis.glsp.debugFile", debugDump.toString());
+        try {
+            InterlisLanguageServer server = new InterlisLanguageServer();
+            CommandHandlers handlers = new CommandHandlers(server);
+
+            InterlisDiagramModel.DiagramModel model = handlers.exportDiagramModel(iliFile.toString())
+                    .get(30, TimeUnit.SECONDS);
+
+            assertNotNull(model);
+            assertTrue(Files.exists(debugDump));
+            String json = Files.readString(debugDump);
+            assertTrue(json.contains("\"diagramModel\""));
+            assertTrue(json.contains("\"source\""));
+            assertTrue(json.contains("Person"));
+        } finally {
+            if (previous == null) {
+                System.clearProperty("interlis.glsp.debugFile");
+            } else {
+                System.setProperty("interlis.glsp.debugFile", previous);
+            }
+        }
+    }
+
+    @Test
     void exportDocxFailsWithResponseErrorWhenCompilationFails() {
         InterlisLanguageServer server = new InterlisLanguageServer();
         CommandHandlers handlers = new CommandHandlers(server);

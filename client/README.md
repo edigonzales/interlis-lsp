@@ -63,6 +63,7 @@ END MyNewModel.
 ### Configuration options ⚙️
 - `interlisLsp.server.jarPath` – override the bundled language server JAR.
 - `interlisLsp.javaPath` – point to a custom Java runtime if the bundled runtime is missing.
+- `interlisLsp.server.jvmArgs` – optional extra JVM arguments (for example `-Dinterlis.glsp.debugFile=/tmp/interlis-diagram-debug.json` to dump generated GLSP nodes/edges as JSON).
 - `interlisLsp.modelRepositories` – comma-separated repositories resolved by the model discovery service and completion engine.
 - `interlisLsp.autoShowOutputOnStart` – show the INTERLIS output channel when the extension activates.
 - `interlisLsp.diagram.autoOpenBeside` – auto-open the diagram editor beside `.ili` files.

@@ -26,6 +26,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const cfg = vscode.workspace.getConfiguration("interlisLsp");
   const jarPath = resolveServerJarPath(context, cfg.get<string>("server.jarPath"));
   const javaPath = resolveJavaPath(context, cfg.get<string>("javaPath"));
+  const jvmArgs = cfg.get<string[]>("server.jvmArgs") ?? [];
 
   // Single channel
   const OUTPUT_NAME = "INTERLIS LSP";
@@ -33,6 +34,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const exec: Executable = {
     command: javaPath,
     args: [
+      ...jvmArgs,
       // "-Dorg.slf4j.simpleLogger.logFile=/Users/stefan/tmp/interlis-lsp.log",
       // "-Dorg.slf4j.simpleLogger.showDateTime=true",
       // '-Dorg.slf4j.simpleLogger.dateTimeFormat=yyyy-MM-dd HH:mm:ss.SSS', // no quotes inside

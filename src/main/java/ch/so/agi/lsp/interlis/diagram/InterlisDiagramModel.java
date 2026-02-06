@@ -6,20 +6,31 @@ import ch.so.agi.lsp.interlis.diagram.InterlisUmlDiagram.Diagram;
 import ch.so.agi.lsp.interlis.diagram.InterlisUmlDiagram.Inheritance;
 import ch.so.agi.lsp.interlis.diagram.InterlisUmlDiagram.Namespace;
 import ch.so.agi.lsp.interlis.diagram.InterlisUmlDiagram.Node;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Export a UI-agnostic diagram model for read-only diagram clients.
  */
 public final class InterlisDiagramModel {
+    private static final Logger LOG = LoggerFactory.getLogger(InterlisDiagramModel.class);
     private static final String ROOT_NAMESPACE = "<root>";
     private static final String SCHEMA_VERSION = "1";
+    private static final String DEBUG_FILE_PROPERTY = "interlis.glsp.debugFile";
+    private static final Gson DEBUG_JSON = new GsonBuilder().setPrettyPrinting().create();
 
     private InterlisDiagramModel() {
     }
@@ -123,7 +134,9 @@ public final class InterlisDiagramModel {
         }
 
         List<ContainerModel> containers = new ArrayList<>(containersByNamespace.values());
-        return new DiagramModel(SCHEMA_VERSION, containers, nodes, edges);
+        DiagramModel result = new DiagramModel(SCHEMA_VERSION, containers, nodes, edges);
+        writeDebugDumpIfEnabled(source, result);
+        return result;
     }
 
     private static String containerIdForNamespace(String namespaceLabel) {
@@ -163,6 +176,48 @@ public final class InterlisDiagramModel {
             return model;
         }
         return topic + " (" + model + ")";
+    }
+
+    private static void writeDebugDumpIfEnabled(Diagram source, DiagramModel result) {
+        String debugFile = System.getProperty(DEBUG_FILE_PROPERTY);
+        if (debugFile == null || debugFile.isBlank()) {
+            return;
+        }
+
+        try {
+            Path target = Path.of(debugFile);
+            Path parent = target.toAbsolutePath().getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("generatedAt", Instant.now().toString());
+
+            Map<String, Object> summary = new LinkedHashMap<>();
+            summary.put("sourceNamespaces", source != null ? source.namespaces.size() : 0);
+            summary.put("sourceNodes", source != null ? source.nodes.size() : 0);
+            summary.put("sourceInheritances", source != null ? source.inheritances.size() : 0);
+            summary.put("sourceAssociations", source != null ? source.assocs.size() : 0);
+            summary.put("containers", result != null ? result.getContainers().size() : 0);
+            summary.put("nodes", result != null ? result.getNodes().size() : 0);
+            summary.put("edges", result != null ? result.getEdges().size() : 0);
+            payload.put("summary", summary);
+
+            payload.put("source", source);
+            payload.put("diagramModel", result);
+
+            Files.writeString(
+                    target,
+                    DEBUG_JSON.toJson(payload),
+                    StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING,
+                    StandardOpenOption.WRITE);
+            LOG.info("Wrote GLSP diagram debug dump to {}", target);
+        } catch (Exception ex) {
+            LOG.warn("Failed to write GLSP diagram debug dump.", ex);
+        }
     }
 
     public static final class DiagramModel {
