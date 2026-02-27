@@ -3,6 +3,15 @@ import { LanguageClient, LanguageClientOptions, Executable, ServerOptions, State
 import * as path from "path";
 import { registerIli2GpkgCommands } from "./ili2gpkg";
 import { resolveJavaPath, resolveServerJarPath } from "./configuration";
+import {
+  cancelScheduledDiagramRefresh,
+  forgetAutoOpenedDiagram,
+  maybeAutoOpenDiagram,
+  refreshDiagramForDocument,
+  registerInterlisDiagramCommands,
+  registerInterlisDiagramEditor,
+  scheduleDiagramRefresh
+} from "./diagram/diagramEditor";
 
 let client: LanguageClient | undefined;
 let revealOutputOnNextLog = false;
@@ -10,6 +19,7 @@ const CARET_SENTINEL = "__INTERLIS_AUTOCLOSE_CARET__";
 let umlPanel: vscode.WebviewPanel | undefined;
 let htmlPanel: vscode.WebviewPanel | undefined;
 let lastDiagramSource: vscode.Uri | undefined;
+const autoOpenedDiagramUris = new Set<string>();
 
 type PendingCaret = { version: number; position: vscode.Position };
 
@@ -19,6 +29,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const cfg = vscode.workspace.getConfiguration("interlisLsp");
   const jarPath = resolveServerJarPath(context, cfg.get<string>("server.jarPath"));
   const javaPath = resolveJavaPath(context, cfg.get<string>("javaPath"));
+  const jvmArgs = cfg.get<string[]>("server.jvmArgs") ?? [];
 
   // Single channel
   const OUTPUT_NAME = "INTERLIS LSP";
@@ -26,6 +37,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const exec: Executable = {
     command: javaPath,
     args: [
+      ...jvmArgs,
       // "-Dorg.slf4j.simpleLogger.logFile=/Users/stefan/tmp/interlis-lsp.log",
       // "-Dorg.slf4j.simpleLogger.showDateTime=true",
       // '-Dorg.slf4j.simpleLogger.dateTimeFormat=yyyy-MM-dd HH:mm:ss.SSS', // no quotes inside
@@ -97,7 +109,13 @@ export async function activate(context: vscode.ExtensionContext) {
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ language: "interlis", scheme: "file" }],
     initializationOptions: {
-      modelRepositories: cfg.get<string>("modelRepositories") ?? ""
+      modelRepositories: cfg.get<string>("modelRepositories") ?? "",
+      diagram: {
+        layout: {
+          edgeRouting: cfg.get<string>("diagram.layout.edgeRouting") ?? "ORTHOGONAL"
+        },
+        showCardinalities: cfg.get<boolean>("diagram.showCardinalities") ?? true
+      }
     },
     synchronize: { configurationSection: "interlisLsp" },
     middleware: caretMiddleware,
@@ -108,32 +126,57 @@ export async function activate(context: vscode.ExtensionContext) {
   client = new LanguageClient("interlisLsp", "INTERLIS Language Server", serverOptions, clientOptions);
   context.subscriptions.push(client);
   await client.start();
+  try {
+    await registerInterlisDiagramEditor(context, () => client);
+    registerInterlisDiagramCommands(context);
+  } catch (err: any) {
+    vscode.window.showErrorMessage(`INTERLIS GLSP diagram integration failed to start: ${err?.message ?? err}`);
+  }
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeTextDocument(event => {
       const key = event.document.uri.toString();
       const pending = pendingCarets.get(key);
-      if (!pending) {
-        return;
+      if (pending) {
+        if (event.document.version >= pending.version) {
+          pendingCarets.delete(key);
+
+          const active = vscode.window.activeTextEditor;
+          if (active && active.document.uri.toString() === key) {
+            const { position } = pending;
+            const selection = new vscode.Selection(position, position);
+            active.selection = selection;
+            active.revealRange(new vscode.Range(position, position));
+          }
+        }
       }
 
-      if (event.document.version < pending.version) {
-        return;
+      if (event.contentChanges.length > 0) {
+        scheduleDiagramRefresh(event.document);
       }
-
-      pendingCarets.delete(key);
-
-      const active = vscode.window.activeTextEditor;
-      if (!active || active.document.uri.toString() !== key) {
-        return;
-      }
-
-      const { position } = pending;
-      const selection = new vscode.Selection(position, position);
-      active.selection = selection;
-      active.revealRange(new vscode.Range(position, position));
     })
   );
+
+  context.subscriptions.push(
+    vscode.workspace.onDidSaveTextDocument(document => {
+      refreshDiagramForDocument(document);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor(editor => {
+      void maybeAutoOpenDiagram(editor, autoOpenedDiagramUris);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.workspace.onDidCloseTextDocument(document => {
+      cancelScheduledDiagramRefresh(document);
+      forgetAutoOpenedDiagram(document, autoOpenedDiagramUris);
+    })
+  );
+
+  void maybeAutoOpenDiagram(vscode.window.activeTextEditor, autoOpenedDiagramUris);
 
   // Register notification handlers ONCE, immediately
   let handlersRegistered = false;

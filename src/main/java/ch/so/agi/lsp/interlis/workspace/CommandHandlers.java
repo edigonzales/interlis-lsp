@@ -5,6 +5,7 @@ import ch.so.agi.lsp.interlis.compiler.Ili2cUtil;
 import ch.so.agi.lsp.interlis.diagram.Ili2GraphML;
 import ch.so.agi.lsp.interlis.diagram.Ili2Mermaid;
 import ch.so.agi.lsp.interlis.diagram.Ili2PlantUml;
+import ch.so.agi.lsp.interlis.diagram.InterlisDiagramModel;
 import ch.so.agi.lsp.interlis.export.docx.InterlisDocxExporter;
 import ch.so.agi.lsp.interlis.export.html.InterlisHtmlExporter;
 import ch.so.agi.lsp.interlis.export.html.MermaidHtmlRenderer;
@@ -141,6 +142,36 @@ public class CommandHandlers {
         try {
             String graphml = Ili2GraphML.render(td);
             return CompletableFuture.completedFuture(graphml);
+        } catch (Exception e) {
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+
+    public CompletableFuture<InterlisDiagramModel.DiagramModel> exportDiagramModel(String fileUriOrPath) {
+        if (server.getClient() != null) {
+            server.getClient().logMessage(new MessageParams(
+                    MessageType.Log, "exportDiagramModel called for " + fileUriOrPath));
+        }
+
+        String filesystemPath = InterlisTextDocumentService.toFilesystemPathIfPossible(fileUriOrPath);
+
+        ClientSettings cfg = server.getClientSettings();
+        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(cfg, filesystemPath);
+        List<Diagnostic> diagnostics = DiagnosticsMapper.toDiagnostics(outcome.getMessages());
+        server.publishDiagnostics(fileUriOrPath, diagnostics);
+        server.clearOutput();
+        server.logToClient(outcome.getLogText());
+
+        String displayPath = firstNonBlank(filesystemPath, fileUriOrPath);
+
+        TransferDescription td = outcome.getTransferDescription();
+        if (td == null) {
+            return CompletableFuture.failedFuture(compilerFailure(displayPath, outcome));
+        }
+
+        try {
+            InterlisDiagramModel.DiagramModel model = InterlisDiagramModel.render(td);
+            return CompletableFuture.completedFuture(model);
         } catch (Exception e) {
             return CompletableFuture.failedFuture(e);
         }

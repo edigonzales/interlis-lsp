@@ -31,7 +31,10 @@
   },
   "activationEvents": [
     "onLanguage:interlis",
-    "onCommand:interlis.ili2gpkg.createSchema"
+    "onCommand:interlis.ili2gpkg.createSchema",
+    "onCommand:interlis.diagram.open",
+    "onCommand:interlis.diagram.autoLayout",
+    "onCommand:interlis.diagram.refresh"
   ],
   "contributes": {
     "languages": [
@@ -55,10 +58,34 @@
         "embeddedLanguages": {}
       }
     ],
+    "customEditors": [
+      {
+        "viewType": "interlis.diagramEditor",
+        "displayName": "INTERLIS Diagram",
+        "selector": [
+          {
+            "filenamePattern": "*.ili"
+          }
+        ],
+        "priority": "option"
+      }
+    ],
     "commands": [
       {
         "command": "interlis.compile.run",
         "title": "INTERLIS: Compile current file"
+      },
+      {
+        "command": "interlis.diagram.open",
+        "title": "INTERLIS: Open diagram editor"
+      },
+      {
+        "command": "interlis.diagram.autoLayout",
+        "title": "INTERLIS: Auto-layout active diagram"
+      },
+      {
+        "command": "interlis.diagram.refresh",
+        "title": "INTERLIS: Force refresh active diagram"
       },
       {
         "command": "interlis.uml.show",
@@ -98,6 +125,14 @@
           "default": "",
           "markdownDescription": "Path to the Java executable. Leave empty to use the platform-specific runtime bundled with the extension."
         },
+        "interlisLsp.server.jvmArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "Additional JVM arguments passed to the language server process (for example -Dinterlis.glsp.debugFile=/tmp/interlis-diagram-debug.json)."
+        },
         "interlisLsp.modelRepositories": {
           "type": "string",
           "default": "%ILI_DIR;https://models.interlis.ch;%JAR_DIR",
@@ -107,11 +142,31 @@
           "type": "string",
           "default": "",
           "markdownDescription": "Path to the ili2gpkg jar. Leave empty to use a jar placed inside the extensions ili2gpkg directory."
-        },        
+        },
         "interlisLsp.autoShowOutputOnStart": {
           "type": "boolean",
           "default": true,
           "markdownDescription": "Show the INTERLIS LSP output channel when the extension activates."
+        },
+        "interlisLsp.diagram.autoOpenBeside": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Automatically open the INTERLIS diagram editor beside an opened .ili text editor."
+        },
+        "interlisLsp.diagram.layout.edgeRouting": {
+          "type": "string",
+          "enum": [
+            "ORTHOGONAL",
+            "POLYLINE",
+            "SPLINES"
+          ],
+          "default": "ORTHOGONAL",
+          "markdownDescription": "Edge routing strategy for INTERLIS diagram auto-layout. Changes take effect after running `INTERLIS: Auto-layout active diagram`."
+        },
+        "interlisLsp.diagram.showCardinalities": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show association cardinality labels in INTERLIS diagrams."
         }
       }
     },
@@ -122,22 +177,26 @@
       "editor.fontLigatures": true
     },
     "themes": [
-    {
-      "label": "INTERLIS Default Colors (dark)",
-      "uiTheme": "vs-dark",
-      "path": "./themes/interlis-color-theme-dark.json"
-    },
-    {
-      "label": "INTERLIS Default Colors (light)",
-      "uiTheme": "vs",
-      "path": "./themes/interlis-color-theme-light.json"
-    }
-  ]
+      {
+        "label": "INTERLIS Default Colors (dark)",
+        "uiTheme": "vs-dark",
+        "path": "./themes/interlis-color-theme-dark.json"
+      },
+      {
+        "label": "INTERLIS Default Colors (light)",
+        "uiTheme": "vs",
+        "path": "./themes/interlis-color-theme-light.json"
+      }
+    ]
   },
   "main": "./dist/extension.js",
   "scripts": {
-    "build": "esbuild src/extension.ts --bundle --platform=node --external:vscode --outfile=dist/extension.js",
-    "watch": "esbuild src/extension.ts --bundle --platform=node --external:vscode --outfile=dist/extension.js --watch"
+    "build": "npm run build:extension && npm run build:webview",
+    "build:extension": "esbuild src/extension.ts --bundle --platform=node --external:vscode --outfile=dist/extension.js",
+    "build:webview": "esbuild src/diagram/glspWebview.ts --bundle --platform=browser --format=iife --loader:.ttf=file --loader:.woff=file --loader:.woff2=file --loader:.eot=file --outfile=dist/glspWebview.js",
+    "watch": "npm run watch:extension",
+    "watch:extension": "esbuild src/extension.ts --bundle --platform=node --external:vscode --outfile=dist/extension.js --watch",
+    "watch:webview": "esbuild src/diagram/glspWebview.ts --bundle --platform=browser --format=iife --loader:.ttf=file --loader:.woff=file --loader:.woff2=file --loader:.eot=file --outfile=dist/glspWebview.js --watch"
   },
   "devDependencies": {
     "@types/node": "^24.5.2",
@@ -146,6 +205,10 @@
     "typescript": "^5.9.2"
   },
   "dependencies": {
+    "@eclipse-glsp/protocol": "^2.5.0",
+    "@eclipse-glsp/vscode-integration": "^2.5.0",
+    "@eclipse-glsp/vscode-integration-webview": "^2.5.0",
+    "@vscode/codicons": "^0.0.36",
     "vscode-languageclient": "^9.0.1"
   }
 }

@@ -11,6 +11,7 @@ A monorepo that ships the INTERLIS-focused Language Server Protocol (LSP) implem
 - [Architecture at a glance](#architecture-at-a-glance)
 - [Language server capabilities](#language-server-capabilities)
 - [Commands & custom requests](#commands--custom-requests)
+- [GLSP ELK layout](#glsp-elk-layout)
 - [Runtime delivery & packaging](#runtime-delivery--packaging)
 - [Developer workflow](#developer-workflow)
   - [Working on the LSP](#working-on-the-lsp)
@@ -104,6 +105,8 @@ Custom JSON-RPC requests handled with `@JsonRequest`:
 
 | Request | VS Code caller | Description |
 | --- | --- | --- |
+| `interlis/glspEndpoint` | Custom editor bootstrap `interlis.diagramEditor` | Returns websocket host/port/path + diagram type for the embedded GLSP runtime. |
+| `interlis/diagramModel` | Internal diagram pipeline | Returns a structured UML graph model (containers, nodes, edges) derived from `TransferDescription`. |
 | `interlis/exportGraphml` | `interlis.graphml.export` | Returns a GraphML UML class diagram as UTF-8 text. |
 | `interlis/exportDocx` | `interlis.docx.export` | Returns a Base64 DOCX payload derived from the compiled model. |
 | `interlis/exportHtml` | `interlis.html.show` | Returns rendered HTML documentation for previews. |
@@ -114,6 +117,51 @@ Server-to-client notifications ✉️:
 | --- | --- | --- |
 | `interlis/clearLog` | none | Clear the shared output channel before new compiler runs. |
 | `interlis/log` | `{ text: string }` | Stream ili2c logs into the VS Code output view. |
+
+## GLSP ELK layout
+
+The embedded GLSP UML diagram now uses server-side ELK (Layered) layout for package/class diagrams.
+
+- Layout engine: `org.eclipse.glsp.layout.ElkLayoutEngine` via `InterlisElkLayoutEngine`
+- Layout mode: `ServerLayoutKind.MANUAL` (explicit trigger via command)
+- VS Code trigger command: `interlis.diagram.autoLayout`
+- Webview viewer options: `needsServerLayout=true`, `needsClientLayout=false`
+
+Configured root options (see `InterlisElkLayoutEngine`):
+
+- `org.eclipse.elk.algorithm=org.eclipse.elk.layered`
+- `org.eclipse.elk.edgeRouting=<from settings>` (`ORTHOGONAL` by default)
+- `org.eclipse.elk.hierarchyHandling=INCLUDE_CHILDREN`
+- `org.eclipse.elk.layered.mergeHierarchyEdges=true`
+- `org.eclipse.elk.layered.mergeEdges=true`
+- `org.eclipse.elk.layered.crossingMinimization.strategy=LAYER_SWEEP`
+- `org.eclipse.elk.layered.thoroughness=10`
+- Spacing defaults:
+  - `org.eclipse.elk.spacing.nodeNode=60`
+  - `org.eclipse.elk.spacing.edgeNode=30`
+  - `org.eclipse.elk.layered.spacing.nodeNodeBetweenLayers=100`
+  - `org.eclipse.elk.layered.spacing.edgeNodeBetweenLayers=40`
+  - `org.eclipse.elk.layered.spacing.edgeEdgeBetweenLayers=25`
+
+Package/container defaults:
+
+- `org.eclipse.elk.padding=30` on each container node
+
+Routing variants (VS Code setting):
+
+- `interlisLsp.diagram.layout.edgeRouting=ORTHOGONAL|POLYLINE|SPLINES` (default: `ORTHOGONAL`)
+- Changes apply after running `INTERLIS: Auto-layout active diagram`.
+- Optional fallback if no client setting is present: `-Dinterlis.glsp.layout.edgeRouting=ORTHOGONAL|POLYLINE|SPLINES`
+
+Association labels and cardinalities:
+
+- Association name labels are ELK-managed (no fixed midpoint placement).
+- If ELK does not provide a usable position, the server falls back to midpoint placement (`position=0.5`, `side=top`, `offset=18`).
+- Cardinalities are configurable via `interlisLsp.diagram.showCardinalities` (default: `true`).
+
+Direction tuning:
+
+- Set JVM system property `-Dinterlis.glsp.layout.direction=RIGHT` (default) or `DOWN`/`LEFT`/`UP`.
 
 ## Runtime delivery & packaging
 

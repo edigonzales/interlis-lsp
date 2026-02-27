@@ -19,12 +19,14 @@
 - **On-type templates** ⚙️ – typing `=` after model, topic, class, or structure headers injects boilerplate blocks, meta-attributes, and matching `END` statements while restoring the caret.
 - **Cached compilation** 💾 – results are cached between document events for responsive completions and navigation.
 - **Diagram generation** 🖼️ – generate Mermaid or PlantUML class diagrams from the compiled model and display them in the editor.
+- **GLSP diagram editor (topic containers)** 🧭 – open a dedicated `.ili` diagram editor beside the source view; it renders classes inside topic containers from the compiled transfer description via an embedded Eclipse GLSP server.
 - **HTML & DOCX exports** 📄 – render human-readable documentation (including custom titles) as HTML or export styled Word documents.
 
 ### VS Code client experience 💡
 - **Activation on INTERLIS files** 📂 – the extension activates for `.ili` files and contributes a TextMate grammar and language configuration for syntax highlighting and editor defaults.
 - **Bundled runtime** 📦 – ships with a self-contained fat JAR and optional platform-specific JRE; paths can be overridden via settings.
 - **Commands palette** 🎛️ – run "Compile current file", "Show UML class diagram", "Show PlantUML class diagram", "Show documentation as HTML", and "Export documentation as DOCX" directly from VS Code.
+- **Automatic side-by-side diagram opening** ↔️ – optionally opens the read-only diagram editor beside INTERLIS text files when they become active.
 - **Integrated output channel** 📢 – compiler logs land in a dedicated "INTERLIS LSP" output channel that can clear itself when new runs start.
 - **Configurable repositories** 🗄️ – choose preferred model repositories via settings passed to the server at initialization.
 - **Caret-aware templates** 🧠 – caret tracking middleware makes sure auto-inserted templates leave the cursor at the expected position after edits are applied.
@@ -61,8 +63,10 @@ END MyNewModel.
 ### Configuration options ⚙️
 - `interlisLsp.server.jarPath` – override the bundled language server JAR.
 - `interlisLsp.javaPath` – point to a custom Java runtime if the bundled runtime is missing.
+- `interlisLsp.server.jvmArgs` – optional extra JVM arguments (for example `-Dinterlis.glsp.debugFile=/tmp/interlis-diagram-debug.json` to dump generated GLSP nodes/edges as JSON).
 - `interlisLsp.modelRepositories` – comma-separated repositories resolved by the model discovery service and completion engine.
 - `interlisLsp.autoShowOutputOnStart` – show the INTERLIS output channel when the extension activates.
+- `interlisLsp.diagram.autoOpenBeside` – auto-open the diagram editor beside `.ili` files.
 
 ### Getting started 🚀
 1. Install the extension from the Marketplace.
