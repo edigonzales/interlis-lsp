@@ -31,7 +31,6 @@
   },
   "activationEvents": [
     "onLanguage:interlis",
-    "onCommand:interlis.ili2gpkg.createSchema",
     "onCommand:interlis.diagram.open",
     "onCommand:interlis.diagram.autoLayout",
     "onCommand:interlis.diagram.refresh"
@@ -106,10 +105,6 @@
       {
         "command": "interlis.docx.export",
         "title": "INTERLIS: Export documentation as DOCX"
-      },
-      {
-        "command": "interlis.ili2gpkg.createSchema",
-        "title": "ili2gpkg: Create empty GeoPackage"
       }
     ],
     "configuration": {
@@ -137,11 +132,6 @@
           "type": "string",
           "default": "%ILI_DIR;https://models.interlis.ch;%JAR_DIR",
           "markdownDescription": "Preferred INTERLIS model repositories as a comma-separated string."
-        },
-        "interlisLsp.ili2gpkgJarPath": {
-          "type": "string",
-          "default": "",
-          "markdownDescription": "Path to the ili2gpkg jar. Leave empty to use a jar placed inside the extensions ili2gpkg directory."
         },
         "interlisLsp.autoShowOutputOnStart": {
           "type": "boolean",

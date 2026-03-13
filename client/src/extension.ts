@@ -1,7 +1,6 @@
 import * as vscode from "vscode";
 import { LanguageClient, LanguageClientOptions, Executable, ServerOptions, State } from "vscode-languageclient/node";
 import * as path from "path";
-import { registerIli2GpkgCommands } from "./ili2gpkg";
 import { resolveJavaPath, resolveServerJarPath } from "./configuration";
 import {
   cancelScheduledDiagramRefresh,
@@ -463,7 +462,6 @@ export async function activate(context: vscode.ExtensionContext) {
     })
   );
 
-  registerIli2GpkgCommands(context, javaPath);
 }
 
 async function ensurePanelVisible(preserveEditorFocus = true) {
