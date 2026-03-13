@@ -4,6 +4,7 @@ import ch.so.agi.lsp.interlis.compiler.CompilationCache;
 import ch.so.agi.lsp.interlis.compiler.Ili2cUtil;
 import ch.so.agi.lsp.interlis.server.ClientSettings;
 import ch.so.agi.lsp.interlis.server.InterlisLanguageServer;
+import ch.so.agi.lsp.interlis.server.RuntimeDiagnostics;
 import ch.interlis.ili2c.metamodel.Element;
 import ch.interlis.ili2c.metamodel.Model;
 import ch.interlis.ili2c.metamodel.TransferDescription;
@@ -264,15 +265,30 @@ public final class InterlisDefinitionFinder {
     }
 
     private Ili2cUtil.CompilationOutcome getOrCompile(String pathOrUri, ClientSettings cfg) {
-        Ili2cUtil.CompilationOutcome cached = compilationCache != null ? compilationCache.get(pathOrUri) : null;
-        if (cached != null && cached.getTransferDescription() != null) {
+        String documentUri = InterlisTextDocumentService.toDocumentUriIfPossible(pathOrUri);
+        boolean tracked = documents != null && documents.isTracked(documentUri);
+        boolean dirty = tracked && documents.isDirty(documentUri);
+
+        Ili2cUtil.CompilationOutcome cached = null;
+        if (compilationCache != null) {
+            cached = dirty
+                    ? compilationCache.getSuccessful(pathOrUri)
+                    : firstOutcome(compilationCache.getSavedAttempt(pathOrUri), compilationCache.getSuccessful(pathOrUri));
+        }
+        if (cached != null || tracked) {
             return cached;
         }
 
-        Ili2cUtil.CompilationOutcome outcome = compiler.apply(cfg, pathOrUri);
+        Ili2cUtil.CompilationOutcome outcome = RuntimeDiagnostics.compile(server, compiler, cfg, pathOrUri, "definition-fallback");
         if (compilationCache != null) {
-            compilationCache.put(pathOrUri, outcome);
+            compilationCache.putSavedAttempt(pathOrUri, outcome);
+            compilationCache.putSuccessful(pathOrUri, outcome);
         }
         return outcome;
+    }
+
+    private static Ili2cUtil.CompilationOutcome firstOutcome(Ili2cUtil.CompilationOutcome primary,
+                                                             Ili2cUtil.CompilationOutcome fallback) {
+        return primary != null ? primary : fallback;
     }
 }

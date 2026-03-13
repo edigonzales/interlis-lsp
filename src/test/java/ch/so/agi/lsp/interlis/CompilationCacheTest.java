@@ -52,6 +52,20 @@ class CompilationCacheTest {
     }
 
     @Test
+    void storesSavedAttemptEvenWhenCompilationFailed() throws Exception {
+        CompilationCache cache = new CompilationCache();
+        Path temp = Files.createTempFile("sample", ".ili");
+
+        Ili2cUtil.CompilationOutcome failed = new Ili2cUtil.CompilationOutcome(null, "compile failed", Collections.emptyList());
+        cache.putSavedAttempt(temp.toString(), failed);
+
+        Ili2cUtil.CompilationOutcome cached = cache.getSavedAttempt(temp.toAbsolutePath().normalize().toString());
+        assertNotNull(cached);
+        assertSame(failed, cached);
+        assertNull(cache.getSuccessful(temp.toString()));
+    }
+
+    @Test
     void definitionFinderUsesCacheWhenAvailable() throws Exception {
         InterlisLanguageServer server = new InterlisLanguageServer();
         DocumentTracker tracker = new DocumentTracker();
@@ -73,6 +87,8 @@ class CompilationCacheTest {
                 },
                 "",
                 Collections.emptyList());
+        cache.putSavedAttempt(tempFile.toString(), stubOutcome);
+        cache.putSuccessful(tempFile.toString(), stubOutcome);
 
         InterlisDefinitionFinder finder = new InterlisDefinitionFinder(
                 server,
@@ -90,7 +106,7 @@ class CompilationCacheTest {
         finder.findDefinition(params);
         finder.findDefinition(params);
 
-        assertEquals(1, compileCount.get(), "Expected compile to run only once due to caching");
+        assertEquals(0, compileCount.get(), "Expected definition lookup to reuse the saved snapshot without recompiling");
     }
 
 }

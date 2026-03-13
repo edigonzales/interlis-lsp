@@ -99,6 +99,10 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
         return textDocumentService;
     }
 
+    public InterlisTextDocumentService getInterlisTextDocumentService() {
+        return textDocumentService;
+    }
+
     @Override
     public WorkspaceService getWorkspaceService() {
         return workspaceService;
@@ -109,6 +113,7 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
     @Override
     public void connect(LanguageClient client) {
         this.client = (InterlisLanguageClient) client;
+        RuntimeDiagnostics.logServerBuild(this);
     }
 
     public LanguageClient getClient() {
@@ -137,11 +142,28 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
     }
     
     public void logToClient(String text) {
+        sendLogChunks(text, client != null ? client::log : null);
+    }
+
+    public void debugLogToClient(String text) {
+        sendLogChunks(text, client != null ? client::debugLog : null);
+    }
+
+    public void notifyCompileFinished(String uri, boolean success) {
+        if (client == null || uri == null || uri.isBlank()) {
+            return;
+        }
+        client.compileFinished(new InterlisLanguageClient.CompileFinishedParams(uri, success));
+    }
+
+    private void sendLogChunks(String text,
+                               java.util.function.Consumer<InterlisLanguageClient.LogParams> sink) {
+        if (sink == null || text == null || text.isBlank()) return;
         if (client == null || text == null || text.isBlank()) return;
         // If logs can be huge, chunk them to avoid oversized JSON payloads (optional)
         final int CHUNK = 8000; // chars
         for (int i = 0; i < text.length(); i += CHUNK) {
-            client.log(new InterlisLanguageClient.LogParams(text.substring(i, Math.min(text.length(), i + CHUNK))));
+            sink.accept(new InterlisLanguageClient.LogParams(text.substring(i, Math.min(text.length(), i + CHUNK))));
         }    
     }
 

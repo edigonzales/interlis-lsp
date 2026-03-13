@@ -7,13 +7,26 @@ import { LanguageClient } from "vscode-languageclient/node";
 export const DIAGRAM_EDITOR_VIEW_TYPE = "interlis.diagramEditor";
 const GLSP_ENDPOINT_REQUEST = "interlis/glspEndpoint";
 const DEFAULT_DIAGRAM_TYPE = "interlis-uml";
-const LIVE_REFRESH_DEBOUNCE_MS = 400;
 const POST_REFRESH_KICK_DELAYS_MS = [0, 60, 180, 420] as const;
 const REFRESH_RETRY_DELAYS_MS = [140, 360, 860] as const;
 
 const CFG_AUTO_OPEN_BESIDE = "diagram.autoOpenBeside";
 
 type GetClient = () => LanguageClient | undefined;
+type DiagramDebugLogger = ((message: string) => void) | undefined;
+type DiagramReadyMessage = {
+  type: "interlis:diagramReady";
+  clientId?: string;
+  sourceUri?: string;
+  reason?: string;
+};
+type DiagramLoadFailedMessage = {
+  type: "interlis:diagramLoadFailed";
+  clientId?: string;
+  sourceUri?: string;
+  message?: string;
+  detail?: string;
+};
 
 type GlspEndpoint = {
   protocol?: string;
@@ -28,8 +41,16 @@ let glspConnector: GlspVscodeConnector | undefined;
 let registrationPromise: Promise<void> | undefined;
 let registeredDiagramType = DEFAULT_DIAGRAM_TYPE;
 let lastInterlisSourceUri: vscode.Uri | undefined;
-const pendingRefreshTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const pendingRefreshRetryTimers = new Map<string, ReturnType<typeof setTimeout>[]>();
+const pendingRefreshSources = new Map<string, string>();
+const readyDiagramClientIds = new Set<string>();
+const knownDiagramClientUris = new Map<string, string>();
+const panelMessageSubscriptions = new WeakMap<vscode.WebviewPanel, vscode.Disposable>();
+let diagramDebugLogger: DiagramDebugLogger;
+
+export function setDiagramDebugLogger(logger: DiagramDebugLogger): void {
+  diagramDebugLogger = logger;
+}
 
 class InterlisGlspEditorProvider extends GlspEditorProvider {
   override diagramType: string;
@@ -50,6 +71,9 @@ class InterlisGlspEditorProvider extends GlspEditorProvider {
     clientId: string
   ): void {
     const webview = webviewPanel.webview;
+    markDiagramClientNotReady(clientId, document.uri, "webview-setup");
+    ensureDiagramPanelMessageBridge(webviewPanel);
+
     webview.options = {
       enableScripts: true,
       localResourceRoots: [
@@ -62,10 +86,14 @@ class InterlisGlspEditorProvider extends GlspEditorProvider {
     const title = path.basename(document.uri.path || document.uri.fsPath || "model.ili");
     webviewPanel.title = `INTERLIS Diagram: ${title}`;
     webviewPanel.webview.html = this.createWebviewHtml(webview, clientId, title);
+    webviewPanel.onDidDispose(() => {
+      clearDiagramClientState(clientId);
+    });
 
     webviewPanel.onDidChangeViewState(event => {
       if (event.webviewPanel.visible) {
         sendKickLayoutMessageToPanel(event.webviewPanel);
+        refreshDiagramByUri(document.uri, true, "panel-visible");
       }
     });
   }
@@ -75,14 +103,7 @@ class InterlisGlspEditorProvider extends GlspEditorProvider {
     const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "dist", "glspWebview.js"));
 
     const stylesheetUris = [
-      vscode.Uri.joinPath(this.extensionUri, "dist", "glspWebview.css"),
-      vscode.Uri.joinPath(this.extensionUri, "node_modules", "sprotty", "css", "sprotty.css"),
-      vscode.Uri.joinPath(this.extensionUri, "node_modules", "@eclipse-glsp", "vscode-integration-webview", "css", "glsp-vscode.css"),
-      vscode.Uri.joinPath(this.extensionUri, "node_modules", "@eclipse-glsp", "vscode-integration-webview", "css", "diagram.css"),
-      vscode.Uri.joinPath(this.extensionUri, "node_modules", "@eclipse-glsp", "vscode-integration-webview", "css", "features.css"),
-      vscode.Uri.joinPath(this.extensionUri, "node_modules", "@eclipse-glsp", "vscode-integration-webview", "css", "command-palette.css"),
-      vscode.Uri.joinPath(this.extensionUri, "node_modules", "@eclipse-glsp", "vscode-integration-webview", "css", "tool-palette.css"),
-      vscode.Uri.joinPath(this.extensionUri, "node_modules", "@eclipse-glsp", "vscode-integration-webview", "css", "decoration.css")
+      vscode.Uri.joinPath(this.extensionUri, "dist", "glspWebview.css")
     ].map(uri => webview.asWebviewUri(uri));
 
     const links = stylesheetUris
@@ -130,14 +151,87 @@ class InterlisGlspEditorProvider extends GlspEditorProvider {
     .interlis-diagram {
       width: 100%;
       height: 100%;
+      display: flex;
+      position: relative;
+      overflow: hidden;
       min-height: 0;
       min-width: 0;
       background: #ffffff;
     }
-    .interlis-diagram .sprotty,
-    .interlis-diagram .sprotty svg,
-    .interlis-diagram .sprotty-graph {
+    #${clientId}_container {
+      display: flex;
+      position: relative;
+      overflow: hidden;
+      min-width: 0;
+      min-height: 0;
+    }
+    #${clientId}_container > #${clientId} {
+      display: flex;
+      flex: 1 1 auto;
+      width: 100%;
+      height: 100%;
+      min-width: 0;
+      min-height: 0;
+      position: relative;
+    }
+    #${clientId}_container > #${clientId} > svg.sprotty-graph {
+      display: block;
+      flex: 1 1 auto;
+      width: 100%;
+      height: 100%;
+      min-width: 0;
+      min-height: 0;
+    }
+    #${clientId}_container > #${clientId},
+    #${clientId}_container > #${clientId} > svg.sprotty-graph,
+    #${clientId}_container .sprotty-graph {
       background: #ffffff !important;
+    }
+    .interlis-diagram-status {
+      position: absolute;
+      inset: 16px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      z-index: 30;
+    }
+    .interlis-diagram-status.is-visible {
+      display: flex;
+    }
+    .interlis-diagram-status-card {
+      max-width: 420px;
+      padding: 14px 16px;
+      border: 1px solid #d7deeb;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: 0 12px 28px rgba(35, 50, 79, 0.16);
+      color: #243147;
+      line-height: 1.45;
+    }
+    .interlis-diagram-status[data-state="warning"] .interlis-diagram-status-card {
+      border-color: #d4b35d;
+      background: rgba(255, 249, 232, 0.97);
+    }
+    .interlis-diagram-status[data-state="error"] .interlis-diagram-status-card {
+      border-color: #d16a6a;
+      background: rgba(255, 244, 244, 0.97);
+    }
+    .interlis-diagram-status-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #243147;
+    }
+    .interlis-diagram-status[data-state="warning"] .interlis-diagram-status-title {
+      color: #755212;
+    }
+    .interlis-diagram-status[data-state="error"] .interlis-diagram-status-title {
+      color: #8a2a2a;
+    }
+    .interlis-diagram-status-detail {
+      margin-top: 6px;
+      font-size: 12px;
+      color: #425167;
     }
     .interlis-container > path.sprotty-node,
     .interlis-container > rect.sprotty-node {
@@ -368,7 +462,7 @@ export function registerInterlisDiagramCommands(context: vscode.ExtensionContext
         return;
       }
 
-      refreshDiagramByUri(activeTab.input.uri, false);
+      refreshDiagramByUri(activeTab.input.uri, true, "manual-refresh");
     })
   );
 
@@ -422,43 +516,17 @@ export function forgetAutoOpenedDiagram(document: vscode.TextDocument, openedUri
     return;
   }
   cancelScheduledDiagramRefresh(document);
+  clearPendingRefresh(document.uri);
   clearRefreshRetryTimers(document.uri);
   openedUris.delete(document.uri.toString());
 }
 
-export function scheduleDiagramRefresh(document: vscode.TextDocument): void {
-  if (!isInterlisFileDocument(document)) {
-    return;
-  }
-
-  const key = document.uri.toString();
-  const existing = pendingRefreshTimers.get(key);
-  if (existing) {
-    clearTimeout(existing);
-  }
-
-  const timeout = setTimeout(() => {
-    pendingRefreshTimers.delete(key);
-    refreshDiagramByUri(document.uri);
-  }, LIVE_REFRESH_DEBOUNCE_MS);
-  pendingRefreshTimers.set(key, timeout);
-}
-
-export function refreshDiagramForDocument(document: vscode.TextDocument): void {
-  if (!isInterlisFileDocument(document)) {
-    return;
-  }
-  cancelScheduledDiagramRefresh(document);
-  refreshDiagramByUri(document.uri);
+export function refreshOpenDiagramByUri(uri: vscode.Uri): boolean {
+  return refreshDiagramByUri(uri, true, "compileFinished");
 }
 
 export function cancelScheduledDiagramRefresh(document: vscode.TextDocument): void {
-  const key = document.uri.toString();
-  const existing = pendingRefreshTimers.get(key);
-  if (existing) {
-    clearTimeout(existing);
-    pendingRefreshTimers.delete(key);
-  }
+  clearPendingRefresh(document.uri);
   clearRefreshRetryTimers(document.uri);
 }
 
@@ -473,6 +541,7 @@ async function openInterlisDiagramBeside(uri: vscode.Uri, preserveFocus: boolean
       preview: false
     } as vscode.TextDocumentShowOptions
   );
+  refreshDiagramByUri(uri, true, "open");
 }
 
 function isDiagramTabAlreadyOpen(uri: vscode.Uri): boolean {
@@ -495,21 +564,114 @@ function isDiagramAutoOpenEnabled(): boolean {
   return vscode.workspace.getConfiguration("interlisLsp").get<boolean>(CFG_AUTO_OPEN_BESIDE) ?? true;
 }
 
-function refreshDiagramByUri(uri: vscode.Uri, allowRetry = true): boolean {
+function ensureDiagramPanelMessageBridge(panel: vscode.WebviewPanel): void {
+  if (panelMessageSubscriptions.has(panel)) {
+    return;
+  }
+
+  const disposable = panel.webview.onDidReceiveMessage(message => {
+    handleDiagramPanelMessage(message);
+  });
+  panelMessageSubscriptions.set(panel, disposable);
+  panel.onDidDispose(() => {
+    disposable.dispose();
+    panelMessageSubscriptions.delete(panel);
+    clearDiagramClientStatesForPanel(panel);
+  });
+}
+
+function handleDiagramPanelMessage(message: unknown): void {
+  if (isDiagramReadyMessage(message)) {
+    handleDiagramReadyMessage(message);
+    return;
+  }
+  if (isDiagramLoadFailedMessage(message)) {
+    handleDiagramLoadFailedMessage(message);
+  }
+}
+
+function handleDiagramReadyMessage(message: DiagramReadyMessage): void {
+  if (!message.clientId) {
+    return;
+  }
+
+  const uri = resolveDiagramMessageUri(message.clientId, message.sourceUri);
+  if (!uri) {
+    logDiagramDebug(`DIAGRAM_CLIENT status=ready clientId=${message.clientId} uri=<unknown>`);
+    return;
+  }
+
+  readyDiagramClientIds.add(message.clientId);
+  knownDiagramClientUris.set(message.clientId, uri.toString());
+  const reasonSuffix = message.reason ? ` reason=${message.reason}` : "";
+  logDiagramDebug(`DIAGRAM_CLIENT status=ready clientId=${message.clientId}${reasonSuffix} uri=${uri.toString()}`);
+  flushPendingRefresh(uri, "ready");
+}
+
+function handleDiagramLoadFailedMessage(message: DiagramLoadFailedMessage): void {
+  if (message.clientId) {
+    readyDiagramClientIds.delete(message.clientId);
+  }
+
+  const uri = resolveDiagramMessageUri(message.clientId, message.sourceUri);
+  const uriText = uri?.toString() ?? message.sourceUri ?? "<unknown>";
+  const summary = message.message?.trim() || "Diagram load failed";
+  const detail = message.detail?.trim();
+  const detailSuffix = detail ? `\n${detail}` : "";
+  logDiagramDebug(
+    `DIAGRAM_LOAD failed clientId=${message.clientId ?? "<unknown>"} uri=${uriText} message=${summary}${detailSuffix}`
+  );
+}
+
+function refreshDiagramByUri(uri: vscode.Uri, allowRetry = true, source = "unknown"): boolean {
+  logDiagramDebug(`DIAGRAM_REFRESH source=${source} status=requested uri=${uri.toString()}`);
+
   if (!glspConnector) {
+    logDiagramDebug(`DIAGRAM_REFRESH source=${source} status=skipped reason=no-connector uri=${uri.toString()}`);
     return false;
   }
 
   const clients = findDiagramClients(uri);
+  for (const { clientId, client } of clients) {
+    const ready = readyDiagramClientIds.has(clientId);
+    logDiagramDebug(`DIAGRAM_CLIENT source=${source} clientId=${clientId} status=${ready ? "ready" : "not-ready"} uri=${uri.toString()}`);
+  }
+  const readyClients = clients.filter(({ clientId }) => readyDiagramClientIds.has(clientId));
   if (clients.length === 0) {
-    if (allowRetry) {
-      scheduleRefreshRetry(uri);
+    if (allowRetry && isDiagramTabAlreadyOpen(uri)) {
+      rememberPendingRefresh(uri, source);
+      logDiagramDebug(`DIAGRAM_REFRESH source=${source} status=queued reason=no-client uri=${uri.toString()}`);
+      scheduleRefreshRetry(uri, source);
+    } else {
+      clearPendingRefresh(uri);
+      logDiagramDebug(`DIAGRAM_REFRESH source=${source} status=skipped reason=no-open-diagram uri=${uri.toString()}`);
     }
     return false;
   }
-  clearRefreshRetryTimers(uri);
 
-  for (const { clientId, client } of clients) {
+  if (readyClients.length === 0) {
+    rememberPendingRefresh(uri, source);
+    if (allowRetry) {
+      logDiagramDebug(`DIAGRAM_REFRESH source=${source} status=queued reason=client-not-ready clients=${clients.length} uri=${uri.toString()}`);
+      scheduleRefreshRetry(uri, source);
+    } else {
+      logDiagramDebug(`DIAGRAM_REFRESH source=${source} status=waiting reason=client-not-ready clients=${clients.length} uri=${uri.toString()}`);
+    }
+    return false;
+  }
+
+  if (readyClients.length === clients.length) {
+    clearRefreshRetryTimers(uri);
+    clearPendingRefresh(uri);
+  } else if (allowRetry) {
+    rememberPendingRefresh(uri, source);
+    logDiagramDebug(`DIAGRAM_REFRESH source=${source} status=partial ready=${readyClients.length} total=${clients.length} uri=${uri.toString()}`);
+    scheduleRefreshRetry(uri, source);
+  } else {
+    logDiagramDebug(`DIAGRAM_REFRESH source=${source} status=partial-wait ready=${readyClients.length} total=${clients.length} uri=${uri.toString()}`);
+  }
+
+  for (const { clientId, client } of readyClients) {
     glspConnector.dispatchAction(
       RequestModelAction.create({
         options: {
@@ -522,18 +684,14 @@ function refreshDiagramByUri(uri: vscode.Uri, allowRetry = true): boolean {
     sendKickLayoutMessage(client);
   }
 
+  logDiagramDebug(`DIAGRAM_REFRESH source=${source} status=dispatched clients=${readyClients.length} uri=${uri.toString()}`);
   return true;
 }
 
 function findDiagramClients(uri: vscode.Uri): Array<{ clientId: string; client: ConnectorClientLike }> {
-  if (!glspConnector) {
-    return [];
-  }
-
   const key = uri.toString();
-  const connector = glspConnector as unknown as { clientMap?: Map<string, ConnectorClientLike> };
-  const clientMap = connector.clientMap;
-  if (!(clientMap instanceof Map)) {
+  const clientMap = getConnectorClientMap();
+  if (!clientMap) {
     return [];
   }
 
@@ -544,6 +702,82 @@ function findDiagramClients(uri: vscode.Uri): Array<{ clientId: string; client: 
     }
   }
   return result;
+}
+
+function getConnectorClientMap(): Map<string, ConnectorClientLike> | undefined {
+  if (!glspConnector) {
+    return undefined;
+  }
+
+  const connector = glspConnector as unknown as { clientMap?: Map<string, ConnectorClientLike> };
+  return connector.clientMap instanceof Map ? connector.clientMap : undefined;
+}
+
+function flushPendingRefresh(uri: vscode.Uri, trigger: string): void {
+  const source = pendingRefreshSources.get(uri.toString());
+  if (!source) {
+    return;
+  }
+  refreshDiagramByUri(uri, false, `${source}:${trigger}`);
+}
+
+function rememberPendingRefresh(uri: vscode.Uri, source: string): void {
+  const key = uri.toString();
+  if (source.includes(":retry+") && pendingRefreshSources.has(key)) {
+    return;
+  }
+  pendingRefreshSources.set(key, source);
+}
+
+function clearPendingRefresh(uri: vscode.Uri): void {
+  pendingRefreshSources.delete(uri.toString());
+}
+
+function markDiagramClientNotReady(clientId: string, uri: vscode.Uri, reason: string): void {
+  readyDiagramClientIds.delete(clientId);
+  knownDiagramClientUris.set(clientId, uri.toString());
+  logDiagramDebug(`DIAGRAM_CLIENT status=not-ready clientId=${clientId} reason=${reason} uri=${uri.toString()}`);
+}
+
+function clearDiagramClientState(clientId: string): void {
+  readyDiagramClientIds.delete(clientId);
+  knownDiagramClientUris.delete(clientId);
+}
+
+function clearDiagramClientStatesForPanel(panel: vscode.WebviewPanel): void {
+  const clientMap = getConnectorClientMap();
+  if (!clientMap) {
+    return;
+  }
+  for (const [clientId, client] of clientMap.entries()) {
+    if (client.webviewEndpoint?.webviewPanel === panel) {
+      clearDiagramClientState(clientId);
+    }
+  }
+}
+
+function resolveDiagramMessageUri(clientId: string | undefined, sourceUri: string | undefined): vscode.Uri | undefined {
+  const rawUri = sourceUri ?? (clientId ? knownDiagramClientUris.get(clientId) : undefined);
+  if (!rawUri) {
+    return undefined;
+  }
+  try {
+    return vscode.Uri.parse(rawUri);
+  } catch {
+    return undefined;
+  }
+}
+
+function isDiagramReadyMessage(message: unknown): message is DiagramReadyMessage {
+  return typeof message === "object"
+    && message !== null
+    && (message as DiagramReadyMessage).type === "interlis:diagramReady";
+}
+
+function isDiagramLoadFailedMessage(message: unknown): message is DiagramLoadFailedMessage {
+  return typeof message === "object"
+    && message !== null
+    && (message as DiagramLoadFailedMessage).type === "interlis:diagramLoadFailed";
 }
 
 function sendKickLayoutMessage(client: ConnectorClientLike): void {
@@ -562,14 +796,14 @@ function sendKickLayoutMessageToPanel(panel: vscode.WebviewPanel): void {
   }
 }
 
-function scheduleRefreshRetry(uri: vscode.Uri): void {
+function scheduleRefreshRetry(uri: vscode.Uri, source = "unknown"): void {
   const key = uri.toString();
   clearRefreshRetryTimers(uri);
 
   const timers: ReturnType<typeof setTimeout>[] = [];
   for (const delayMs of REFRESH_RETRY_DELAYS_MS) {
     const timer = setTimeout(() => {
-      refreshDiagramByUri(uri, false);
+      refreshDiagramByUri(uri, false, `${source}:retry+${delayMs}ms`);
     }, delayMs);
     timers.push(timer);
   }
@@ -595,6 +829,10 @@ type ConnectorClientLike = {
     webviewPanel?: vscode.WebviewPanel;
   };
 };
+
+function logDiagramDebug(message: string): void {
+  diagramDebugLogger?.(message);
+}
 
 function resolveInterlisSourceUri(resource?: unknown): vscode.Uri | undefined {
   if (resource instanceof vscode.Uri && isInterlisFileUri(resource)) {

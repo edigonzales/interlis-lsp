@@ -15,14 +15,19 @@ import ch.interlis.ili2c.metamodel.TransferDescription;
 import ch.interlis.ili2c.metamodel.ViewableTransferElement;
 import org.eclipse.lsp4j.DocumentSymbol;
 import org.eclipse.lsp4j.DocumentSymbolParams;
+import org.eclipse.lsp4j.DocumentFormattingParams;
+import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.SymbolKind;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
 import org.eclipse.lsp4j.DidSaveTextDocumentParams;
 import org.eclipse.lsp4j.SymbolInformation;
+import org.eclipse.lsp4j.TextDocumentContentChangeEvent;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.TextDocumentItem;
+import org.eclipse.lsp4j.TextEdit;
+import org.eclipse.lsp4j.VersionedTextDocumentIdentifier;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -40,10 +45,14 @@ import static org.junit.jupiter.api.Assertions.*;
 class InterlisTextDocumentServiceTest {
 
     @Test
-    void didOpenUsesExistingCacheEntryForSameDocument(@TempDir Path tempDir) throws Exception {
+    void didOpenCompilesAndStoresFreshSavedAttempt(@TempDir Path tempDir) throws Exception {
         Path modelPath = Files.createTempFile(tempDir, "ModelB", ".ili");
+        Files.writeString(modelPath, "MODEL ModelB; END ModelB.");
 
         CompilationCache cache = new CompilationCache();
+
+        Ili2cUtil.CompilationOutcome oldOutcome = new Ili2cUtil.CompilationOutcome(null, "OLD", Collections.emptyList());
+        cache.putSavedAttempt(modelPath.toString(), oldOutcome);
 
         TransferDescription td = new TransferDescription() {
             @Override
@@ -51,9 +60,7 @@ class InterlisTextDocumentServiceTest {
                 return new Model[0];
             }
         };
-
-        Ili2cUtil.CompilationOutcome outcome = new Ili2cUtil.CompilationOutcome(td, "", Collections.emptyList());
-        cache.put(modelPath.toString(), outcome);
+        Ili2cUtil.CompilationOutcome freshOutcome = new Ili2cUtil.CompilationOutcome(td, "LOG-1", Collections.emptyList());
 
         InterlisLanguageServer server = new InterlisLanguageServer();
         server.setClientSettings(new ClientSettings());
@@ -64,7 +71,7 @@ class InterlisTextDocumentServiceTest {
                 cache,
                 (cfg, path) -> {
                     compileCount.incrementAndGet();
-                    return outcome;
+                    return freshOutcome;
                 });
 
         TextDocumentItem item = new TextDocumentItem(modelPath.toUri().toString(), "interlis", 1, "MODEL ModelB; END ModelB.");
@@ -72,7 +79,10 @@ class InterlisTextDocumentServiceTest {
 
         service.didOpen(params);
 
-        assertEquals(0, compileCount.get(), "Expected cached compilation to be reused on didOpen");
+        assertEquals(1, compileCount.get(), "Expected didOpen to compile the saved file authoritatively");
+        assertFalse(service.isDocumentDirty(item.getUri()));
+        assertEquals("LOG-1", cache.getSavedAttempt(modelPath.toString()).getLogText());
+        assertSame(freshOutcome, cache.getSuccessful(modelPath.toString()));
     }
 
     @Test
@@ -125,6 +135,127 @@ class InterlisTextDocumentServiceTest {
         service.didOpen(params);
 
         assertEquals(1, compileCount.get(), "Expected imported model to trigger compilation when opened");
+    }
+
+    @Test
+    void didChangeReusesLastSuccessfulSnapshotForDocumentSymbols(@TempDir Path tempDir) throws Exception {
+        Path modelPath = Files.createTempFile(tempDir, "ModelDirtySymbols", ".ili");
+        String content = """
+                INTERLIS 2.3;
+                MODEL ModelDirtySymbols (en) AT "http://example.org" VERSION "2024-01-01" =
+                  TOPIC TopicA =
+                    CLASS ClassA =
+                    END ClassA;
+                  END TopicA;
+                END ModelDirtySymbols.
+                """;
+        Files.writeString(modelPath, content);
+
+        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(new ClientSettings(), modelPath.toString());
+        assertNotNull(outcome.getTransferDescription(), outcome.getLogText());
+
+        CompilationCache cache = new CompilationCache();
+        RecordingServer server = new RecordingServer();
+        server.setClientSettings(new ClientSettings());
+
+        AtomicInteger compileCount = new AtomicInteger();
+        InterlisTextDocumentService service = new InterlisTextDocumentService(
+                server,
+                cache,
+                (cfg, path) -> {
+                    compileCount.incrementAndGet();
+                    return outcome;
+                });
+
+        TextDocumentItem item = new TextDocumentItem(modelPath.toUri().toString(), "interlis", 1, content);
+        service.didOpen(new DidOpenTextDocumentParams(item));
+
+        service.didChange(fullDocumentChange(item.getUri(), 2, content + "\n"));
+
+        DocumentSymbolParams symbolParams = new DocumentSymbolParams(new TextDocumentIdentifier(item.getUri()));
+        List<Either<SymbolInformation, DocumentSymbol>> symbols = service.documentSymbol(symbolParams).get();
+
+        assertTrue(service.isDocumentDirty(item.getUri()));
+        assertEquals(1, compileCount.get(), "Expected dirty document symbols to use the last successful snapshot");
+        assertFalse(symbols.isEmpty(), "Expected document symbols to remain available from the saved snapshot");
+    }
+
+    @Test
+    void didChangeWithoutSuccessfulSnapshotLeavesDocumentSymbolsEmpty(@TempDir Path tempDir) throws Exception {
+        Path modelPath = Files.createTempFile(tempDir, "ModelDirtyInvalid", ".ili");
+        String content = "MODEL ModelDirtyInvalid;";
+        Files.writeString(modelPath, content);
+
+        Ili2cUtil.CompilationOutcome failed = new Ili2cUtil.CompilationOutcome(null, "failed", Collections.emptyList());
+
+        CompilationCache cache = new CompilationCache();
+        RecordingServer server = new RecordingServer();
+        server.setClientSettings(new ClientSettings());
+
+        AtomicInteger compileCount = new AtomicInteger();
+        InterlisTextDocumentService service = new InterlisTextDocumentService(
+                server,
+                cache,
+                (cfg, path) -> {
+                    compileCount.incrementAndGet();
+                    return failed;
+                });
+
+        TextDocumentItem item = new TextDocumentItem(modelPath.toUri().toString(), "interlis", 1, content);
+        service.didOpen(new DidOpenTextDocumentParams(item));
+
+        service.didChange(fullDocumentChange(item.getUri(), 2, content + "\nTOPIC Broken ="));
+
+        DocumentSymbolParams symbolParams = new DocumentSymbolParams(new TextDocumentIdentifier(item.getUri()));
+        List<Either<SymbolInformation, DocumentSymbol>> symbols = service.documentSymbol(symbolParams).get();
+
+        assertTrue(service.isDocumentDirty(item.getUri()));
+        assertEquals(1, compileCount.get(), "Expected dirty invalid document to avoid recompilation");
+        assertTrue(symbols.isEmpty(), "Expected no document symbols without a successful saved snapshot");
+    }
+
+    @Test
+    void formattingDoesNotRecompileDirtyDocuments(@TempDir Path tempDir) throws Exception {
+        Path modelPath = Files.createTempFile(tempDir, "ModelDirtyFormat", ".ili");
+        String content = """
+                INTERLIS 2.4;
+
+                MODEL ModelDirtyFormat (de)
+                  AT "https://example.com"
+                  VERSION "2025-09-17"
+                  =
+                END ModelDirtyFormat.
+                """;
+        Files.writeString(modelPath, content);
+
+        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(new ClientSettings(), modelPath.toString());
+        assertNotNull(outcome.getTransferDescription(), outcome.getLogText());
+
+        CompilationCache cache = new CompilationCache();
+        RecordingServer server = new RecordingServer();
+        server.setClientSettings(new ClientSettings());
+
+        AtomicInteger compileCount = new AtomicInteger();
+        InterlisTextDocumentService service = new InterlisTextDocumentService(
+                server,
+                cache,
+                (cfg, path) -> {
+                    compileCount.incrementAndGet();
+                    return outcome;
+                });
+
+        TextDocumentItem item = new TextDocumentItem(modelPath.toUri().toString(), "interlis", 1, content);
+        service.didOpen(new DidOpenTextDocumentParams(item));
+
+        service.didChange(fullDocumentChange(item.getUri(), 2, content + "\n! unsaved"));
+
+        DocumentFormattingParams params = new DocumentFormattingParams();
+        params.setTextDocument(new TextDocumentIdentifier(item.getUri()));
+        List<? extends TextEdit> edits = service.formatting(params).get();
+
+        assertTrue(service.isDocumentDirty(item.getUri()));
+        assertEquals(1, compileCount.get(), "Expected formatting on a dirty document to avoid recompilation");
+        assertTrue(edits.isEmpty(), "Expected dirty formatting to no-op instead of applying a stale saved snapshot");
     }
 
     @Test
@@ -371,22 +502,43 @@ class InterlisTextDocumentServiceTest {
         service.didOpen(new DidOpenTextDocumentParams(item));
 
         assertEquals(1, compileCount.get(), "Expected initial compile during didOpen");
-        assertEquals("LOG-1", server.getLogText(), "Expected didOpen to publish first compile log");
+        assertEquals(1, server.getCompileFinishedCount(), "Expected didOpen to publish compile completion once");
+        assertTrue(server.wasLastCompileSuccessful(), "Expected didOpen compile to be marked as successful");
+        assertTrue(server.getDebugLogText().contains("REAL_COMPILE source=didOpen"),
+                "Expected didOpen to emit a real-compile marker to the debug log");
+        assertTrue(server.getLogText().contains("LOG-1"), "Expected didOpen to publish first compile log");
 
         DidSaveTextDocumentParams saveParams = new DidSaveTextDocumentParams();
         saveParams.setTextDocument(new TextDocumentIdentifier(item.getUri()));
         service.didSave(saveParams);
 
         assertEquals(2, compileCount.get(), "Expected didSave to force recompilation");
-        assertEquals("LOG-2", server.getLogText(), "Expected didSave to publish fresh compile log");
+        assertEquals(2, server.getCompileFinishedCount(), "Expected didSave to publish compile completion once");
+        assertTrue(server.wasLastCompileSuccessful(), "Expected didSave compile to be marked as successful");
+        assertTrue(server.getDebugLogText().contains("REAL_COMPILE source=didSave"),
+                "Expected didSave to emit a real-compile marker to the debug log");
+        assertTrue(server.getLogText().contains("LOG-2"), "Expected didSave to publish fresh compile log");
+        assertFalse(service.isDocumentDirty(item.getUri()));
 
         Ili2cUtil.CompilationOutcome cached = cache.get(modelPath.toString());
         assertNotNull(cached, "Expected compilation outcome to be cached after save");
         assertEquals("LOG-2", cached.getLogText(), "Expected cache to hold the latest compilation outcome");
+        assertEquals("LOG-2", cache.getSavedAttempt(modelPath.toString()).getLogText(),
+                "Expected saved-attempt cache to track the latest authoritative compile");
+    }
+
+    private static DidChangeTextDocumentParams fullDocumentChange(String uri, int version, String text) {
+        VersionedTextDocumentIdentifier identifier = new VersionedTextDocumentIdentifier(uri, version);
+        TextDocumentContentChangeEvent change = new TextDocumentContentChangeEvent();
+        change.setText(text);
+        return new DidChangeTextDocumentParams(identifier, List.of(change));
     }
 
     private static class RecordingServer extends InterlisLanguageServer {
         private final StringBuilder logBuffer = new StringBuilder();
+        private final StringBuilder debugLogBuffer = new StringBuilder();
+        private int compileFinishedCount;
+        private boolean lastCompileSuccessful;
 
         @Override
         public void clearOutput() {
@@ -401,8 +553,34 @@ class InterlisTextDocumentServiceTest {
             logBuffer.append(text);
         }
 
+        @Override
+        public void debugLogToClient(String text) {
+            if (text == null) {
+                return;
+            }
+            debugLogBuffer.append(text);
+        }
+
+        @Override
+        public void notifyCompileFinished(String uri, boolean success) {
+            compileFinishedCount++;
+            lastCompileSuccessful = success;
+        }
+
         String getLogText() {
             return logBuffer.toString();
+        }
+
+        String getDebugLogText() {
+            return debugLogBuffer.toString();
+        }
+
+        int getCompileFinishedCount() {
+            return compileFinishedCount;
+        }
+
+        boolean wasLastCompileSuccessful() {
+            return lastCompileSuccessful;
         }
     }
 

@@ -204,7 +204,10 @@ Tip 👉 For CI packaging see the `build and publish` GitHub Actions workflow, w
 1. Install dependencies: `cd client && npm install`.
 2. Build once or watch: `npm run build` or `npm run watch` (uses esbuild ⚡).
 3. Launch VS Code with the extension: `code client --extensionDevelopmentPath="$(pwd)/client"`.
-4. During development, point the extension to your local server build by setting `interlisLsp.server.jarPath`.
+4. When you start the Extension Development Host via `Run INTERLIS Client`, VS Code runs the `Prepare INTERLIS Dev Host` task first. That task builds the client bundle and runs `./gradlew copyDevServerJar`, which copies the freshly built fat JAR to `client/server/interlis-lsp-all.jar`.
+5. Leave `interlisLsp.server.jarPath` empty during normal development. The extension will then pick up `client/server/interlis-lsp-all.jar` automatically. Only set `interlisLsp.server.jarPath` if you intentionally want to override the bundled dev JAR; any non-empty setting takes precedence over `client/server/interlis-lsp-all.jar`.
+
+Manual fallback: if you are not using the VS Code launch configuration, build the server yourself with `./gradlew copyDevServerJar` (or `./gradlew shadowJar` and copy the resulting `build/libs/*-all.jar` to `client/server/interlis-lsp-all.jar`).
 
 #### Meta-attribute highlighting
 

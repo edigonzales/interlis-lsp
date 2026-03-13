@@ -20,6 +20,11 @@ import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.eclipse.lsp4j.DidChangeTextDocumentParams;
+import org.eclipse.lsp4j.DidOpenTextDocumentParams;
+import org.eclipse.lsp4j.TextDocumentContentChangeEvent;
+import org.eclipse.lsp4j.TextDocumentItem;
+import org.eclipse.lsp4j.VersionedTextDocumentIdentifier;
 import org.eclipse.lsp4j.jsonrpc.ResponseErrorException;
 import org.eclipse.lsp4j.jsonrpc.messages.ResponseErrorCode;
 
@@ -192,6 +197,91 @@ class CommandHandlersTest {
     }
 
     @Test
+    void exportDiagramModelUsesLastSuccessfulSnapshotForDirtyDocuments() throws Exception {
+        Path iliFile = tempDir.resolve("DirtyDiagram.ili");
+        String valid = "INTERLIS 2.3;\n" +
+                "MODEL DirtyDiagram (en)\n" +
+                "AT \"http://example.com/DirtyDiagram.ili\"\n" +
+                "VERSION \"2024-01-01\" =\n" +
+                "  TOPIC SimpleTopic =\n" +
+                "    CLASS Person =\n" +
+                "    END Person;\n" +
+                "  END SimpleTopic;\n" +
+                "END DirtyDiagram.\n";
+        Files.writeString(iliFile, valid);
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        server.setClientSettings(new ClientSettings());
+        server.getInterlisTextDocumentService().didOpen(
+                new DidOpenTextDocumentParams(new TextDocumentItem(iliFile.toUri().toString(), "interlis", 1, valid)));
+
+        Files.writeString(iliFile, "MODEL Broken;");
+        server.getInterlisTextDocumentService().didChange(fullDocumentChange(iliFile.toUri().toString(), 2, valid + "\n! dirty"));
+
+        CommandHandlers handlers = new CommandHandlers(server);
+        InterlisDiagramModel.DiagramModel model = handlers.exportDiagramModel(iliFile.toUri().toString())
+                .get(30, TimeUnit.SECONDS);
+
+        assertNotNull(model);
+        assertTrue(model.getNodes().stream().anyMatch(n -> "Person".equals(n.getLabel())));
+    }
+
+    @Test
+    void exportDiagramModelAsksToSaveWhenDirtyDocumentHasNoSuccessfulSnapshot() throws Exception {
+        Path iliFile = tempDir.resolve("DirtyDiagramInvalid.ili");
+        String invalid = "MODEL DirtyDiagramInvalid;";
+        Files.writeString(iliFile, invalid);
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        server.setClientSettings(new ClientSettings());
+        server.getInterlisTextDocumentService().didOpen(
+                new DidOpenTextDocumentParams(new TextDocumentItem(iliFile.toUri().toString(), "interlis", 1, invalid)));
+        server.getInterlisTextDocumentService().didChange(fullDocumentChange(iliFile.toUri().toString(), 2, invalid + "\nTOPIC Broken ="));
+
+        CommandHandlers handlers = new CommandHandlers(server);
+        CompletableFuture<InterlisDiagramModel.DiagramModel> future = handlers.exportDiagramModel(iliFile.toUri().toString());
+
+        ExecutionException exec = assertThrows(ExecutionException.class, () -> future.get(30, TimeUnit.SECONDS));
+        ResponseErrorException ree = assertInstanceOf(ResponseErrorException.class, exec.getCause());
+        assertTrue(ree.getMessage().contains("Save the file to refresh the diagram"));
+    }
+
+    @Test
+    void exportDiagramModelKeepsLastSuccessfulSnapshotForSavedInvalidDocuments() throws Exception {
+        Path iliFile = tempDir.resolve("SavedInvalidDiagram.ili");
+        String valid = "INTERLIS 2.3;\n" +
+                "MODEL SavedInvalidDiagram (en)\n" +
+                "AT \"http://example.com/SavedInvalidDiagram.ili\"\n" +
+                "VERSION \"2024-01-01\" =\n" +
+                "  TOPIC SimpleTopic =\n" +
+                "    CLASS Person =\n" +
+                "    END Person;\n" +
+                "  END SimpleTopic;\n" +
+                "END SavedInvalidDiagram.\n";
+        String invalid = valid + "TOPIC Broken =";
+        Files.writeString(iliFile, valid);
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        server.setClientSettings(new ClientSettings());
+        String uri = iliFile.toUri().toString();
+        server.getInterlisTextDocumentService().didOpen(
+                new DidOpenTextDocumentParams(new TextDocumentItem(uri, "interlis", 1, valid)));
+
+        Files.writeString(iliFile, invalid);
+        server.getInterlisTextDocumentService().didChange(fullDocumentChange(uri, 2, invalid));
+
+        org.eclipse.lsp4j.DidSaveTextDocumentParams saveParams = new org.eclipse.lsp4j.DidSaveTextDocumentParams();
+        saveParams.setTextDocument(new org.eclipse.lsp4j.TextDocumentIdentifier(uri));
+        server.getInterlisTextDocumentService().didSave(saveParams);
+
+        CommandHandlers handlers = new CommandHandlers(server);
+        InterlisDiagramModel.DiagramModel model = handlers.exportDiagramModel(uri).get(30, TimeUnit.SECONDS);
+
+        assertNotNull(model);
+        assertTrue(model.getNodes().stream().anyMatch(n -> "Person".equals(n.getLabel())));
+    }
+
+    @Test
     void exportDocxFailsWithResponseErrorWhenCompilationFails() {
         InterlisLanguageServer server = new InterlisLanguageServer();
         CommandHandlers handlers = new CommandHandlers(server);
@@ -234,5 +324,12 @@ class CommandHandlersTest {
         ResponseErrorException ree = assertInstanceOf(ResponseErrorException.class, cause);
         assertEquals(ResponseErrorCode.InternalError.getValue(), ree.getResponseError().getCode());
         assertTrue(ree.getMessage().contains(nonexistent.getFileName().toString()));
+    }
+
+    private static DidChangeTextDocumentParams fullDocumentChange(String uri, int version, String text) {
+        VersionedTextDocumentIdentifier identifier = new VersionedTextDocumentIdentifier(uri, version);
+        TextDocumentContentChangeEvent change = new TextDocumentContentChangeEvent();
+        change.setText(text);
+        return new DidChangeTextDocumentParams(identifier, java.util.List.of(change));
     }
 }

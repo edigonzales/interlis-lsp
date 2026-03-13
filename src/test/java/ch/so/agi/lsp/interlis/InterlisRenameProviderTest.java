@@ -19,6 +19,7 @@ import java.nio.file.Path;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -149,5 +150,61 @@ class InterlisRenameProviderTest {
         assertNotNull(edits);
         assertTrue(edits.stream().anyMatch(e -> "SO_ARP_SEin_Konfiguration_20250115.Configuration.ThemaFoo".equals(e.getNewText())),
                 "Expected EXTENDS clause to update fully qualified reference");
+    }
+
+    @Test
+    void renameUsesSavedSnapshotWhenDocumentIsDirty() throws Exception {
+        String source = String.join("\n",
+                "INTERLIS 2.3;",
+                "",
+                "MODEL DirtyRename (en) AT \"http://example.org\" VERSION \"2024-01-01\" =",
+                "  TOPIC Config =",
+                "    STRUCTURE Thema =",
+                "    END Thema;",
+                "  END Config;",
+                "END DirtyRename.");
+
+        Path iliFile = Files.createTempFile("rename-dirty", ".ili");
+        Files.writeString(iliFile, source, StandardCharsets.UTF_8);
+
+        DocumentTracker tracker = new DocumentTracker();
+        String uri = iliFile.toUri().toString();
+        tracker.open(new org.eclipse.lsp4j.TextDocumentItem(uri, "interlis", 1, source));
+
+        CompilationCache cache = new CompilationCache();
+        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(new ch.so.agi.lsp.interlis.server.ClientSettings(), iliFile.toString());
+        assertNotNull(outcome.getTransferDescription(), outcome.getLogText());
+        cache.putSavedAttempt(iliFile.toString(), outcome);
+        cache.putSuccessful(iliFile.toString(), outcome);
+
+        org.eclipse.lsp4j.VersionedTextDocumentIdentifier identifier =
+                new org.eclipse.lsp4j.VersionedTextDocumentIdentifier(uri, 2);
+        org.eclipse.lsp4j.TextDocumentContentChangeEvent change = new org.eclipse.lsp4j.TextDocumentContentChangeEvent();
+        change.setText(source + "\n! dirty");
+        tracker.applyChanges(identifier, List.of(change));
+
+        AtomicInteger compileCount = new AtomicInteger();
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        InterlisRenameProvider provider = new InterlisRenameProvider(
+                server,
+                tracker,
+                cache,
+                (cfg, path) -> {
+                    compileCount.incrementAndGet();
+                    return outcome;
+                });
+
+        int tokenOffset = source.indexOf("STRUCTURE Thema") + "STRUCTURE ".length();
+        Position position = DocumentTracker.positionAt(source, tokenOffset);
+
+        RenameParams params = new RenameParams();
+        params.setTextDocument(new TextDocumentIdentifier(uri));
+        params.setPosition(position);
+        params.setNewName("ThemaFoo");
+
+        WorkspaceEdit edit = provider.rename(params);
+        assertNotNull(edit);
+        assertEquals(0, compileCount.get(), "Expected dirty rename to use the saved snapshot without recompiling");
+        assertTrue(edit.getChanges().containsKey(uri));
     }
 }

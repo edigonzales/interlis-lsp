@@ -6,6 +6,7 @@ import ch.so.agi.lsp.interlis.compiler.Ili2cUtil;
 import ch.so.agi.lsp.interlis.model.ModelDiscoveryService;
 import ch.so.agi.lsp.interlis.server.ClientSettings;
 import ch.so.agi.lsp.interlis.server.InterlisLanguageServer;
+import ch.so.agi.lsp.interlis.server.RuntimeDiagnostics;
 import org.eclipse.lsp4j.*;
 import org.eclipse.lsp4j.services.TextDocumentService;
 import org.eclipse.lsp4j.jsonrpc.CompletableFutures;
@@ -69,22 +70,13 @@ public class InterlisTextDocumentService implements TextDocumentService {
     @Override
     public void didChange(DidChangeTextDocumentParams params) {
         documents.applyChanges(params.getTextDocument(), params.getContentChanges());
-        String uri = params.getTextDocument().getUri();
-        String pathOrUri = toFilesystemPathIfPossible(uri);
-        // Any edit invalidates the transfer description cached for this document. Features
-        // such as completion, rename or document symbols combine the live text tracked by
-        // {@link DocumentTracker} with the cached {@link Ili2cUtil.CompilationOutcome}.
-        // Keeping the old compilation result after a change would leave those features with
-        // stale model information until the file is saved, so we drop the cache entry here
-        // and let the next request trigger a fresh compile if it needs one.
-        compilationCache.invalidate(pathOrUri);
     }
 
     @Override
     public void didSave(DidSaveTextDocumentParams params) {
         String uri = params.getTextDocument().getUri();
-        // Often a good moment to do an authoritative compile based on on-disk state
-        compileAndPublish(uri, "didSave", true);
+        documents.markSaved(uri);
+        compileAndPublish(uri, "didSave");
     }
 
     @Override
@@ -100,14 +92,17 @@ public class InterlisTextDocumentService implements TextDocumentService {
         try {
             String uri = params.getTextDocument().getUri();
             String pathOrUri = toFilesystemPathIfPossible(uri);
-            String originalText = readDocument(uri);
+            boolean tracked = documents.isTracked(uri);
+            boolean dirty = tracked && documents.isDirty(uri);
+            String originalText = documents.getText(uri);
+            if (originalText == null) {
+                originalText = readDocument(uri);
+            }
 
-            ClientSettings cfg = server.getClientSettings();
-
-            Ili2cUtil.CompilationOutcome outcome = compilationCache.get(pathOrUri);
-            if (outcome == null) {
-                outcome = compiler.apply(cfg, pathOrUri);
-                compilationCache.put(pathOrUri, outcome);
+            Ili2cUtil.CompilationOutcome outcome = resolveOutcomeForInteractiveFeature(uri, pathOrUri, "formatting-fallback");
+            if (dirty) {
+                // Formatting from a stale saved snapshot would overwrite unsaved user edits.
+                return CompletableFuture.completedFuture(Collections.emptyList());
             }
 
             String formattedText = Ili2cUtil.prettyPrint(outcome != null ? outcome.getTransferDescription() : null, pathOrUri);
@@ -225,11 +220,7 @@ public class InterlisTextDocumentService implements TextDocumentService {
                     return Collections.emptyList();
                 }
 
-                Ili2cUtil.CompilationOutcome outcome = compilationCache.get(pathOrUri);
-                if (outcome == null || outcome.getTransferDescription() == null) {
-                    outcome = compiler.apply(server.getClientSettings(), pathOrUri);
-                    compilationCache.put(pathOrUri, outcome);
-                }
+                Ili2cUtil.CompilationOutcome outcome = resolveOutcomeForInteractiveFeature(uri, pathOrUri, "documentSymbol-fallback");
 
                 if (outcome == null || outcome.getTransferDescription() == null) {
                     return Collections.emptyList();
@@ -253,35 +244,50 @@ public class InterlisTextDocumentService implements TextDocumentService {
     }
 
     private void compileAndPublish(String documentUri, String source) {
-        compileAndPublish(documentUri, source, false);
-    }
-
-    private void compileAndPublish(String documentUri, String source, boolean forceRecompile) {
         try {
             String pathOrUri = toFilesystemPathIfPossible(documentUri);
             ClientSettings cfg = server.getClientSettings();
             LOG.debug("Validating [{}] via {} with modelRepositories={}", pathOrUri, source,
                     cfg.getModelRepositoriesList());
 
-            Ili2cUtil.CompilationOutcome outcome = forceRecompile ? null : compilationCache.get(pathOrUri);
-            if (forceRecompile || outcome == null || outcome.getTransferDescription() == null) {
-                outcome = compiler.apply(cfg, pathOrUri);
-                compilationCache.put(pathOrUri, outcome);
-            }
+            server.clearOutput();
+            Ili2cUtil.CompilationOutcome outcome = RuntimeDiagnostics.compile(server, compiler, cfg, pathOrUri, source);
             if (outcome == null) {
                 outcome = new Ili2cUtil.CompilationOutcome(null, "", Collections.emptyList());
             }
+            recordAuthoritativeOutcome(pathOrUri, outcome);
 
             server.publishDiagnostics(documentUri, DiagnosticsMapper.toDiagnostics(outcome.getMessages()));
-            server.clearOutput();
             server.logToClient(outcome.getLogText());
+            server.notifyCompileFinished(documentUri, outcome.getTransferDescription() != null);
         } catch (Exception ex) {
+            server.notifyCompileFinished(documentUri, false);
             if (CancellationUtil.isCancellation(ex)) {
                 LOG.debug("Validation cancelled for {} (source={})", documentUri, source);
                 throw CancellationUtil.propagateCancellation(ex);
             }
             LOG.error("Validation failed for {} (source={})", documentUri, source, ex);
         }
+    }
+
+    public boolean isTrackedDocument(String uriOrPath) {
+        return documents.isTracked(toDocumentUriIfPossible(uriOrPath));
+    }
+
+    public boolean isDocumentDirty(String uriOrPath) {
+        return documents.isDirty(toDocumentUriIfPossible(uriOrPath));
+    }
+
+    public Ili2cUtil.CompilationOutcome getLastSuccessfulCompilation(String uriOrPath) {
+        return compilationCache.getSuccessful(toFilesystemPathIfPossible(uriOrPath));
+    }
+
+    public Ili2cUtil.CompilationOutcome getLastSavedCompilationAttempt(String uriOrPath) {
+        return compilationCache.getSavedAttempt(toFilesystemPathIfPossible(uriOrPath));
+    }
+
+    public void rememberSavedCompilationOutcome(String uriOrPath, Ili2cUtil.CompilationOutcome outcome) {
+        recordAuthoritativeOutcome(toFilesystemPathIfPossible(uriOrPath), outcome);
     }
 
     public static String toFilesystemPathIfPossible(String uriOrPath) {
@@ -293,6 +299,20 @@ public class InterlisTextDocumentService implements TextDocumentService {
             } catch (Exception ignored) { /* leave as-is */ }
         }
         return uriOrPath;
+    }
+
+    public static String toDocumentUriIfPossible(String uriOrPath) {
+        if (uriOrPath == null || uriOrPath.isBlank()) {
+            return null;
+        }
+        if (uriOrPath.startsWith("file:")) {
+            return uriOrPath;
+        }
+        try {
+            return Paths.get(uriOrPath).toUri().toString();
+        } catch (Exception ex) {
+            return uriOrPath;
+        }
     }
 
     public static String readDocument(String uriOrPath) throws Exception {
@@ -335,5 +355,45 @@ public class InterlisTextDocumentService implements TextDocumentService {
         } catch (Exception ex) {
             LOG.debug("Unable to publish formatting diagnostics for {}", documentUri, ex);
         }
+    }
+
+    private Ili2cUtil.CompilationOutcome resolveOutcomeForInteractiveFeature(String documentUri,
+                                                                             String pathOrUri,
+                                                                             String compileSource) {
+        boolean tracked = documents.isTracked(documentUri);
+        boolean dirty = tracked && documents.isDirty(documentUri);
+
+        if (dirty) {
+            return compilationCache.getSuccessful(pathOrUri);
+        }
+
+        Ili2cUtil.CompilationOutcome outcome = firstOutcome(
+                compilationCache.getSavedAttempt(pathOrUri),
+                compilationCache.getSuccessful(pathOrUri));
+        if (outcome != null || tracked) {
+            return outcome;
+        }
+
+        Ili2cUtil.CompilationOutcome compiled = RuntimeDiagnostics.compile(
+                server,
+                compiler,
+                server.getClientSettings(),
+                pathOrUri,
+                compileSource);
+        recordAuthoritativeOutcome(pathOrUri, compiled);
+        return compiled;
+    }
+
+    private void recordAuthoritativeOutcome(String pathOrUri, Ili2cUtil.CompilationOutcome outcome) {
+        if (pathOrUri == null || pathOrUri.isBlank() || outcome == null) {
+            return;
+        }
+        compilationCache.putSavedAttempt(pathOrUri, outcome);
+        compilationCache.putSuccessful(pathOrUri, outcome);
+    }
+
+    private static Ili2cUtil.CompilationOutcome firstOutcome(Ili2cUtil.CompilationOutcome primary,
+                                                             Ili2cUtil.CompilationOutcome fallback) {
+        return primary != null ? primary : fallback;
     }
 }

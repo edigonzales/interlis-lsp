@@ -1,0 +1,35 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build INTERLIS Client",
+      "type": "npm",
+      "script": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Copy INTERLIS Server JAR",
+      "type": "shell",
+      "command": "./gradlew",
+      "windows": {
+        "command": "gradlew.bat"
+      },
+      "args": [
+        "copyDevServerJar"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/.."
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Prepare INTERLIS Dev Host",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "Build INTERLIS Client",
+        "Copy INTERLIS Server JAR"
+      ],
+      "problemMatcher": []
+    }
+  ]
+}

@@ -1,3 +1,5 @@
+import java.time.Instant
+
 plugins {
     id 'java'
     id 'application'
@@ -59,6 +61,27 @@ test {
 
 application {
     mainClass = 'ch.so.agi.lsp.interlis.server.LspServerLauncher'
+}
+
+def buildTimestamp = Instant.now().toString()
+def buildMarker = 'dirty-compile-diagnostics'
+
+tasks.withType(Jar).configureEach {
+    manifest {
+        attributes(
+                'Implementation-Title': 'INTERLIS LSP',
+                'Implementation-Version': project.version.toString(),
+                'Build-Time': buildTimestamp,
+                'Build-Marker': buildMarker
+        )
+    }
+}
+
+tasks.register('copyDevServerJar', Copy) {
+    dependsOn tasks.named('shadowJar')
+    from(tasks.named('shadowJar').flatMap { it.archiveFile })
+    into layout.projectDirectory.dir('client/server')
+    rename { 'interlis-lsp-all.jar' }
 }
 
 /*

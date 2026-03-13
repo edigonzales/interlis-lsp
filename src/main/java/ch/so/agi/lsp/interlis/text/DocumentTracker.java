@@ -19,10 +19,12 @@ public final class DocumentTracker {
     private static final class DocumentState {
         String text;
         Integer version;
+        boolean dirty;
 
-        DocumentState(String text, Integer version) {
+        DocumentState(String text, Integer version, boolean dirty) {
             this.text = text != null ? text : "";
             this.version = version;
+            this.dirty = dirty;
         }
     }
 
@@ -30,7 +32,7 @@ public final class DocumentTracker {
 
     public void open(TextDocumentItem item) {
         if (item == null) return;
-        documents.put(item.getUri(), new DocumentState(item.getText(), item.getVersion()));
+        documents.put(item.getUri(), new DocumentState(item.getText(), item.getVersion(), false));
     }
 
     public void close(String uri) {
@@ -45,7 +47,7 @@ public final class DocumentTracker {
         }
 
         String uri = identifier.getUri();
-        DocumentState state = documents.computeIfAbsent(uri, u -> new DocumentState("", null));
+        DocumentState state = documents.computeIfAbsent(uri, u -> new DocumentState("", null, true));
         String text = state.text;
 
         for (TextDocumentContentChangeEvent change : changes) {
@@ -70,6 +72,7 @@ public final class DocumentTracker {
 
         state.text = text;
         state.version = identifier.getVersion();
+        state.dirty = true;
     }
 
     public String getText(String uri) {
@@ -80,6 +83,22 @@ public final class DocumentTracker {
     public Integer getVersion(String uri) {
         DocumentState state = uri == null ? null : documents.get(uri);
         return state != null ? state.version : null;
+    }
+
+    public boolean isDirty(String uri) {
+        DocumentState state = uri == null ? null : documents.get(uri);
+        return state != null && state.dirty;
+    }
+
+    public boolean isTracked(String uri) {
+        return uri != null && documents.containsKey(uri);
+    }
+
+    public void markSaved(String uri) {
+        DocumentState state = uri == null ? null : documents.get(uri);
+        if (state != null) {
+            state.dirty = false;
+        }
     }
 
     public static int toOffset(String text, Position position) {

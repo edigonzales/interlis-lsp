@@ -11,6 +11,7 @@ import java.util.concurrent.ExecutionException;
 
 public class LspServerLauncher {
     public static void main(String[] args) throws ExecutionException, InterruptedException {
+        quietLsp4jCancellationWarnings();
         // Keep the original stdout exclusively for LSP JSON-RPC messages.
         PrintStream lspProtocolOut = System.out;
         // Redirect all incidental System.out prints from third-party libs away from the LSP transport.
@@ -44,5 +45,11 @@ public class LspServerLauncher {
             }
             InterlisGlspBridge.clear();
         }
+    }
+
+    private static void quietLsp4jCancellationWarnings() {
+        java.util.logging.Logger remoteEndpointLogger =
+                java.util.logging.Logger.getLogger("org.eclipse.lsp4j.jsonrpc.RemoteEndpoint");
+        remoteEndpointLogger.setLevel(java.util.logging.Level.SEVERE);
     }
 }

@@ -6,10 +6,10 @@ import {
   cancelScheduledDiagramRefresh,
   forgetAutoOpenedDiagram,
   maybeAutoOpenDiagram,
-  refreshDiagramForDocument,
+  refreshOpenDiagramByUri,
   registerInterlisDiagramCommands,
   registerInterlisDiagramEditor,
-  scheduleDiagramRefresh
+  setDiagramDebugLogger
 } from "./diagram/diagramEditor";
 
 let client: LanguageClient | undefined;
@@ -24,15 +24,105 @@ type PendingCaret = { version: number; position: vscode.Position };
 
 const pendingCarets = new Map<string, PendingCaret>();
 
+class TimestampedOutputChannel implements vscode.OutputChannel {
+  readonly name: string;
+  private atLineStart = true;
+
+  constructor(private readonly delegate: vscode.OutputChannel) {
+    this.name = delegate.name;
+  }
+
+  append(value: string): void {
+    if (!value) {
+      return;
+    }
+    this.delegate.append(this.formatChunk(value));
+  }
+
+  appendLine(value: string): void {
+    if (!value) {
+      this.delegate.appendLine(`${this.timestamp()} `);
+      this.atLineStart = true;
+      return;
+    }
+    this.delegate.appendLine(this.formatChunk(value));
+    this.atLineStart = true;
+  }
+
+  replace(value: string): void {
+    this.atLineStart = true;
+    if (!value) {
+      this.delegate.replace(value);
+      return;
+    }
+    this.delegate.replace(this.formatChunk(value));
+  }
+
+  clear(): void {
+    this.atLineStart = true;
+    this.delegate.clear();
+  }
+
+  show(columnOrPreserveFocus?: vscode.ViewColumn | boolean, preserveFocus?: boolean): void {
+    if (typeof columnOrPreserveFocus === "boolean" || columnOrPreserveFocus === undefined) {
+      this.delegate.show(columnOrPreserveFocus);
+      return;
+    }
+    this.delegate.show(columnOrPreserveFocus, preserveFocus);
+  }
+
+  hide(): void {
+    this.delegate.hide();
+  }
+
+  dispose(): void {
+    this.delegate.dispose();
+  }
+
+  private formatChunk(value: string): string {
+    let formatted = "";
+    for (let index = 0; index < value.length; index += 1) {
+      if (this.atLineStart) {
+        formatted += `${this.timestamp()} `;
+        this.atLineStart = false;
+      }
+      const char = value[index];
+      formatted += char;
+      if (char === "\n") {
+        this.atLineStart = true;
+      }
+    }
+    return formatted;
+  }
+
+  private timestamp(): string {
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, "0");
+    const minutes = String(now.getMinutes()).padStart(2, "0");
+    const seconds = String(now.getSeconds()).padStart(2, "0");
+    const millis = String(now.getMilliseconds()).padStart(3, "0");
+    return `[${hours}:${minutes}:${seconds}.${millis}]`;
+  }
+}
+
 export async function activate(context: vscode.ExtensionContext) {
   const cfg = vscode.workspace.getConfiguration("interlisLsp");
   const jarPath = resolveServerJarPath(context, cfg.get<string>("server.jarPath"));
   const javaPath = resolveJavaPath(context, cfg.get<string>("javaPath"));
   const jvmArgs = cfg.get<string[]>("server.jvmArgs") ?? [];
 
-  // Single channel
-  const OUTPUT_NAME = "INTERLIS LSP";
-  const output = vscode.window.createOutputChannel(OUTPUT_NAME); // no { log: true }
+  const output = vscode.window.createOutputChannel("INTERLIS LSP");
+  const rawDebugOutput = vscode.window.createOutputChannel("INTERLIS LSP Debug");
+  const debugOutput = new TimestampedOutputChannel(rawDebugOutput);
+  context.subscriptions.push(output, rawDebugOutput);
+  setDiagramDebugLogger(message => debugOutput.appendLine(message));
+  context.subscriptions.push(new vscode.Disposable(() => setDiagramDebugLogger(undefined)));
+  debugOutput.appendLine(`Using server JAR: ${jarPath}`);
+  debugOutput.appendLine(`Using Java runtime: ${javaPath}`);
+  if (jvmArgs.length > 0) {
+    debugOutput.appendLine(`Using JVM args: ${jvmArgs.join(" ")}`);
+  }
+
   const exec: Executable = {
     command: javaPath,
     args: [
@@ -119,11 +209,56 @@ export async function activate(context: vscode.ExtensionContext) {
     synchronize: { configurationSection: "interlisLsp" },
     middleware: caretMiddleware,
     outputChannel: output,
-    traceOutputChannel: output
+    traceOutputChannel: debugOutput
   };
 
   client = new LanguageClient("interlisLsp", "INTERLIS Language Server", serverOptions, clientOptions);
   context.subscriptions.push(client);
+  let handlersRegistered = false;
+  const revealOutputChannel = (preserveEditorFocus = true) => {
+    output.show(preserveEditorFocus);
+    void ensurePanelVisible(preserveEditorFocus);
+  };
+
+  const registerHandlersOnce = () => {
+    if (handlersRegistered) return;
+    handlersRegistered = true;
+
+    client!.onNotification("interlis/clearLog", () => {
+      output.clear();
+      if (revealOutputOnNextLog) {
+        revealOutputChannel(true);
+        revealOutputOnNextLog = false;
+      }
+    });
+
+    client!.onNotification("interlis/log", (p: { text?: string }) => {
+      if (p?.text) {
+        output.append(p.text);
+        revealOutputChannel(true);
+      }
+    });
+
+    client!.onNotification("interlis/debugLog", (p: { text?: string }) => {
+      if (p?.text) {
+        debugOutput.append(p.text);
+      }
+    });
+
+    client!.onNotification("interlis/compileFinished", (p: { uri?: string; success?: boolean }) => {
+      if (p?.success && p.uri) {
+        try {
+          refreshOpenDiagramByUri(vscode.Uri.parse(p.uri));
+        } catch {
+          // Ignore invalid URIs from optional client notifications.
+        }
+      }
+    });
+  };
+
+  registerHandlersOnce(); // ensure handlers exist now
+  client.onDidChangeState(e => { if (e.newState === State.Running) registerHandlersOnce(); });
+
   await client.start();
   try {
     await registerInterlisDiagramEditor(context, () => client);
@@ -150,15 +285,6 @@ export async function activate(context: vscode.ExtensionContext) {
         }
       }
 
-      if (event.contentChanges.length > 0) {
-        scheduleDiagramRefresh(event.document);
-      }
-    })
-  );
-
-  context.subscriptions.push(
-    vscode.workspace.onDidSaveTextDocument(document => {
-      refreshDiagramForDocument(document);
     })
   );
 
@@ -176,36 +302,6 @@ export async function activate(context: vscode.ExtensionContext) {
   );
 
   void maybeAutoOpenDiagram(vscode.window.activeTextEditor, autoOpenedDiagramUris);
-
-  // Register notification handlers ONCE, immediately
-  let handlersRegistered = false;
-  const revealOutputChannel = (preserveEditorFocus = true) => {
-    output.show(preserveEditorFocus);
-    void ensurePanelVisible(preserveEditorFocus);
-  };
-
-  const registerHandlersOnce = () => {
-    if (handlersRegistered) return;
-    handlersRegistered = true;
-
-    client!.onNotification("interlis/clearLog", () => {
-      output.clear();
-      if (revealOutputOnNextLog) {
-        revealOutputChannel(true);
-        revealOutputOnNextLog = false;
-      }
-    });
-
-    client!.onNotification("interlis/log", (p: { text?: string }) => {
-      if (p?.text) {
-        output.append(p.text);
-        revealOutputChannel(true);
-      }
-    });
-  };
-
-  registerHandlersOnce(); // ensure handlers exist now
-  client.onDidChangeState(e => { if (e.newState === State.Running) registerHandlersOnce(); });
 
   async function showUmlHtml(html: string, title: string) {
     const column = vscode.ViewColumn.Beside;

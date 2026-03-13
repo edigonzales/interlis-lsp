@@ -5,6 +5,7 @@ import ch.so.agi.lsp.interlis.compiler.Ili2cUtil;
 import ch.so.agi.lsp.interlis.model.ModelDiscoveryService;
 import ch.so.agi.lsp.interlis.server.ClientSettings;
 import ch.so.agi.lsp.interlis.server.InterlisLanguageServer;
+import ch.so.agi.lsp.interlis.server.RuntimeDiagnostics;
 import ch.interlis.ili2c.metamodel.Model;
 import ch.interlis.ili2c.metamodel.Topic;
 import ch.interlis.ili2c.metamodel.TransferDescription;
@@ -250,12 +251,21 @@ final class InterlisCompletionProvider {
             if (pathOrUri == null || pathOrUri.isBlank()) {
                 return null;
             }
-            ClientSettings settings = server.getClientSettings();
-            Ili2cUtil.CompilationOutcome outcome = compilationCache.get(pathOrUri);
-            if (outcome == null || outcome.getTransferDescription() == null) {
-                outcome = compiler.apply(settings, pathOrUri);
-                if (outcome != null) {
-                    compilationCache.put(pathOrUri, outcome);
+            boolean tracked = documents != null && documents.isTracked(uri);
+            boolean dirty = tracked && documents.isDirty(uri);
+
+            Ili2cUtil.CompilationOutcome outcome;
+            if (dirty) {
+                outcome = compilationCache.getSuccessful(pathOrUri);
+            } else {
+                outcome = firstOutcome(compilationCache.getSavedAttempt(pathOrUri), compilationCache.getSuccessful(pathOrUri));
+                if (outcome == null && !tracked) {
+                    ClientSettings settings = server.getClientSettings();
+                    outcome = RuntimeDiagnostics.compile(server, compiler, settings, pathOrUri, "completion-fallback");
+                    if (outcome != null) {
+                        compilationCache.putSavedAttempt(pathOrUri, outcome);
+                        compilationCache.putSuccessful(pathOrUri, outcome);
+                    }
                 }
             }
             return outcome != null ? outcome.getTransferDescription() : null;
@@ -266,6 +276,11 @@ final class InterlisCompletionProvider {
             LOG.warn("Failed to obtain transfer description for completion", ex);
             return null;
         }
+    }
+
+    private static Ili2cUtil.CompilationOutcome firstOutcome(Ili2cUtil.CompilationOutcome primary,
+                                                             Ili2cUtil.CompilationOutcome fallback) {
+        return primary != null ? primary : fallback;
     }
 
     private static int lineStartOffset(String text, int offset) {

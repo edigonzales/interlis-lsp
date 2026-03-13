@@ -12,6 +12,7 @@ import ch.so.agi.lsp.interlis.export.html.MermaidHtmlRenderer;
 import ch.so.agi.lsp.interlis.export.html.PlantUmlHtmlRenderer;
 import ch.so.agi.lsp.interlis.server.ClientSettings;
 import ch.so.agi.lsp.interlis.server.InterlisLanguageServer;
+import ch.so.agi.lsp.interlis.server.RuntimeDiagnostics;
 import ch.so.agi.lsp.interlis.text.InterlisTextDocumentService;
 import ch.interlis.ili2c.metamodel.TransferDescription;
 import java.nio.file.Path;
@@ -21,8 +22,6 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.Optional;
 import org.eclipse.lsp4j.Diagnostic;
-import org.eclipse.lsp4j.MessageParams;
-import org.eclipse.lsp4j.MessageType;
 import org.eclipse.lsp4j.jsonrpc.ResponseErrorException;
 import org.eclipse.lsp4j.jsonrpc.messages.ResponseError;
 import org.eclipse.lsp4j.jsonrpc.messages.ResponseErrorCode;
@@ -37,37 +36,14 @@ public class CommandHandlers {
 
     /** Validate an .ili file and return textual log; also publishes diagnostics. */
     public CompletableFuture<Object> compile(String fileUriOrPath) {
-        if (server.getClient() != null) {
-            server.getClient().logMessage(new MessageParams(
-                MessageType.Log, "compile called for " + fileUriOrPath));
-        }
-
-        String filesystemPath = InterlisTextDocumentService.toFilesystemPathIfPossible(fileUriOrPath);
-
-        ClientSettings cfg = server.getClientSettings();
-        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(cfg, filesystemPath);
-        List<Diagnostic> diagnostics = DiagnosticsMapper.toDiagnostics(outcome.getMessages());
-        server.publishDiagnostics(fileUriOrPath, diagnostics);
-        server.clearOutput();
-        server.logToClient(outcome.getLogText());
+        Ili2cUtil.CompilationOutcome outcome = compileAndPublish(fileUriOrPath, "compile-command", true);
         return CompletableFuture.completedFuture(outcome.getLogText());
     }
 
     /** Compile an .ili file and return an HTML page with the generated Mermaid diagram. */
     public CompletableFuture<Object> generateUml(String fileUriOrPath) {
-        if (server.getClient() != null) {
-            server.getClient().logMessage(new MessageParams(
-                MessageType.Log, "generateUml called for " + fileUriOrPath));
-        }
-
         String filesystemPath = InterlisTextDocumentService.toFilesystemPathIfPossible(fileUriOrPath);
-
-        ClientSettings cfg = server.getClientSettings();
-        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(cfg, filesystemPath);
-        List<Diagnostic> diagnostics = DiagnosticsMapper.toDiagnostics(outcome.getMessages());
-        server.publishDiagnostics(fileUriOrPath, diagnostics);
-        server.clearOutput();
-        server.logToClient(outcome.getLogText());
+        Ili2cUtil.CompilationOutcome outcome = compileAndPublish(fileUriOrPath, "generateUml", true);
 
         String displayPath = firstNonBlank(filesystemPath, fileUriOrPath);
 
@@ -87,19 +63,8 @@ public class CommandHandlers {
 
     /** Compile an .ili file and return an HTML page with the generated PlantUML diagram. */
     public CompletableFuture<Object> generatePlantUml(String fileUriOrPath) {
-        if (server.getClient() != null) {
-            server.getClient().logMessage(new MessageParams(
-                MessageType.Log, "generatePlantUml called for " + fileUriOrPath));
-        }
-
         String filesystemPath = InterlisTextDocumentService.toFilesystemPathIfPossible(fileUriOrPath);
-
-        ClientSettings cfg = server.getClientSettings();
-        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(cfg, filesystemPath);
-        List<Diagnostic> diagnostics = DiagnosticsMapper.toDiagnostics(outcome.getMessages());
-        server.publishDiagnostics(fileUriOrPath, diagnostics);
-        server.clearOutput();
-        server.logToClient(outcome.getLogText());
+        Ili2cUtil.CompilationOutcome outcome = compileAndPublish(fileUriOrPath, "generatePlantUml", true);
 
         String displayPath = firstNonBlank(filesystemPath, fileUriOrPath);
 
@@ -118,19 +83,8 @@ public class CommandHandlers {
     }
 
     public CompletableFuture<String> exportGraphml(String fileUriOrPath) {
-        if (server.getClient() != null) {
-            server.getClient().logMessage(new MessageParams(
-                MessageType.Log, "exportGraphml called for " + fileUriOrPath));
-        }
-
         String filesystemPath = InterlisTextDocumentService.toFilesystemPathIfPossible(fileUriOrPath);
-
-        ClientSettings cfg = server.getClientSettings();
-        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(cfg, filesystemPath);
-        List<Diagnostic> diagnostics = DiagnosticsMapper.toDiagnostics(outcome.getMessages());
-        server.publishDiagnostics(fileUriOrPath, diagnostics);
-        server.clearOutput();
-        server.logToClient(outcome.getLogText());
+        Ili2cUtil.CompilationOutcome outcome = compileAndPublish(fileUriOrPath, "exportGraphml", true);
 
         String displayPath = firstNonBlank(filesystemPath, fileUriOrPath);
 
@@ -148,49 +102,47 @@ public class CommandHandlers {
     }
 
     public CompletableFuture<InterlisDiagramModel.DiagramModel> exportDiagramModel(String fileUriOrPath) {
-        if (server.getClient() != null) {
-            server.getClient().logMessage(new MessageParams(
-                    MessageType.Log, "exportDiagramModel called for " + fileUriOrPath));
-        }
+        RuntimeDiagnostics.logDiagramRequest(server, fileUriOrPath);
 
         String filesystemPath = InterlisTextDocumentService.toFilesystemPathIfPossible(fileUriOrPath);
-
-        ClientSettings cfg = server.getClientSettings();
-        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(cfg, filesystemPath);
-        List<Diagnostic> diagnostics = DiagnosticsMapper.toDiagnostics(outcome.getMessages());
-        server.publishDiagnostics(fileUriOrPath, diagnostics);
-        server.clearOutput();
-        server.logToClient(outcome.getLogText());
-
         String displayPath = firstNonBlank(filesystemPath, fileUriOrPath);
+        InterlisTextDocumentService textService = server.getInterlisTextDocumentService();
+        boolean tracked = textService.isTrackedDocument(fileUriOrPath);
+        boolean dirty = tracked && textService.isDocumentDirty(fileUriOrPath);
+
+        if (dirty) {
+            Ili2cUtil.CompilationOutcome outcome = textService.getLastSuccessfulCompilation(fileUriOrPath);
+            if (outcome == null || outcome.getTransferDescription() == null) {
+                return CompletableFuture.failedFuture(diagramDirtyFailure(displayPath));
+            }
+            return renderDiagramModel(outcome);
+        }
+
+        if (tracked) {
+            Ili2cUtil.CompilationOutcome outcome = resolveTrackedDiagramOutcome(
+                    textService.getLastSavedCompilationAttempt(fileUriOrPath),
+                    textService.getLastSuccessfulCompilation(fileUriOrPath));
+            if (outcome != null) {
+                if (outcome.getTransferDescription() == null) {
+                    return CompletableFuture.failedFuture(compilerFailure(displayPath, outcome));
+                }
+                return renderDiagramModel(outcome);
+            }
+        }
+
+        Ili2cUtil.CompilationOutcome outcome = compileAndPublish(fileUriOrPath, "exportDiagramModel-fallback", false);
 
         TransferDescription td = outcome.getTransferDescription();
         if (td == null) {
             return CompletableFuture.failedFuture(compilerFailure(displayPath, outcome));
         }
 
-        try {
-            InterlisDiagramModel.DiagramModel model = InterlisDiagramModel.render(td);
-            return CompletableFuture.completedFuture(model);
-        } catch (Exception e) {
-            return CompletableFuture.failedFuture(e);
-        }
+        return renderDiagramModel(outcome);
     }
 
     public CompletableFuture<String> exportDocx(String fileUriOrPath, String titleOverride) {
-        if (server.getClient() != null) {
-            server.getClient().logMessage(new MessageParams(
-                MessageType.Log, "exportDocx called for " + fileUriOrPath));
-        }
-
         String filesystemPath = InterlisTextDocumentService.toFilesystemPathIfPossible(fileUriOrPath);
-
-        ClientSettings cfg = server.getClientSettings();
-        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(cfg, filesystemPath);
-        List<Diagnostic> diagnostics = DiagnosticsMapper.toDiagnostics(outcome.getMessages());
-        server.publishDiagnostics(fileUriOrPath, diagnostics);
-        server.clearOutput();
-        server.logToClient(outcome.getLogText());
+        Ili2cUtil.CompilationOutcome outcome = compileAndPublish(fileUriOrPath, "exportDocx", true);
 
         String displayPath = firstNonBlank(filesystemPath, fileUriOrPath);
 
@@ -212,19 +164,8 @@ public class CommandHandlers {
     }
 
     public CompletableFuture<String> exportHtml(String fileUriOrPath, String titleOverride) {
-        if (server.getClient() != null) {
-            server.getClient().logMessage(new MessageParams(
-                MessageType.Log, "exportHtml called for " + fileUriOrPath));
-        }
-
         String filesystemPath = InterlisTextDocumentService.toFilesystemPathIfPossible(fileUriOrPath);
-
-        ClientSettings cfg = server.getClientSettings();
-        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(cfg, filesystemPath);
-        List<Diagnostic> diagnostics = DiagnosticsMapper.toDiagnostics(outcome.getMessages());
-        server.publishDiagnostics(fileUriOrPath, diagnostics);
-        server.clearOutput();
-        server.logToClient(outcome.getLogText());
+        Ili2cUtil.CompilationOutcome outcome = compileAndPublish(fileUriOrPath, "exportHtml", true);
 
         String displayPath = firstNonBlank(filesystemPath, fileUriOrPath);
 
@@ -270,6 +211,54 @@ public class CommandHandlers {
         return fileUriOrPath;
     }
 
+    private Ili2cUtil.CompilationOutcome compileAndPublish(String fileUriOrPath, String source, boolean emitCompileFinished) {
+        String filesystemPath = InterlisTextDocumentService.toFilesystemPathIfPossible(fileUriOrPath);
+        ClientSettings cfg = server.getClientSettings();
+        try {
+            server.clearOutput();
+            Ili2cUtil.CompilationOutcome outcome = RuntimeDiagnostics.compile(server, Ili2cUtil::compile, cfg, filesystemPath, source);
+            server.getInterlisTextDocumentService().rememberSavedCompilationOutcome(fileUriOrPath, outcome);
+
+            List<Diagnostic> diagnostics = DiagnosticsMapper.toDiagnostics(outcome.getMessages());
+            server.publishDiagnostics(fileUriOrPath, diagnostics);
+            server.logToClient(outcome.getLogText());
+            if (emitCompileFinished) {
+                server.notifyCompileFinished(fileUriOrPath, outcome != null && outcome.getTransferDescription() != null);
+            }
+            return outcome;
+        } catch (RuntimeException ex) {
+            if (emitCompileFinished) {
+                server.notifyCompileFinished(fileUriOrPath, false);
+            }
+            throw ex;
+        }
+    }
+
+    private CompletableFuture<InterlisDiagramModel.DiagramModel> renderDiagramModel(Ili2cUtil.CompilationOutcome outcome) {
+        try {
+            InterlisDiagramModel.DiagramModel model = InterlisDiagramModel.render(outcome.getTransferDescription());
+            return CompletableFuture.completedFuture(model);
+        } catch (Exception e) {
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+
+    private static Ili2cUtil.CompilationOutcome firstOutcome(Ili2cUtil.CompilationOutcome primary,
+                                                             Ili2cUtil.CompilationOutcome fallback) {
+        return primary != null ? primary : fallback;
+    }
+
+    private static Ili2cUtil.CompilationOutcome resolveTrackedDiagramOutcome(Ili2cUtil.CompilationOutcome savedAttempt,
+                                                                             Ili2cUtil.CompilationOutcome successful) {
+        if (savedAttempt != null && savedAttempt.getTransferDescription() != null) {
+            return savedAttempt;
+        }
+        if (successful != null) {
+            return successful;
+        }
+        return savedAttempt;
+    }
+
     static ResponseErrorException compilerFailure(String fileUriOrPath, Ili2cUtil.CompilationOutcome outcome) {
         String message = "ili2c did not return a TransferDescription";
         if (outcome != null) {
@@ -282,6 +271,15 @@ public class CommandHandlers {
         }
 
         ResponseError error = new ResponseError(ResponseErrorCode.InternalError, message, details);
+        return new ResponseErrorException(error);
+    }
+
+    static ResponseErrorException diagramDirtyFailure(String fileUriOrPath) {
+        String message = "Save the file to refresh the diagram";
+        if (fileUriOrPath != null && !fileUriOrPath.isBlank()) {
+            message = message + " (" + fileUriOrPath + ")";
+        }
+        ResponseError error = new ResponseError(ResponseErrorCode.InternalError, message, null);
         return new ResponseErrorException(error);
     }
 

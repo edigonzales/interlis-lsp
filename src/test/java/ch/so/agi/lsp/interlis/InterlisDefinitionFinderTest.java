@@ -58,7 +58,13 @@ class InterlisDefinitionFinderTest {
         TextDocumentItem item = new TextDocumentItem(sourceFile.toUri().toString(), "interlis", 1, sourceContent);
         tracker.open(item);
 
-        InterlisDefinitionFinder finder = new InterlisDefinitionFinder(server, tracker, new CompilationCache());
+        CompilationCache cache = new CompilationCache();
+        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(settings, sourceFile.toString());
+        assertNotNull(outcome.getTransferDescription(), outcome.getLogText());
+        cache.putSavedAttempt(sourceFile.toString(), outcome);
+        cache.putSuccessful(sourceFile.toString(), outcome);
+
+        InterlisDefinitionFinder finder = new InterlisDefinitionFinder(server, tracker, cache);
 
         TextDocumentPositionParams params = new TextDocumentPositionParams();
         params.setTextDocument(new TextDocumentIdentifier(item.getUri()));
@@ -116,7 +122,13 @@ class InterlisDefinitionFinderTest {
         TextDocumentItem item = new TextDocumentItem(sourceFile.toUri().toString(), "interlis", 1, sourceContent);
         tracker.open(item);
 
-        InterlisDefinitionFinder finder = new InterlisDefinitionFinder(server, tracker, new CompilationCache());
+        CompilationCache cache = new CompilationCache();
+        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(settings, sourceFile.toString());
+        assertNotNull(outcome.getTransferDescription(), outcome.getLogText());
+        cache.putSavedAttempt(sourceFile.toString(), outcome);
+        cache.putSuccessful(sourceFile.toString(), outcome);
+
+        InterlisDefinitionFinder finder = new InterlisDefinitionFinder(server, tracker, cache);
 
         TextDocumentPositionParams params = new TextDocumentPositionParams();
         params.setTextDocument(new TextDocumentIdentifier(item.getUri()));
@@ -165,7 +177,11 @@ class InterlisDefinitionFinderTest {
         TextDocumentItem item = new TextDocumentItem(sourceFile.toUri().toString(), "interlis", 1, sourceContent);
         tracker.open(item);
 
-        InterlisDefinitionFinder finder = new InterlisDefinitionFinder(server, tracker, new CompilationCache());
+        CompilationCache cache = new CompilationCache();
+        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(settings, sourceFile.toString());
+        cache.putSavedAttempt(sourceFile.toString(), outcome);
+
+        InterlisDefinitionFinder finder = new InterlisDefinitionFinder(server, tracker, cache);
 
         TextDocumentPositionParams params = new TextDocumentPositionParams();
         params.setTextDocument(new TextDocumentIdentifier(item.getUri()));

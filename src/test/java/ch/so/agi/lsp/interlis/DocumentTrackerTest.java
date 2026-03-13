@@ -22,6 +22,8 @@ class DocumentTrackerTest {
 
         assertEquals("CLASS Foo =", tracker.getText("file:///doc.ili"));
         assertEquals(1, tracker.getVersion("file:///doc.ili"));
+        assertTrue(tracker.isTracked("file:///doc.ili"));
+        assertFalse(tracker.isDirty("file:///doc.ili"));
     }
 
     @Test
@@ -39,6 +41,7 @@ class DocumentTrackerTest {
 
         assertEquals("Hello\nInterlis", tracker.getText("file:///doc.ili"));
         assertEquals(2, tracker.getVersion("file:///doc.ili"));
+        assertTrue(tracker.isDirty("file:///doc.ili"));
     }
 
     @Test
@@ -55,6 +58,25 @@ class DocumentTrackerTest {
 
         assertEquals("new text", tracker.getText("file:///doc.ili"));
         assertEquals(3, tracker.getVersion("file:///doc.ili"));
+        assertTrue(tracker.isDirty("file:///doc.ili"));
+    }
+
+    @Test
+    void markSavedClearsDirtyFlag() {
+        DocumentTracker tracker = new DocumentTracker();
+        TextDocumentItem item = new TextDocumentItem("file:///doc.ili", "INTERLIS", 1, "old");
+        tracker.open(item);
+
+        VersionedTextDocumentIdentifier id = new VersionedTextDocumentIdentifier("file:///doc.ili", 2);
+        TextDocumentContentChangeEvent change = new TextDocumentContentChangeEvent();
+        change.setText("new");
+        tracker.applyChanges(id, List.of(change));
+
+        assertTrue(tracker.isDirty("file:///doc.ili"));
+
+        tracker.markSaved("file:///doc.ili");
+
+        assertFalse(tracker.isDirty("file:///doc.ili"));
     }
 
     @Test
