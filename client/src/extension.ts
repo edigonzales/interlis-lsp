@@ -6,7 +6,7 @@ import {
   cancelScheduledDiagramRefresh,
   forgetAutoOpenedDiagram,
   maybeAutoOpenDiagram,
-  refreshOpenDiagramByUri,
+  reconcileOpenDiagramAfterCompile,
   registerInterlisDiagramCommands,
   registerInterlisDiagramEditor,
   setDiagramDebugLogger
@@ -246,9 +246,9 @@ export async function activate(context: vscode.ExtensionContext) {
     });
 
     client!.onNotification("interlis/compileFinished", (p: { uri?: string; success?: boolean }) => {
-      if (p?.success && p.uri) {
+      if (p?.uri) {
         try {
-          refreshOpenDiagramByUri(vscode.Uri.parse(p.uri));
+          reconcileOpenDiagramAfterCompile(vscode.Uri.parse(p.uri), p.success === true);
         } catch {
           // Ignore invalid URIs from optional client notifications.
         }

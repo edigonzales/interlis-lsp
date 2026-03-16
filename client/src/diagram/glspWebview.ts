@@ -29,6 +29,7 @@ const MODEL_SWITCH_RETRY_DELAY_MS = 40;
 const MODEL_SWITCH_MAX_RETRIES = 10;
 
 type DiagramStatusKind = "warning" | "error";
+type DiagramLoadFailureReason = "startup-error" | "timeout" | "load-error";
 type DiagramReadyHostMessage = {
   type: "interlis:diagramReady";
   clientId: string;
@@ -41,11 +42,27 @@ type DiagramLoadFailedHostMessage = {
   sourceUri?: string;
   message: string;
   detail?: string;
+  reason: DiagramLoadFailureReason;
 };
 type DiagramHostMessage = DiagramReadyHostMessage | DiagramLoadFailedHostMessage;
+type DiagramStatusCommand = {
+  type: "interlis:diagramStatus";
+  clear?: boolean;
+  kind?: DiagramStatusKind;
+  title?: string;
+  detail?: string;
+};
+type DiagramRecoverCommand = {
+  type: "interlis:recoverStartup";
+  attempt: number;
+  reason?: DiagramLoadFailureReason;
+};
+type DiagramWebviewCommand = DiagramStatusCommand | DiagramRecoverCommand;
 type VsCodeApi = { postMessage(message: unknown): void };
 
 let hostBridge: VsCodeApi | undefined;
+let activeDiagramWidget: InterlisDiagramWidget | undefined;
+let hostCommandHandlersInstalled = false;
 
 function initializeHostBridge(vscode: VsCodeApi | undefined): void {
   hostBridge = vscode;
@@ -61,6 +78,16 @@ function postHostMessage(message: DiagramHostMessage): void {
   } catch (error) {
     console.error("INTERLIS diagram host bridge postMessage failed", error, message);
   }
+}
+
+function installHostCommandHandlers(): void {
+  if (hostCommandHandlersInstalled) {
+    return;
+  }
+  hostCommandHandlersInstalled = true;
+  window.addEventListener("message", event => {
+    activeDiagramWidget?.handleHostCommand(event?.data);
+  });
 }
 
 @injectable()
@@ -123,12 +150,20 @@ class InterlisDiagramWidget extends GLSPDiagramWidget {
   private statusOverlay?: HTMLDivElement;
   private statusTitle?: HTMLDivElement;
   private statusDetail?: HTMLDivElement;
+  private statusBanner?: HTMLDivElement;
+  private statusBannerTitle?: HTMLDivElement;
+  private statusBannerDetail?: HTMLDivElement;
   private globalErrorHandlersInstalled = false;
   private startupPending = false;
+  private activeStartupAttempt = 0;
+  private hasRenderedOnce = false;
 
   protected override initializeHtml(): void {
     super.initializeHtml();
+    activeDiagramWidget = this;
+    installHostCommandHandlers();
     this.ensureStatusOverlay();
+    this.ensureStatusBanner();
     this.installRenderObserver();
     this.installGlobalErrorHandlers();
   }
@@ -136,6 +171,7 @@ class InterlisDiagramWidget extends GLSPDiagramWidget {
   override async loadDiagram(): Promise<void> {
     const attempt = ++this.loadAttempt;
     this.startupPending = true;
+    this.activeStartupAttempt = attempt;
     this.hideStatusOverlay();
     this.armLoadWatchdog(attempt);
 
@@ -155,8 +191,24 @@ class InterlisDiagramWidget extends GLSPDiagramWidget {
       this.reportLoadFailure(
         error,
         "The diagram could not be initialized. Save the file or reopen the diagram.",
-        this.shouldShowStartupFailure()
+        this.shouldShowStartupFailure(attempt),
+        "load-error"
       );
+    }
+  }
+
+  handleHostCommand(command: unknown): void {
+    if (!command || typeof command !== "object") {
+      return;
+    }
+
+    const maybeCommand = command as Partial<DiagramWebviewCommand> & { type?: string };
+    if (maybeCommand.type === "interlis:recoverStartup") {
+      this.recoverFromHost(maybeCommand as DiagramRecoverCommand);
+      return;
+    }
+    if (maybeCommand.type === "interlis:diagramStatus") {
+      this.applyStatusCommand(maybeCommand as DiagramStatusCommand);
     }
   }
 
@@ -189,6 +241,31 @@ class InterlisDiagramWidget extends GLSPDiagramWidget {
     this.statusDetail = detail;
   }
 
+  private ensureStatusBanner(): void {
+    if (!this.containerDiv || this.statusBanner) {
+      return;
+    }
+
+    const banner = document.createElement("div");
+    banner.className = "interlis-diagram-banner";
+    banner.setAttribute("role", "status");
+    banner.setAttribute("aria-live", "polite");
+
+    const title = document.createElement("div");
+    title.className = "interlis-diagram-banner-title";
+
+    const detail = document.createElement("div");
+    detail.className = "interlis-diagram-banner-detail";
+
+    banner.appendChild(title);
+    banner.appendChild(detail);
+    this.containerDiv.appendChild(banner);
+
+    this.statusBanner = banner;
+    this.statusBannerTitle = title;
+    this.statusBannerDetail = detail;
+  }
+
   private installRenderObserver(): void {
     if (!this.containerDiv) {
       return;
@@ -209,6 +286,8 @@ class InterlisDiagramWidget extends GLSPDiagramWidget {
     }
     this.clearLoadWatchdog();
     this.hideStatusOverlay();
+    this.hasRenderedOnce = true;
+    this.activeStartupAttempt = 0;
     this.reportReady(attempt, reason);
   }
 
@@ -219,25 +298,29 @@ class InterlisDiagramWidget extends GLSPDiagramWidget {
 
     this.globalErrorHandlersInstalled = true;
     window.addEventListener("error", event => {
-      if (!this.shouldShowStartupFailure()) {
+      const attempt = this.activeStartupAttempt;
+      if (!this.shouldShowStartupFailure(attempt)) {
         return;
       }
       this.clearLoadWatchdog();
       this.reportLoadFailure(
         event.error ?? event.message,
         "The webview hit a startup error before the diagram was rendered.",
-        true
+        true,
+        "startup-error"
       );
     });
     window.addEventListener("unhandledrejection", event => {
-      if (!this.shouldShowStartupFailure()) {
+      const attempt = this.activeStartupAttempt;
+      if (!this.shouldShowStartupFailure(attempt)) {
         return;
       }
       this.clearLoadWatchdog();
       this.reportLoadFailure(
         event.reason,
         "The webview hit a startup error before the diagram was rendered.",
-        true
+        true,
+        "startup-error"
       );
     });
   }
@@ -254,14 +337,13 @@ class InterlisDiagramWidget extends GLSPDiagramWidget {
         "Diagram loading is taking longer than expected",
         "If the view stays blank, save the file or run INTERLIS: Force refresh active diagram."
       );
-      postHostMessage({
-        type: "interlis:diagramLoadFailed",
-        clientId: this.clientId,
-        sourceUri: this.diagramOptions.sourceUri,
-        message: "Diagram load timed out",
-        detail: `No rendered graph appeared within ${DIAGRAM_LOAD_WARNING_DELAY_MS}ms.`
-      });
-      console.warn("DIAGRAM_LOAD delayed");
+      this.reportLoadFailure(
+        `No rendered graph appeared within ${DIAGRAM_LOAD_WARNING_DELAY_MS}ms.`,
+        "Diagram load timed out",
+        false,
+        "timeout"
+      );
+      console.warn("DIAGRAM_LOAD delayed", this.clientId);
     }, DIAGRAM_LOAD_WARNING_DELAY_MS);
   }
 
@@ -299,8 +381,33 @@ class InterlisDiagramWidget extends GLSPDiagramWidget {
     delete this.statusOverlay.dataset.state;
   }
 
-  private shouldShowStartupFailure(): boolean {
-    return this.startupPending && !this.hasRenderedGraph();
+  private showStatusBanner(kind: DiagramStatusKind, title: string, detail: string): void {
+    this.ensureStatusBanner();
+    if (!this.statusBanner || !this.statusBannerTitle || !this.statusBannerDetail) {
+      return;
+    }
+
+    this.statusBanner.dataset.state = kind;
+    this.statusBanner.classList.add("is-visible");
+    this.statusBannerTitle.textContent = title;
+    this.statusBannerDetail.textContent = detail;
+  }
+
+  private hideStatusBanner(): void {
+    if (!this.statusBanner) {
+      return;
+    }
+
+    this.statusBanner.classList.remove("is-visible");
+    delete this.statusBanner.dataset.state;
+  }
+
+  private shouldShowStartupFailure(attempt: number): boolean {
+    return attempt > 0
+      && this.activeStartupAttempt === attempt
+      && this.startupPending
+      && !this.hasRenderedGraph()
+      && !this.hasRenderedOnce;
   }
 
   private reportReady(attempt: number, reason: string): void {
@@ -317,21 +424,58 @@ class InterlisDiagramWidget extends GLSPDiagramWidget {
     });
   }
 
-  private reportLoadFailure(error: unknown, fallback: string, showOverlay: boolean): void {
+  private reportLoadFailure(
+    error: unknown,
+    fallback: string,
+    showOverlay: boolean,
+    reason: DiagramLoadFailureReason
+  ): void {
     const message = this.formatErrorMessage(error, fallback);
-    const detail = this.formatErrorDetail(error);
+    const detail = this.formatErrorDetail(error, reason);
     postHostMessage({
       type: "interlis:diagramLoadFailed",
       clientId: this.clientId,
       sourceUri: this.diagramOptions.sourceUri,
       message,
-      detail
+      detail,
+      reason
     });
     if (showOverlay) {
       this.showStatusOverlay("error", "Diagram startup failed", message);
     }
     this.startupPending = false;
+    this.activeStartupAttempt = 0;
     console.error("DIAGRAM_LOAD failed", error);
+  }
+
+  private recoverFromHost(command: DiagramRecoverCommand): void {
+    this.clearLoadWatchdog();
+    this.hideStatusOverlay();
+    const detail = command.reason === "timeout"
+      ? "Retrying diagram startup after a timeout."
+      : "Retrying diagram startup in the current editor tab.";
+    this.showStatusOverlay("warning", "Retrying diagram startup", detail);
+    window.setTimeout(() => {
+      if (activeDiagramWidget !== this) {
+        return;
+      }
+      void this.loadDiagram();
+    }, 0);
+  }
+
+  private applyStatusCommand(command: DiagramStatusCommand): void {
+    if (command.clear) {
+      this.hideStatusBanner();
+      return;
+    }
+
+    const title = command.title?.trim();
+    const detail = command.detail?.trim();
+    if (!title || !detail) {
+      this.hideStatusBanner();
+      return;
+    }
+    this.showStatusBanner(command.kind ?? "warning", title, detail);
   }
 
   private formatErrorMessage(error: unknown, fallback: string): string {
@@ -344,17 +488,22 @@ class InterlisDiagramWidget extends GLSPDiagramWidget {
     return fallback;
   }
 
-  private formatErrorDetail(error: unknown): string | undefined {
+  private formatErrorDetail(error: unknown, reason: DiagramLoadFailureReason): string | undefined {
+    const prefix = reason === "timeout"
+      ? "Timeout while waiting for the first rendered graph."
+      : reason === "startup-error"
+        ? "Unhandled startup error before the first diagram render."
+        : "GLSP loadDiagram failed before the first diagram render.";
     if (error instanceof Error) {
-      return error.stack || error.message;
+      return `${prefix}\n${error.stack || error.message}`;
     }
     if (typeof error === "string" && error.trim().length > 0) {
-      return error.trim();
+      return `${prefix}\n${error.trim()}`;
     }
     try {
-      return JSON.stringify(error);
+      return `${prefix}\n${JSON.stringify(error)}`;
     } catch {
-      return undefined;
+      return prefix;
     }
   }
 }
@@ -422,7 +571,8 @@ class InterlisGlspWebviewStarter extends GLSPStarter {
           clientId: identifier.clientId,
           sourceUri: decodeURIComponent(identifier.uri),
           message: "Diagram webview did not reinitialize in time",
-          detail: `Missing container ${identifier.clientId}_container after switching diagrams.`
+          detail: `Missing container ${identifier.clientId}_container after switching diagrams.`,
+          reason: "startup-error"
         });
         return;
       }

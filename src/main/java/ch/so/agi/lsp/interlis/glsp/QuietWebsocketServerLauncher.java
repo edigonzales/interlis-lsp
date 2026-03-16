@@ -29,6 +29,10 @@ public class QuietWebsocketServerLauncher extends WebsocketServerLauncher {
             ServletContextHandler context = new ServletContextHandler(ServletContextHandler.SESSIONS);
             context.setContextPath("/");
             JakartaWebSocketServletContainerInitializer.configure(context, (servletContext, container) -> {
+                long idleTimeoutMs = 0L;
+                container.setDefaultMaxSessionIdleTimeout(idleTimeoutMs);
+                LOGGER.info("Configured GLSP websocket default session idle timeout to {} ms", idleTimeoutMs);
+
                 ServerEndpointConfig.Builder builder = ServerEndpointConfig.Builder.create(
                         GLSPServerEndpoint.class,
                         "/" + endpointPath);

@@ -1,6 +1,6 @@
 import * as path from "path";
 import * as vscode from "vscode";
-import { RequestModelAction, TriggerLayoutAction } from "@eclipse-glsp/protocol";
+import { ClientState, type GLSPClient, RequestModelAction, TriggerLayoutAction } from "@eclipse-glsp/protocol";
 import { GlspEditorProvider, GlspVscodeConnector, SocketGlspVscodeServer } from "@eclipse-glsp/vscode-integration/node";
 import { LanguageClient } from "vscode-languageclient/node";
 
@@ -9,11 +9,13 @@ const GLSP_ENDPOINT_REQUEST = "interlis/glspEndpoint";
 const DEFAULT_DIAGRAM_TYPE = "interlis-uml";
 const POST_REFRESH_KICK_DELAYS_MS = [0, 60, 180, 420] as const;
 const REFRESH_RETRY_DELAYS_MS = [140, 360, 860] as const;
+const STARTUP_RECOVERY_DELAYS_MS = [120, 360, 960] as const;
 
 const CFG_AUTO_OPEN_BESIDE = "diagram.autoOpenBeside";
 
 type GetClient = () => LanguageClient | undefined;
 type DiagramDebugLogger = ((message: string) => void) | undefined;
+type DiagramLoadFailureReason = "startup-error" | "timeout" | "load-error";
 type DiagramReadyMessage = {
   type: "interlis:diagramReady";
   clientId?: string;
@@ -26,6 +28,20 @@ type DiagramLoadFailedMessage = {
   sourceUri?: string;
   message?: string;
   detail?: string;
+  reason?: DiagramLoadFailureReason;
+};
+type DiagramStatusKind = "warning" | "error";
+type DiagramStatusCommand = {
+  type: "interlis:diagramStatus";
+  clear?: boolean;
+  kind?: DiagramStatusKind;
+  title?: string;
+  detail?: string;
+};
+type DiagramRecoverCommand = {
+  type: "interlis:recoverStartup";
+  attempt: number;
+  reason?: DiagramLoadFailureReason;
 };
 
 type GlspEndpoint = {
@@ -41,10 +57,17 @@ let glspConnector: GlspVscodeConnector | undefined;
 let registrationPromise: Promise<void> | undefined;
 let registeredDiagramType = DEFAULT_DIAGRAM_TYPE;
 let lastInterlisSourceUri: vscode.Uri | undefined;
+let diagramExtensionUri: vscode.Uri | undefined;
+let hostGlspClient: GLSPClient | undefined;
+let hostGlspClientState = ClientState.Initial;
 const pendingRefreshRetryTimers = new Map<string, ReturnType<typeof setTimeout>[]>();
 const pendingRefreshSources = new Map<string, string>();
 const readyDiagramClientIds = new Set<string>();
+const everReadyDiagramClientIds = new Set<string>();
 const knownDiagramClientUris = new Map<string, string>();
+const startupRecoveryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const startupRecoveryAttempts = new Map<string, number>();
+const diagramStatusByUri = new Map<string, DiagramStatusCommand>();
 const panelMessageSubscriptions = new WeakMap<vscode.WebviewPanel, vscode.Disposable>();
 let diagramDebugLogger: DiagramDebugLogger;
 
@@ -85,7 +108,7 @@ class InterlisGlspEditorProvider extends GlspEditorProvider {
 
     const title = path.basename(document.uri.path || document.uri.fsPath || "model.ili");
     webviewPanel.title = `INTERLIS Diagram: ${title}`;
-    webviewPanel.webview.html = this.createWebviewHtml(webview, clientId, title);
+    webviewPanel.webview.html = createDiagramWebviewHtml(this.extensionUri, webview, clientId, title);
     webviewPanel.onDidDispose(() => {
       clearDiagramClientState(clientId);
     });
@@ -96,275 +119,6 @@ class InterlisGlspEditorProvider extends GlspEditorProvider {
         refreshDiagramByUri(document.uri, true, "panel-visible");
       }
     });
-  }
-
-  private createWebviewHtml(webview: vscode.Webview, clientId: string, title: string): string {
-    const nonce = createNonce();
-    const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "dist", "glspWebview.js"));
-
-    const stylesheetUris = [
-      vscode.Uri.joinPath(this.extensionUri, "dist", "glspWebview.css")
-    ].map(uri => webview.asWebviewUri(uri));
-
-    const links = stylesheetUris
-      .map(uri => `<link rel="stylesheet" href="${uri}" />`)
-      .join("\n");
-
-    return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} data:; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource}; script-src 'nonce-${nonce}';" />
-  <title>INTERLIS Diagram</title>
-  ${links}
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: #ffffff;
-      color: #1f2733;
-      font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
-    }
-    .interlis-shell {
-      width: 100%;
-      height: 100%;
-      display: grid;
-      grid-template-rows: auto 1fr;
-      background: #ffffff;
-    }
-    .interlis-header {
-      padding: 9px 12px;
-      border-bottom: 1px solid #d6deec;
-      background: #edf2fb;
-      font-size: 12px;
-      font-weight: 600;
-      letter-spacing: 0.01em;
-      color: #263247;
-      white-space: nowrap;
-      text-overflow: ellipsis;
-      overflow: hidden;
-    }
-    .interlis-diagram {
-      width: 100%;
-      height: 100%;
-      display: flex;
-      position: relative;
-      overflow: hidden;
-      min-height: 0;
-      min-width: 0;
-      background: #ffffff;
-    }
-    #${clientId}_container {
-      display: flex;
-      position: relative;
-      overflow: hidden;
-      min-width: 0;
-      min-height: 0;
-    }
-    #${clientId}_container > #${clientId} {
-      display: flex;
-      flex: 1 1 auto;
-      width: 100%;
-      height: 100%;
-      min-width: 0;
-      min-height: 0;
-      position: relative;
-    }
-    #${clientId}_container > #${clientId} > svg.sprotty-graph {
-      display: block;
-      flex: 1 1 auto;
-      width: 100%;
-      height: 100%;
-      min-width: 0;
-      min-height: 0;
-    }
-    #${clientId}_container > #${clientId},
-    #${clientId}_container > #${clientId} > svg.sprotty-graph,
-    #${clientId}_container .sprotty-graph {
-      background: #ffffff !important;
-    }
-    .interlis-diagram-status {
-      position: absolute;
-      inset: 16px;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      pointer-events: none;
-      z-index: 30;
-    }
-    .interlis-diagram-status.is-visible {
-      display: flex;
-    }
-    .interlis-diagram-status-card {
-      max-width: 420px;
-      padding: 14px 16px;
-      border: 1px solid #d7deeb;
-      border-radius: 10px;
-      background: rgba(255, 255, 255, 0.96);
-      box-shadow: 0 12px 28px rgba(35, 50, 79, 0.16);
-      color: #243147;
-      line-height: 1.45;
-    }
-    .interlis-diagram-status[data-state="warning"] .interlis-diagram-status-card {
-      border-color: #d4b35d;
-      background: rgba(255, 249, 232, 0.97);
-    }
-    .interlis-diagram-status[data-state="error"] .interlis-diagram-status-card {
-      border-color: #d16a6a;
-      background: rgba(255, 244, 244, 0.97);
-    }
-    .interlis-diagram-status-title {
-      font-size: 13px;
-      font-weight: 700;
-      color: #243147;
-    }
-    .interlis-diagram-status[data-state="warning"] .interlis-diagram-status-title {
-      color: #755212;
-    }
-    .interlis-diagram-status[data-state="error"] .interlis-diagram-status-title {
-      color: #8a2a2a;
-    }
-    .interlis-diagram-status-detail {
-      margin-top: 6px;
-      font-size: 12px;
-      color: #425167;
-    }
-    .interlis-container > path.sprotty-node,
-    .interlis-container > rect.sprotty-node {
-      fill: #e9f0ff;
-      stroke: #6b86ba;
-      stroke-width: 1.25;
-    }
-    .interlis-container-root > path.sprotty-node,
-    .interlis-container-root > rect.sprotty-node {
-      fill: #f2f4f8;
-      stroke: #8d97aa;
-      stroke-dasharray: 6 5;
-    }
-    .interlis-container-title {
-      font-size: 13px;
-      font-weight: 700;
-      fill: #263247;
-      pointer-events: none;
-    }
-    .interlis-class > path.sprotty-node,
-    .interlis-class > rect.sprotty-node {
-      fill: #ffffff;
-      stroke: #708299;
-      stroke-width: 1.2;
-    }
-    .interlis-class-title {
-      font-size: 12px;
-      font-weight: 700;
-      fill: #182234;
-      pointer-events: none;
-    }
-    .interlis-class-stereotype {
-      font-size: 10px;
-      font-weight: 600;
-      fill: #3c5b89;
-      pointer-events: none;
-    }
-    .interlis-class-attribute,
-    .interlis-class-method {
-      font-size: 10px;
-      fill: #2a3a50;
-      pointer-events: none;
-    }
-    text.interlis-container-title,
-    text.interlis-class-title,
-    text.interlis-class-stereotype,
-    text.interlis-class-attribute,
-    text.interlis-class-method,
-    text.interlis-error-title,
-    text.interlis-error-message,
-    text.interlis-error-source {
-      text-anchor: start;
-    }
-    .interlis-edge-association > path {
-      stroke: #2c7f6d;
-      stroke-width: 1.45;
-      fill: none;
-    }
-    .interlis-edge-inheritance > path {
-      stroke: #6b58c9;
-      stroke-width: 1.55;
-      stroke-dasharray: none;
-      fill: none;
-    }
-    .interlis-edge-inheritance > path.interlis-inheritance-arrow {
-      fill: none;
-      stroke: #6b58c9;
-      stroke-width: 1.55;
-      stroke-linejoin: miter;
-    }
-    .interlis-edge-label,
-    .interlis-edge-cardinality {
-      font-size: 10px;
-      font-weight: 600;
-      fill: #33465f;
-      pointer-events: none;
-    }
-    .interlis-error > path.sprotty-node,
-    .interlis-error > rect.sprotty-node {
-      fill: #fff5f5;
-      stroke: #d25f5f;
-      stroke-width: 1.4;
-    }
-    .interlis-error-title {
-      font-size: 13px;
-      font-weight: 700;
-      fill: #8d1d1d;
-    }
-    .interlis-error-message,
-    .interlis-error-source {
-      font-size: 11px;
-      fill: #572727;
-    }
-  </style>
-</head>
-<body>
-  <div class="interlis-shell">
-    <div class="interlis-header">INTERLIS GLSP Diagram: ${escapeHtml(title)}</div>
-    <div class="interlis-diagram" id="${clientId}_container"></div>
-  </div>
-  <script nonce="${nonce}" src="${scriptUri}"></script>
-  <script nonce="${nonce}">
-    (() => {
-      const containerId = "${clientId}_container";
-      const kickLayout = () => {
-        const container = document.getElementById(containerId);
-        if (container) {
-          container.classList.add("mouse-enter");
-          container.classList.remove("mouse-leave");
-        }
-        try {
-          window.dispatchEvent(new FocusEvent("focus"));
-        } catch {
-          window.dispatchEvent(new Event("focus"));
-        }
-        window.dispatchEvent(new Event("resize"));
-      };
-
-      [0, 40, 120, 300, 700, 1200].forEach(delayMs => setTimeout(kickLayout, delayMs));
-      document.addEventListener("visibilitychange", () => {
-        if (!document.hidden) {
-          kickLayout();
-        }
-      });
-      window.addEventListener("message", event => {
-        if (event?.data?.type === "interlis:kickLayout") {
-          [0, 50, 140, 320].forEach(delayMs => setTimeout(kickLayout, delayMs));
-        }
-      });
-    })();
-  </script>
-</body>
-</html>`;
   }
 }
 
@@ -382,6 +136,7 @@ export async function registerInterlisDiagramEditor(context: vscode.ExtensionCon
     if (!client) {
       throw new Error("Language server is not available.");
     }
+    diagramExtensionUri = context.extensionUri;
 
     const endpoint = await client.sendRequest<GlspEndpoint>(GLSP_ENDPOINT_REQUEST);
     validateEndpoint(endpoint);
@@ -402,6 +157,7 @@ export async function registerInterlisDiagramEditor(context: vscode.ExtensionCon
       }
     });
     await glspServer.start();
+    await bindHostGlspTransportState(context, glspServer);
 
     glspConnector = new GlspVscodeConnector({
       server: glspServer,
@@ -415,6 +171,8 @@ export async function registerInterlisDiagramEditor(context: vscode.ExtensionCon
     context.subscriptions.push(new vscode.Disposable(() => {
       glspServer = undefined;
       glspConnector = undefined;
+      hostGlspClient = undefined;
+      hostGlspClientState = ClientState.Initial;
       registrationPromise = undefined;
     }));
     context.subscriptions.push(
@@ -602,9 +360,12 @@ function handleDiagramReadyMessage(message: DiagramReadyMessage): void {
   }
 
   readyDiagramClientIds.add(message.clientId);
+  everReadyDiagramClientIds.add(message.clientId);
+  clearStartupRecovery(message.clientId);
   knownDiagramClientUris.set(message.clientId, uri.toString());
   const reasonSuffix = message.reason ? ` reason=${message.reason}` : "";
   logDiagramDebug(`DIAGRAM_CLIENT status=ready clientId=${message.clientId}${reasonSuffix} uri=${uri.toString()}`);
+  sendDiagramStatusToClient(message.clientId, uri);
   flushPendingRefresh(uri, "ready");
 }
 
@@ -621,6 +382,10 @@ function handleDiagramLoadFailedMessage(message: DiagramLoadFailedMessage): void
   logDiagramDebug(
     `DIAGRAM_LOAD failed clientId=${message.clientId ?? "<unknown>"} uri=${uriText} message=${summary}${detailSuffix}`
   );
+
+  if (message.clientId && uri) {
+    scheduleStartupRecovery(message.clientId, uri, message.reason);
+  }
 }
 
 function refreshDiagramByUri(uri: vscode.Uri, allowRetry = true, source = "unknown"): boolean {
@@ -634,8 +399,25 @@ function refreshDiagramByUri(uri: vscode.Uri, allowRetry = true, source = "unkno
   const clients = findDiagramClients(uri);
   for (const { clientId, client } of clients) {
     const ready = readyDiagramClientIds.has(clientId);
-    logDiagramDebug(`DIAGRAM_CLIENT source=${source} clientId=${clientId} status=${ready ? "ready" : "not-ready"} uri=${uri.toString()}`);
+    logDiagramDebug(
+      `DIAGRAM_CLIENT source=${source} clientId=${clientId} status=${ready ? "ready" : "not-ready"} transport=${describeHostGlspState(hostGlspClientState)} uri=${uri.toString()}`
+    );
   }
+
+  if (!isHostGlspTransportReady()) {
+    rememberPendingRefresh(uri, source);
+    if (allowRetry) {
+      scheduleRefreshRetry(uri, source);
+    }
+    logDiagramDebug(
+      `DIAGRAM_TRANSPORT source=${source} status=unavailable state=${describeHostGlspState(hostGlspClientState)} uri=${uri.toString()}`
+    );
+    logDiagramDebug(
+      `DIAGRAM_REFRESH source=${source} status=${allowRetry ? "queued" : "waiting"} reason=server-not-running state=${describeHostGlspState(hostGlspClientState)} uri=${uri.toString()}`
+    );
+    return false;
+  }
+
   const readyClients = clients.filter(({ clientId }) => readyDiagramClientIds.has(clientId));
   if (clients.length === 0) {
     if (allowRetry && isDiagramTabAlreadyOpen(uri)) {
@@ -741,7 +523,9 @@ function markDiagramClientNotReady(clientId: string, uri: vscode.Uri, reason: st
 
 function clearDiagramClientState(clientId: string): void {
   readyDiagramClientIds.delete(clientId);
+  everReadyDiagramClientIds.delete(clientId);
   knownDiagramClientUris.delete(clientId);
+  clearStartupRecovery(clientId);
 }
 
 function clearDiagramClientStatesForPanel(panel: vscode.WebviewPanel): void {
@@ -820,6 +604,184 @@ function clearRefreshRetryTimers(uri: vscode.Uri): void {
     clearTimeout(timer);
   }
   pendingRefreshRetryTimers.delete(key);
+}
+
+function scheduleStartupRecovery(
+  clientId: string,
+  uri: vscode.Uri,
+  reason: DiagramLoadFailureReason | undefined
+): void {
+  const failureReason = reason ?? "startup-error";
+  const attempt = startupRecoveryAttempts.get(clientId) ?? 0;
+  const neverBecameReady = !everReadyDiagramClientIds.has(clientId);
+  const shouldRecover = neverBecameReady || failureReason === "startup-error" || failureReason === "timeout";
+
+  if (!shouldRecover) {
+    return;
+  }
+  if (attempt >= STARTUP_RECOVERY_DELAYS_MS.length) {
+    logDiagramDebug(`DIAGRAM_RECOVERY status=exhausted clientId=${clientId} uri=${uri.toString()} reason=${failureReason}`);
+    return;
+  }
+
+  rememberPendingRefresh(uri, `startup-recovery:${failureReason}`);
+  const existingTimer = startupRecoveryTimers.get(clientId);
+  if (existingTimer) {
+    clearTimeout(existingTimer);
+  }
+
+  const delayMs = STARTUP_RECOVERY_DELAYS_MS[attempt];
+  startupRecoveryAttempts.set(clientId, attempt + 1);
+  const timer = setTimeout(() => {
+    startupRecoveryTimers.delete(clientId);
+    void recoverDiagramClient(clientId, uri, attempt, failureReason);
+  }, delayMs);
+  startupRecoveryTimers.set(clientId, timer);
+  logDiagramDebug(`DIAGRAM_RECOVERY status=scheduled clientId=${clientId} uri=${uri.toString()} reason=${failureReason} attempt=${attempt + 1} delayMs=${delayMs}`);
+}
+
+async function recoverDiagramClient(
+  clientId: string,
+  uri: vscode.Uri,
+  attempt: number,
+  reason: DiagramLoadFailureReason
+): Promise<void> {
+  const panel = findDiagramPanelByClientId(clientId);
+  if (!panel) {
+    logDiagramDebug(`DIAGRAM_RECOVERY status=aborted clientId=${clientId} uri=${uri.toString()} reason=no-panel`);
+    return;
+  }
+
+  markDiagramClientNotReady(clientId, uri, `recovery-${attempt + 1}`);
+  if (attempt === 0) {
+    await panel.webview.postMessage({
+      type: "interlis:recoverStartup",
+      attempt: attempt + 1,
+      reason
+    } satisfies DiagramRecoverCommand);
+  } else if (diagramExtensionUri) {
+    const title = path.basename(uri.path || uri.fsPath || "model.ili");
+    panel.title = `INTERLIS Diagram: ${title}`;
+    panel.webview.html = createDiagramWebviewHtml(diagramExtensionUri, panel.webview, clientId, title);
+  }
+
+  sendKickLayoutMessageToPanel(panel);
+  sendDiagramStatusToPanel(panel, uri);
+  refreshDiagramByUri(uri, true, `startup-recovery:${reason}:attempt${attempt + 1}`);
+}
+
+function clearStartupRecovery(clientId: string): void {
+  const timer = startupRecoveryTimers.get(clientId);
+  if (timer) {
+    clearTimeout(timer);
+    startupRecoveryTimers.delete(clientId);
+  }
+  startupRecoveryAttempts.delete(clientId);
+}
+
+async function bindHostGlspTransportState(
+  context: vscode.ExtensionContext,
+  server: SocketGlspVscodeServer
+): Promise<void> {
+  const client = await server.glspClient;
+  hostGlspClient = client;
+  updateHostGlspTransportState(client.currentState, "startup");
+
+  const stateListener = client.onCurrentStateChanged(state => {
+    if (hostGlspClient !== client) {
+      return;
+    }
+    updateHostGlspTransportState(state, "event");
+  });
+  context.subscriptions.push(stateListener);
+  context.subscriptions.push(new vscode.Disposable(() => {
+    if (hostGlspClient === client) {
+      hostGlspClient = undefined;
+      hostGlspClientState = ClientState.Initial;
+    }
+  }));
+}
+
+function updateHostGlspTransportState(state: ClientState, source: string): void {
+  const previous = hostGlspClientState;
+  hostGlspClientState = state;
+
+  if (previous !== state) {
+    logDiagramDebug(
+      `DIAGRAM_TRANSPORT status=state-change source=${source} from=${describeHostGlspState(previous)} to=${describeHostGlspState(state)}`
+    );
+  } else {
+    logDiagramDebug(
+      `DIAGRAM_TRANSPORT status=state-confirmed source=${source} state=${describeHostGlspState(state)}`
+    );
+  }
+
+  if (previous !== ClientState.Running && state === ClientState.Running) {
+    flushAllPendingRefreshes("transport-running");
+  }
+}
+
+function flushAllPendingRefreshes(trigger: string): void {
+  for (const rawUri of pendingRefreshSources.keys()) {
+    try {
+      refreshDiagramByUri(vscode.Uri.parse(rawUri), false, trigger);
+    } catch {
+      // Ignore malformed URIs in pending refresh state.
+    }
+  }
+}
+
+function isHostGlspTransportReady(): boolean {
+  return !!hostGlspClient && hostGlspClientState === ClientState.Running;
+}
+
+function describeHostGlspState(state: ClientState): string {
+  return ClientState[state] ?? String(state);
+}
+
+function findDiagramPanelByClientId(clientId: string): vscode.WebviewPanel | undefined {
+  const clientMap = getConnectorClientMap();
+  const client = clientMap?.get(clientId);
+  return client?.webviewEndpoint?.webviewPanel;
+}
+
+function updateDiagramCompileStatus(uri: vscode.Uri, success: boolean): void {
+  const key = uri.toString();
+  if (success) {
+    diagramStatusByUri.delete(key);
+  } else {
+    diagramStatusByUri.set(key, {
+      type: "interlis:diagramStatus",
+      kind: "warning",
+      title: "Last valid diagram snapshot shown",
+      detail: "The latest saved model did not compile. Fix the errors and save again to refresh the diagram."
+    });
+  }
+  sendDiagramStatusToUri(uri);
+}
+
+export function reconcileOpenDiagramAfterCompile(uri: vscode.Uri, success: boolean): boolean {
+  updateDiagramCompileStatus(uri, success);
+  return refreshDiagramByUri(uri, true, success ? "compileFinished:success" : "compileFinished:failure");
+}
+
+function sendDiagramStatusToUri(uri: vscode.Uri): void {
+  for (const { clientId } of findDiagramClients(uri)) {
+    sendDiagramStatusToClient(clientId, uri);
+  }
+}
+
+function sendDiagramStatusToClient(clientId: string, uri: vscode.Uri): void {
+  const panel = findDiagramPanelByClientId(clientId);
+  if (!panel) {
+    return;
+  }
+  sendDiagramStatusToPanel(panel, uri);
+}
+
+function sendDiagramStatusToPanel(panel: vscode.WebviewPanel, uri: vscode.Uri): void {
+  const status = diagramStatusByUri.get(uri.toString());
+  void panel.webview.postMessage(status ?? ({ type: "interlis:diagramStatus", clear: true } satisfies DiagramStatusCommand));
 }
 
 type ConnectorClientLike = {
@@ -910,4 +872,320 @@ function createNonce(): string {
     value += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return value;
+}
+
+function createDiagramWebviewHtml(
+  extensionUri: vscode.Uri,
+  webview: vscode.Webview,
+  clientId: string,
+  title: string
+): string {
+  const nonce = createNonce();
+  const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, "dist", "glspWebview.js"));
+
+  const stylesheetUris = [
+    vscode.Uri.joinPath(extensionUri, "dist", "glspWebview.css")
+  ].map(uri => webview.asWebviewUri(uri));
+
+  const links = stylesheetUris
+    .map(uri => `<link rel="stylesheet" href="${uri}" />`)
+    .join("\n");
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} data:; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource}; script-src 'nonce-${nonce}';" />
+  <title>INTERLIS Diagram</title>
+  ${links}
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #ffffff;
+      color: #1f2733;
+      font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .interlis-shell {
+      width: 100%;
+      height: 100%;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      background: #ffffff;
+    }
+    .interlis-header {
+      padding: 9px 12px;
+      border-bottom: 1px solid #d6deec;
+      background: #edf2fb;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      color: #263247;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      overflow: hidden;
+    }
+    .interlis-diagram {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      position: relative;
+      overflow: hidden;
+      min-height: 0;
+      min-width: 0;
+      background: #ffffff;
+    }
+    #${clientId}_container {
+      display: flex;
+      position: relative;
+      overflow: hidden;
+      min-width: 0;
+      min-height: 0;
+    }
+    #${clientId}_container > #${clientId} {
+      display: flex;
+      flex: 1 1 auto;
+      width: 100%;
+      height: 100%;
+      min-width: 0;
+      min-height: 0;
+      position: relative;
+    }
+    #${clientId}_container > #${clientId} > svg.sprotty-graph {
+      display: block;
+      flex: 1 1 auto;
+      width: 100%;
+      height: 100%;
+      min-width: 0;
+      min-height: 0;
+    }
+    #${clientId}_container > #${clientId},
+    #${clientId}_container > #${clientId} > svg.sprotty-graph,
+    #${clientId}_container .sprotty-graph {
+      background: #ffffff !important;
+    }
+    .interlis-diagram-status {
+      position: absolute;
+      inset: 16px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      z-index: 30;
+    }
+    .interlis-diagram-status.is-visible {
+      display: flex;
+    }
+    .interlis-diagram-status-card {
+      max-width: 420px;
+      padding: 14px 16px;
+      border: 1px solid #d7deeb;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: 0 12px 28px rgba(35, 50, 79, 0.16);
+      color: #243147;
+      line-height: 1.45;
+    }
+    .interlis-diagram-status[data-state="warning"] .interlis-diagram-status-card {
+      border-color: #d4b35d;
+      background: rgba(255, 249, 232, 0.97);
+    }
+    .interlis-diagram-status[data-state="error"] .interlis-diagram-status-card {
+      border-color: #d16a6a;
+      background: rgba(255, 244, 244, 0.97);
+    }
+    .interlis-diagram-status-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #243147;
+    }
+    .interlis-diagram-status[data-state="warning"] .interlis-diagram-status-title {
+      color: #755212;
+    }
+    .interlis-diagram-status[data-state="error"] .interlis-diagram-status-title {
+      color: #8a2a2a;
+    }
+    .interlis-diagram-status-detail {
+      margin-top: 6px;
+      font-size: 12px;
+      color: #425167;
+    }
+    .interlis-diagram-banner {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      display: none;
+      max-width: min(420px, calc(100% - 24px));
+      padding: 10px 12px;
+      border: 1px solid #d7deeb;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.94);
+      box-shadow: 0 8px 24px rgba(35, 50, 79, 0.12);
+      pointer-events: none;
+      z-index: 28;
+    }
+    .interlis-diagram-banner.is-visible {
+      display: block;
+    }
+    .interlis-diagram-banner[data-state="warning"] {
+      border-color: #d4b35d;
+      background: rgba(255, 249, 232, 0.96);
+    }
+    .interlis-diagram-banner[data-state="error"] {
+      border-color: #d16a6a;
+      background: rgba(255, 244, 244, 0.96);
+    }
+    .interlis-diagram-banner-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #243147;
+    }
+    .interlis-diagram-banner[data-state="warning"] .interlis-diagram-banner-title {
+      color: #755212;
+    }
+    .interlis-diagram-banner[data-state="error"] .interlis-diagram-banner-title {
+      color: #8a2a2a;
+    }
+    .interlis-diagram-banner-detail {
+      margin-top: 4px;
+      font-size: 11px;
+      line-height: 1.4;
+      color: #425167;
+    }
+    .interlis-container > path.sprotty-node,
+    .interlis-container > rect.sprotty-node {
+      fill: #e9f0ff;
+      stroke: #6b86ba;
+      stroke-width: 1.25;
+    }
+    .interlis-container-root > path.sprotty-node,
+    .interlis-container-root > rect.sprotty-node {
+      fill: #f2f4f8;
+      stroke: #8d97aa;
+      stroke-dasharray: 6 5;
+    }
+    .interlis-container-title {
+      font-size: 13px;
+      font-weight: 700;
+      fill: #263247;
+      pointer-events: none;
+    }
+    .interlis-class > path.sprotty-node,
+    .interlis-class > rect.sprotty-node {
+      fill: #ffffff;
+      stroke: #708299;
+      stroke-width: 1.2;
+    }
+    .interlis-class-title {
+      font-size: 12px;
+      font-weight: 700;
+      fill: #182234;
+      pointer-events: none;
+    }
+    .interlis-class-stereotype {
+      font-size: 10px;
+      font-weight: 600;
+      fill: #3c5b89;
+      pointer-events: none;
+    }
+    .interlis-class-attribute,
+    .interlis-class-method {
+      font-size: 10px;
+      fill: #2a3a50;
+      pointer-events: none;
+    }
+    text.interlis-container-title,
+    text.interlis-class-title,
+    text.interlis-class-stereotype,
+    text.interlis-class-attribute,
+    text.interlis-class-method,
+    text.interlis-error-title,
+    text.interlis-error-message,
+    text.interlis-error-source {
+      text-anchor: start;
+    }
+    .interlis-edge-association > path {
+      stroke: #2c7f6d;
+      stroke-width: 1.45;
+      fill: none;
+    }
+    .interlis-edge-inheritance > path {
+      stroke: #6b58c9;
+      stroke-width: 1.55;
+      stroke-dasharray: none;
+      fill: none;
+    }
+    .interlis-edge-inheritance > path.interlis-inheritance-arrow {
+      fill: none;
+      stroke: #6b58c9;
+      stroke-width: 1.55;
+      stroke-linejoin: miter;
+    }
+    .interlis-edge-label,
+    .interlis-edge-cardinality {
+      font-size: 10px;
+      font-weight: 600;
+      fill: #33465f;
+      pointer-events: none;
+    }
+    .interlis-error > path.sprotty-node,
+    .interlis-error > rect.sprotty-node {
+      fill: #fff5f5;
+      stroke: #d25f5f;
+      stroke-width: 1.4;
+    }
+    .interlis-error-title {
+      font-size: 13px;
+      font-weight: 700;
+      fill: #8d1d1d;
+    }
+    .interlis-error-message,
+    .interlis-error-source {
+      font-size: 11px;
+      fill: #572727;
+    }
+  </style>
+</head>
+<body>
+  <div class="interlis-shell">
+    <div class="interlis-header">INTERLIS GLSP Diagram: ${escapeHtml(title)}</div>
+    <div class="interlis-diagram" id="${clientId}_container"></div>
+  </div>
+  <script nonce="${nonce}" src="${scriptUri}"></script>
+  <script nonce="${nonce}">
+    (() => {
+      const containerId = "${clientId}_container";
+      const kickLayout = () => {
+        const container = document.getElementById(containerId);
+        if (container) {
+          container.classList.add("mouse-enter");
+          container.classList.remove("mouse-leave");
+        }
+        try {
+          window.dispatchEvent(new FocusEvent("focus"));
+        } catch {
+          window.dispatchEvent(new Event("focus"));
+        }
+        window.dispatchEvent(new Event("resize"));
+      };
+
+      [0, 40, 120, 300, 700, 1200].forEach(delayMs => setTimeout(kickLayout, delayMs));
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) {
+          kickLayout();
+        }
+      });
+      window.addEventListener("message", event => {
+        if (event?.data?.type === "interlis:kickLayout") {
+          [0, 50, 140, 320].forEach(delayMs => setTimeout(kickLayout, delayMs));
+        }
+      });
+    })();
+  </script>
+</body>
+</html>`;
 }
