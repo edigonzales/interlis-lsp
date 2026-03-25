@@ -15,6 +15,10 @@ import {
 let client: LanguageClient | undefined;
 let revealOutputOnNextLog = false;
 const CARET_SENTINEL = "__INTERLIS_AUTOCLOSE_CARET__";
+const TEXT_TAIL_PATTERN = /:\s*(?:MANDATORY\s+)?(?:TEXT|MTEXT)\s*$/i;
+const TEXT_LENGTH_VALUE_TAIL_PATTERN = /:\s*(?:MANDATORY\s+)?(?:TEXT|MTEXT)\s*\*\s*$/i;
+const NUMERIC_TAIL_PATTERN = /:\s*(?:MANDATORY\s+)?([-+]?[0-9]+(?:\.[0-9]+)?)\s*$/;
+const NUMERIC_UPPER_BOUND_TAIL_PATTERN = /:\s*(?:MANDATORY\s+)?[-+]?[0-9]+(?:\.[0-9]+)?\s*\.\.\s*$/;
 let umlPanel: vscode.WebviewPanel | undefined;
 let htmlPanel: vscode.WebviewPanel | undefined;
 let lastDiagramSource: vscode.Uri | undefined;
@@ -23,6 +27,8 @@ const autoOpenedDiagramUris = new Set<string>();
 type PendingCaret = { version: number; position: vscode.Position };
 
 const pendingCarets = new Map<string, PendingCaret>();
+const pendingTailSuggestTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const tailSuggestVersions = new Map<string, number>();
 
 class TimestampedOutputChannel implements vscode.OutputChannel {
   readonly name: string;
@@ -285,6 +291,7 @@ export async function activate(context: vscode.ExtensionContext) {
         }
       }
 
+      scheduleTailSuggest(event);
     })
   );
 
@@ -298,6 +305,13 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.workspace.onDidCloseTextDocument(document => {
       cancelScheduledDiagramRefresh(document);
       forgetAutoOpenedDiagram(document, autoOpenedDiagramUris);
+      const key = document.uri.toString();
+      const timer = pendingTailSuggestTimers.get(key);
+      if (timer) {
+        clearTimeout(timer);
+        pendingTailSuggestTimers.delete(key);
+      }
+      tailSuggestVersions.delete(key);
     })
   );
 
@@ -558,6 +572,118 @@ export async function activate(context: vscode.ExtensionContext) {
     })
   );
 
+}
+
+function scheduleTailSuggest(event: vscode.TextDocumentChangeEvent): void {
+  if (!isEligibleTailSuggestChange(event)) {
+    return;
+  }
+
+  const key = event.document.uri.toString();
+  const existing = pendingTailSuggestTimers.get(key);
+  if (existing) {
+    clearTimeout(existing);
+  }
+
+  const timer = setTimeout(() => {
+    pendingTailSuggestTimers.delete(key);
+    void maybeTriggerTailSuggest(event.document, event.contentChanges[0]?.text ?? "");
+  }, 25);
+  pendingTailSuggestTimers.set(key, timer);
+}
+
+function isEligibleTailSuggestChange(event: vscode.TextDocumentChangeEvent): boolean {
+  if (!event || event.document.languageId !== "interlis" || event.contentChanges.length !== 1) {
+    return false;
+  }
+  const active = vscode.window.activeTextEditor;
+  if (!active || active.document.uri.toString() !== event.document.uri.toString()) {
+    return false;
+  }
+  const change = event.contentChanges[0];
+  if (!change || !change.text || /\r|\n/.test(change.text)) {
+    return false;
+  }
+  return change.range.start.line === change.range.end.line;
+}
+
+async function maybeTriggerTailSuggest(document: vscode.TextDocument, insertedText: string): Promise<void> {
+  const key = document.uri.toString();
+  const active = vscode.window.activeTextEditor;
+  if (!active || active.document.uri.toString() !== key || active.document.version !== document.version) {
+    return;
+  }
+  if (active.selections.length !== 1 || !active.selection.isEmpty) {
+    return;
+  }
+  if (tailSuggestVersions.get(key) === document.version) {
+    return;
+  }
+
+  const selection = active.selection;
+  const line = document.lineAt(selection.active.line).text;
+  const prefix = line.slice(0, selection.active.character);
+  const suffix = line.slice(selection.active.character);
+  if (suffix.trim().length > 0) {
+    return;
+  }
+  if (!shouldTriggerTextTail(prefix, insertedText)
+    && !shouldTriggerTextLengthValueTail(prefix, insertedText)
+    && !shouldTriggerNumericTail(prefix, insertedText)
+    && !shouldTriggerNumericUpperBoundTail(prefix, insertedText)) {
+    return;
+  }
+
+  tailSuggestVersions.set(key, document.version);
+  await refreshSuggestWidget();
+}
+
+async function refreshSuggestWidget(): Promise<void> {
+  await vscode.commands.executeCommand("hideSuggestWidget");
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  await vscode.commands.executeCommand("editor.action.triggerSuggest");
+}
+
+function shouldTriggerTextTail(prefix: string, insertedText: string): boolean {
+  void insertedText;
+  return TEXT_TAIL_PATTERN.test(prefix);
+}
+
+function shouldTriggerTextLengthValueTail(prefix: string, insertedText: string): boolean {
+  if (!TEXT_LENGTH_VALUE_TAIL_PATTERN.test(prefix)) {
+    return false;
+  }
+  const trimmed = insertedText.trim();
+  return trimmed.endsWith("*");
+}
+
+function shouldTriggerNumericTail(prefix: string, insertedText: string): boolean {
+  const trimmed = insertedText.trim();
+  if (!trimmed || !NUMERIC_TAIL_PATTERN.test(prefix)) {
+    return false;
+  }
+  const literal = prefix.match(NUMERIC_TAIL_PATTERN)?.[1] ?? "";
+  if (!literal) {
+    return false;
+  }
+  if (trimmed.length > 1) {
+    return true;
+  }
+  if (!/[0-9]/.test(trimmed)) {
+    return false;
+  }
+  if (literal.length === 1 || literal === `-${trimmed}` || literal === `+${trimmed}`) {
+    return true;
+  }
+  return literal.includes(".") && literal.endsWith(trimmed);
+}
+
+function shouldTriggerNumericUpperBoundTail(prefix: string, insertedText: string): boolean {
+  if (!NUMERIC_UPPER_BOUND_TAIL_PATTERN.test(prefix)) {
+    return false;
+  }
+  const trimmed = insertedText.trim();
+  return trimmed.endsWith(".");
 }
 
 async function ensurePanelVisible(preserveEditorFocus = true) {

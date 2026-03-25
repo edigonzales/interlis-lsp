@@ -3,7 +3,11 @@ package ch.so.agi.lsp.interlis.text;
 import ch.so.agi.lsp.interlis.compiler.CompilationCache;
 import ch.so.agi.lsp.interlis.compiler.DiagnosticsMapper;
 import ch.so.agi.lsp.interlis.compiler.Ili2cUtil;
+import ch.so.agi.lsp.interlis.live.DocumentSnapshot;
+import ch.so.agi.lsp.interlis.live.LiveAnalysisService;
+import ch.so.agi.lsp.interlis.live.LiveParseResult;
 import ch.so.agi.lsp.interlis.model.ModelDiscoveryService;
+import ch.interlis.ili2c.metamodel.TransferDescription;
 import ch.so.agi.lsp.interlis.server.ClientSettings;
 import ch.so.agi.lsp.interlis.server.InterlisLanguageServer;
 import ch.so.agi.lsp.interlis.server.RuntimeDiagnostics;
@@ -29,11 +33,13 @@ public class InterlisTextDocumentService implements TextDocumentService {
 
     private final InterlisLanguageServer server;
     private final DocumentTracker documents = new DocumentTracker();
+    private final LiveAnalysisService liveAnalysis = new LiveAnalysisService();
     private final CompilationCache compilationCache;
     private final InterlisDefinitionFinder definitionFinder;
     private final ModelDiscoveryService modelDiscoveryService;
     private final InterlisCompletionProvider completionProvider;
     private final InterlisRenameProvider renameProvider;
+    private final InterlisReferencesProvider referencesProvider;
     private final BiFunction<ClientSettings, String, Ili2cUtil.CompilationOutcome> compiler;
 
     public InterlisTextDocumentService(InterlisLanguageServer server) {
@@ -46,10 +52,11 @@ public class InterlisTextDocumentService implements TextDocumentService {
         this.server = server;
         this.compilationCache = cache != null ? cache : new CompilationCache();
         this.compiler = compiler != null ? compiler : Ili2cUtil::compile;
-        this.definitionFinder = new InterlisDefinitionFinder(server, documents, this.compilationCache);
+        this.definitionFinder = new InterlisDefinitionFinder(server, documents, this.compilationCache, this.compiler, this.liveAnalysis);
         this.modelDiscoveryService = new ModelDiscoveryService();
-        this.completionProvider = new InterlisCompletionProvider(server, documents, this.compilationCache, this.compiler, this.modelDiscoveryService);
-        this.renameProvider = new InterlisRenameProvider(server, documents, this.compilationCache, this.compiler);
+        this.completionProvider = new InterlisCompletionProvider(server, documents, this.compilationCache, this.compiler, this.modelDiscoveryService, this.liveAnalysis);
+        this.renameProvider = new InterlisRenameProvider(server, documents, this.compilationCache, this.compiler, this.liveAnalysis);
+        this.referencesProvider = new InterlisReferencesProvider(server, documents, this.compilationCache, this.compiler, this.liveAnalysis);
     }
 
     public void onClientSettingsUpdated(ClientSettings settings) {
@@ -64,18 +71,32 @@ public class InterlisTextDocumentService implements TextDocumentService {
     public void didOpen(DidOpenTextDocumentParams params) {
         String uri = params.getTextDocument().getUri();
         documents.open(params.getTextDocument());
+        liveAnalysis.analyze(currentSnapshot(uri));
         compileAndPublish(uri, "didOpen");
     }
 
     @Override
     public void didChange(DidChangeTextDocumentParams params) {
         documents.applyChanges(params.getTextDocument(), params.getContentChanges());
+        String uri = params.getTextDocument() != null ? params.getTextDocument().getUri() : null;
+        DocumentSnapshot snapshot = currentSnapshot(uri);
+        String pathOrUri = toFilesystemPathIfPossible(uri);
+        TransferDescription authoritativeTd = InteractiveCompilationResolver.resolveTransferDescriptionForInteractiveFeature(
+                server,
+                documents,
+                compilationCache,
+                compiler,
+                uri,
+                pathOrUri,
+                "live-diagnostics-fallback");
+        liveAnalysis.schedule(snapshot, authoritativeTd, result -> publishLiveDiagnosticsIfCurrent(snapshot, result));
     }
 
     @Override
     public void didSave(DidSaveTextDocumentParams params) {
         String uri = params.getTextDocument().getUri();
         documents.markSaved(uri);
+        liveAnalysis.analyze(currentSnapshot(uri));
         compileAndPublish(uri, "didSave");
     }
 
@@ -84,6 +105,7 @@ public class InterlisTextDocumentService implements TextDocumentService {
         String uri = params.getTextDocument().getUri();
         server.publishDiagnostics(uri, Collections.emptyList());
         documents.close(uri);
+        liveAnalysis.remove(uri);
     }
 
     @Override
@@ -173,6 +195,38 @@ public class InterlisTextDocumentService implements TextDocumentService {
                 WorkspaceEdit empty = new WorkspaceEdit();
                 empty.setChanges(Collections.emptyMap());
                 return empty;
+            }
+        });
+    }
+
+    @Override
+    public CompletableFuture<List<? extends Location>> references(ReferenceParams params) {
+        return CompletableFutures.computeAsync(cancelChecker -> {
+            cancelChecker.checkCanceled();
+            try {
+                return referencesProvider.references(params);
+            } catch (Exception ex) {
+                if (CancellationUtil.isCancellation(ex)) {
+                    throw CancellationUtil.propagateCancellation(ex);
+                }
+                LOG.error("References lookup failed", ex);
+                return Collections.emptyList();
+            }
+        });
+    }
+
+    @Override
+    public CompletableFuture<org.eclipse.lsp4j.jsonrpc.messages.Either3<Range, PrepareRenameResult, PrepareRenameDefaultBehavior>> prepareRename(PrepareRenameParams params) {
+        return CompletableFutures.computeAsync(cancelChecker -> {
+            cancelChecker.checkCanceled();
+            try {
+                return renameProvider.prepareRename(params);
+            } catch (Exception ex) {
+                if (CancellationUtil.isCancellation(ex)) {
+                    throw CancellationUtil.propagateCancellation(ex);
+                }
+                LOG.error("Prepare rename failed", ex);
+                return null;
             }
         });
     }
@@ -360,28 +414,18 @@ public class InterlisTextDocumentService implements TextDocumentService {
     private Ili2cUtil.CompilationOutcome resolveOutcomeForInteractiveFeature(String documentUri,
                                                                              String pathOrUri,
                                                                              String compileSource) {
-        boolean tracked = documents.isTracked(documentUri);
-        boolean dirty = tracked && documents.isDirty(documentUri);
-
-        if (dirty) {
-            return compilationCache.getSuccessful(pathOrUri);
-        }
-
-        Ili2cUtil.CompilationOutcome outcome = firstOutcome(
-                compilationCache.getSavedAttempt(pathOrUri),
-                compilationCache.getSuccessful(pathOrUri));
-        if (outcome != null || tracked) {
-            return outcome;
-        }
-
-        Ili2cUtil.CompilationOutcome compiled = RuntimeDiagnostics.compile(
+        Ili2cUtil.CompilationOutcome outcome = InteractiveCompilationResolver.resolveOutcomeForInteractiveFeature(
                 server,
+                documents,
+                compilationCache,
                 compiler,
-                server.getClientSettings(),
+                documentUri,
                 pathOrUri,
                 compileSource);
-        recordAuthoritativeOutcome(pathOrUri, compiled);
-        return compiled;
+        if (outcome != null) {
+            recordAuthoritativeOutcome(pathOrUri, outcome);
+        }
+        return outcome;
     }
 
     private void recordAuthoritativeOutcome(String pathOrUri, Ili2cUtil.CompilationOutcome outcome) {
@@ -392,8 +436,37 @@ public class InterlisTextDocumentService implements TextDocumentService {
         compilationCache.putSuccessful(pathOrUri, outcome);
     }
 
-    private static Ili2cUtil.CompilationOutcome firstOutcome(Ili2cUtil.CompilationOutcome primary,
-                                                             Ili2cUtil.CompilationOutcome fallback) {
-        return primary != null ? primary : fallback;
+    private DocumentSnapshot currentSnapshot(String uri) {
+        if (uri == null || uri.isBlank()) {
+            return null;
+        }
+        String text = documents.getText(uri);
+        if (text == null) {
+            try {
+                text = readDocument(uri);
+            } catch (Exception ex) {
+                LOG.debug("Unable to read snapshot for {}", uri, ex);
+                return null;
+            }
+        }
+        return new DocumentSnapshot(uri, toFilesystemPathIfPossible(uri), text, documents.getVersion(uri));
+    }
+
+    private void publishLiveDiagnosticsIfCurrent(DocumentSnapshot snapshot, LiveParseResult result) {
+        if (snapshot == null || result == null || snapshot.uri() == null) {
+            return;
+        }
+        String currentText = documents.getText(snapshot.uri());
+        Integer currentVersion = documents.getVersion(snapshot.uri());
+        if (!documents.isDirty(snapshot.uri())) {
+            return;
+        }
+        if (currentVersion != null && snapshot.version() != null && !currentVersion.equals(snapshot.version())) {
+            return;
+        }
+        if (currentText != null && !currentText.equals(snapshot.text())) {
+            return;
+        }
+        server.publishDiagnostics(snapshot.uri(), result.diagnostics());
     }
 }

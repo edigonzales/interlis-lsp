@@ -3,6 +3,8 @@ package ch.so.agi.lsp.interlis;
 import ch.so.agi.lsp.interlis.server.ClientSettings;
 import ch.so.agi.lsp.interlis.server.InterlisLanguageServer;
 import ch.so.agi.lsp.interlis.workspace.CommandHandlers;
+import org.eclipse.lsp4j.InitializeParams;
+import org.eclipse.lsp4j.InitializeResult;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -30,5 +32,20 @@ public class LanguageServerSmokeTest {
 
         assertTrue(result instanceof String);
         //assertTrue(((String) result).contains("ERROR:"));
+    }
+
+    @Test
+    void initializeAdvertisesReferencesAndPrepareRename() throws Exception {
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        InitializeResult result = server.initialize(new InitializeParams()).get();
+
+        assertNotNull(result.getCapabilities().getReferencesProvider());
+        assertTrue(result.getCapabilities().getReferencesProvider().getLeft());
+        assertNotNull(result.getCapabilities().getCompletionProvider());
+        assertEquals(java.util.List.of(".", ":", " "),
+                result.getCapabilities().getCompletionProvider().getTriggerCharacters());
+        assertNotNull(result.getCapabilities().getRenameProvider());
+        assertTrue(result.getCapabilities().getRenameProvider().isRight());
+        assertTrue(result.getCapabilities().getRenameProvider().getRight().getPrepareProvider());
     }
 }

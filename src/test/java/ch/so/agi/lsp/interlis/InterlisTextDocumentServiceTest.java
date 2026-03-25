@@ -16,6 +16,10 @@ import ch.interlis.ili2c.metamodel.ViewableTransferElement;
 import org.eclipse.lsp4j.DocumentSymbol;
 import org.eclipse.lsp4j.DocumentSymbolParams;
 import org.eclipse.lsp4j.DocumentFormattingParams;
+import org.eclipse.lsp4j.CompletionItem;
+import org.eclipse.lsp4j.CompletionList;
+import org.eclipse.lsp4j.CompletionParams;
+import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.SymbolKind;
 import org.eclipse.lsp4j.Position;
@@ -38,6 +42,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -215,6 +221,96 @@ class InterlisTextDocumentServiceTest {
     }
 
     @Test
+    void completionOutsideSupportedSlotDoesNotCompileFallback(@TempDir Path tempDir) throws Exception {
+        Path modelPath = Files.createTempFile(tempDir, "ModelNoCompletionFallback", ".ili");
+        String content = """
+                INTERLIS 2.3;
+                MODEL ModelNoCompletionFallback (en) AT "http://example.org" VERSION "2024-01-01" =
+                END ModelNoCompletionFallback.
+                """;
+        Files.writeString(modelPath, content);
+
+        CompilationCache cache = new CompilationCache();
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        server.setClientSettings(new ClientSettings());
+
+        AtomicInteger compileCount = new AtomicInteger();
+        InterlisTextDocumentService service = new InterlisTextDocumentService(
+                server,
+                cache,
+                (cfg, path) -> {
+                    compileCount.incrementAndGet();
+                    return new Ili2cUtil.CompilationOutcome(null, "", Collections.emptyList());
+                });
+
+        CompletionParams params = new CompletionParams();
+        params.setTextDocument(new TextDocumentIdentifier(modelPath.toUri().toString()));
+        params.setPosition(new Position(1, 6)); // whitespace after MODEL
+
+        Either<List<CompletionItem>, CompletionList> completion = service.completion(params).get();
+        assertTrue(completion.isLeft());
+        assertTrue(completion.getLeft().isEmpty());
+        assertEquals(0, compileCount.get(), "Expected completion outside supported slots to skip ili2c fallback");
+    }
+
+    @Test
+    void didChangeUsesSavedSnapshotForImportedLiveDiagnostics(@TempDir Path tempDir) throws Exception {
+        Path baseFile = tempDir.resolve("BaseTypes.ili");
+        String baseContent = """
+                INTERLIS 2.3;
+                MODEL BaseTypes (en) AT "http://example.org" VERSION "2024-01-01" =
+                  DOMAIN ImportedDomain = TEXT*20;
+                END BaseTypes.
+                """;
+        Files.writeString(baseFile, baseContent);
+
+        Path usingFile = tempDir.resolve("UsingModel.ili");
+        String usingContent = """
+                INTERLIS 2.3;
+                MODEL UsingModel (en) AT "http://example.org" VERSION "2024-01-01" =
+                  IMPORTS BaseTypes;
+                  TOPIC T =
+                    CLASS C =
+                      qualifiedAttr : BaseTypes.ImportedDomain;
+                    END C;
+                  END T;
+                END UsingModel.
+                """;
+        Files.writeString(usingFile, usingContent);
+
+        CompilationCache cache = new CompilationCache();
+        RecordingServer server = new RecordingServer();
+        ClientSettings settings = new ClientSettings();
+        settings.setModelRepositories(tempDir.toAbsolutePath().toString());
+        server.setClientSettings(settings);
+
+        AtomicInteger compileCount = new AtomicInteger();
+        InterlisTextDocumentService service = new InterlisTextDocumentService(
+                server,
+                cache,
+                (cfg, path) -> {
+                    compileCount.incrementAndGet();
+                    return Ili2cUtil.compile(cfg, path);
+                });
+
+        String uri = usingFile.toUri().toString();
+        service.didOpen(new DidOpenTextDocumentParams(new TextDocumentItem(uri, "interlis", 1, usingContent)));
+        assertEquals(1, compileCount.get(), "Expected didOpen to compile the authoritative snapshot once");
+
+        String dirty = usingContent + "\n";
+        service.didChange(fullDocumentChange(uri, 2, dirty));
+
+        waitForDiagnostics(server, uri, 2);
+
+        assertEquals(1, compileCount.get(), "Expected didChange live diagnostics to reuse the saved snapshot");
+        assertTrue(server.getDiagnostics(uri).stream()
+                        .noneMatch(diagnostic -> diagnostic.getMessage() != null
+                                && diagnostic.getMessage().contains("Unknown")
+                                && diagnostic.getMessage().contains("ImportedDomain")),
+                "Expected imported type to stay valid after whitespace-only dirty edits");
+    }
+
+    @Test
     void formattingDoesNotRecompileDirtyDocuments(@TempDir Path tempDir) throws Exception {
         Path modelPath = Files.createTempFile(tempDir, "ModelDirtyFormat", ".ili");
         String content = """
@@ -256,6 +352,121 @@ class InterlisTextDocumentServiceTest {
         assertTrue(service.isDocumentDirty(item.getUri()));
         assertEquals(1, compileCount.get(), "Expected formatting on a dirty document to avoid recompilation");
         assertTrue(edits.isEmpty(), "Expected dirty formatting to no-op instead of applying a stale saved snapshot");
+    }
+
+    @Test
+    void didChangeUsesSavedSnapshotForPredefinedInterlisLiveDiagnostics(@TempDir Path tempDir) throws Exception {
+        Path usingFile = tempDir.resolve("UsingModel.ili");
+        String usingContent = """
+                INTERLIS 2.3;
+                MODEL UsingModel (en) AT "http://example.org" VERSION "2024-01-01" =
+                  TOPIC T =
+                    CLASS C =
+                      attr : INTERLIS.XMLDate;
+                    END C;
+                  END T;
+                END UsingModel.
+                """;
+        Files.writeString(usingFile, usingContent);
+
+        CompilationCache cache = new CompilationCache();
+        RecordingServer server = new RecordingServer();
+        server.setClientSettings(new ClientSettings());
+
+        AtomicInteger compileCount = new AtomicInteger();
+        InterlisTextDocumentService service = new InterlisTextDocumentService(
+                server,
+                cache,
+                (cfg, path) -> {
+                    compileCount.incrementAndGet();
+                    return Ili2cUtil.compile(cfg, path);
+                });
+
+        String uri = usingFile.toUri().toString();
+        service.didOpen(new DidOpenTextDocumentParams(new TextDocumentItem(uri, "interlis", 1, usingContent)));
+        assertEquals(1, compileCount.get(), "Expected didOpen to compile the authoritative snapshot once");
+
+        String dirty = usingContent + "\n";
+        service.didChange(fullDocumentChange(uri, 2, dirty));
+
+        waitForDiagnostics(server, uri, 2);
+
+        assertEquals(1, compileCount.get(), "Expected didChange live diagnostics to reuse the saved snapshot");
+        assertTrue(server.getDiagnostics(uri).stream()
+                        .noneMatch(diagnostic -> diagnostic.getMessage() != null
+                                && diagnostic.getMessage().contains("Unknown")
+                                && diagnostic.getMessage().contains("INTERLIS.XMLDate")),
+                "Expected INTERLIS.XMLDate to stay valid after whitespace-only dirty edits");
+    }
+
+    @Test
+    void didChangeUsesSavedSnapshotForQualifiedImportedDomainsWithMultipleImports(@TempDir Path tempDir) throws Exception {
+        Path geometryFile = tempDir.resolve("GeometryCHLV95_V1.ili");
+        Files.writeString(geometryFile, """
+                INTERLIS 2.3;
+                MODEL GeometryCHLV95_V1 (en) AT "http://example.org" VERSION "2024-01-01" =
+                  DOMAIN MultiSurface = TEXT*20;
+                END GeometryCHLV95_V1.
+                """);
+        Path textFile = tempDir.resolve("Text.ili");
+        Files.writeString(textFile, """
+                INTERLIS 2.3;
+                MODEL Text (en) AT "http://example.org" VERSION "2024-01-01" =
+                  DOMAIN Label = TEXT*30;
+                END Text.
+                """);
+        Path mathFile = tempDir.resolve("Math.ili");
+        Files.writeString(mathFile, """
+                INTERLIS 2.3;
+                MODEL Math (en) AT "http://example.org" VERSION "2024-01-01" =
+                  DOMAIN Number = 0 .. 10;
+                END Math.
+                """);
+
+        Path usingFile = tempDir.resolve("UsingModel.ili");
+        String usingContent = """
+                INTERLIS 2.3;
+                MODEL UsingModel (en) AT "http://example.org" VERSION "2024-01-01" =
+                  IMPORTS GeometryCHLV95_V1, Text, Math;
+                  TOPIC T =
+                    CLASS C =
+                      attr : GeometryCHLV95_V1.MultiSurface;
+                    END C;
+                  END T;
+                END UsingModel.
+                """;
+        Files.writeString(usingFile, usingContent);
+
+        CompilationCache cache = new CompilationCache();
+        RecordingServer server = new RecordingServer();
+        ClientSettings settings = new ClientSettings();
+        settings.setModelRepositories(tempDir.toAbsolutePath().toString());
+        server.setClientSettings(settings);
+
+        AtomicInteger compileCount = new AtomicInteger();
+        InterlisTextDocumentService service = new InterlisTextDocumentService(
+                server,
+                cache,
+                (cfg, path) -> {
+                    compileCount.incrementAndGet();
+                    return Ili2cUtil.compile(cfg, path);
+                });
+
+        String uri = usingFile.toUri().toString();
+        service.didOpen(new DidOpenTextDocumentParams(new TextDocumentItem(uri, "interlis", 1, usingContent)));
+        assertEquals(1, compileCount.get(), "Expected didOpen to compile the authoritative snapshot once");
+
+        String dirty = usingContent + "\n";
+        service.didChange(fullDocumentChange(uri, 2, dirty));
+
+        waitForDiagnostics(server, uri, 2);
+
+        assertEquals(1, compileCount.get(), "Expected didChange live diagnostics to reuse the saved snapshot");
+        assertTrue(server.getDiagnostics(uri).stream()
+                        .noneMatch(diagnostic -> diagnostic.getMessage() != null
+                                && diagnostic.getMessage().contains("Unknown")
+                                && diagnostic.getMessage().contains("GeometryCHLV95_V1.MultiSurface")),
+                "Expected imported qualified domain to stay valid after whitespace-only dirty edits");
     }
 
     @Test
@@ -534,9 +745,22 @@ class InterlisTextDocumentServiceTest {
         return new DidChangeTextDocumentParams(identifier, List.of(change));
     }
 
+    private static void waitForDiagnostics(RecordingServer server, String uri, int expectedPublishCount) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + 4_000L;
+        while (System.currentTimeMillis() < deadline) {
+            if (server.getDiagnosticPublishCount(uri) >= expectedPublishCount) {
+                return;
+            }
+            Thread.sleep(25L);
+        }
+        fail("Timed out waiting for diagnostics for " + uri);
+    }
+
     private static class RecordingServer extends InterlisLanguageServer {
         private final StringBuilder logBuffer = new StringBuilder();
         private final StringBuilder debugLogBuffer = new StringBuilder();
+        private final Map<String, List<Diagnostic>> diagnosticsByUri = new ConcurrentHashMap<>();
+        private final Map<String, AtomicInteger> diagnosticPublishCounts = new ConcurrentHashMap<>();
         private int compileFinishedCount;
         private boolean lastCompileSuccessful;
 
@@ -567,6 +791,12 @@ class InterlisTextDocumentServiceTest {
             lastCompileSuccessful = success;
         }
 
+        @Override
+        public void publishDiagnostics(String uri, List<Diagnostic> diagnostics) {
+            diagnosticsByUri.put(uri, diagnostics != null ? List.copyOf(diagnostics) : List.of());
+            diagnosticPublishCounts.computeIfAbsent(uri, ignored -> new AtomicInteger()).incrementAndGet();
+        }
+
         String getLogText() {
             return logBuffer.toString();
         }
@@ -581,6 +811,15 @@ class InterlisTextDocumentServiceTest {
 
         boolean wasLastCompileSuccessful() {
             return lastCompileSuccessful;
+        }
+
+        List<Diagnostic> getDiagnostics(String uri) {
+            return diagnosticsByUri.getOrDefault(uri, List.of());
+        }
+
+        int getDiagnosticPublishCount(String uri) {
+            AtomicInteger count = diagnosticPublishCounts.get(uri);
+            return count != null ? count.get() : 0;
         }
     }
 

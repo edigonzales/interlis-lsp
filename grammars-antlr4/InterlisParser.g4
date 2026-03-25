@@ -21,7 +21,7 @@ modeldef
     (TRANSLATION OF Name LSBR STRING RSBR)?
     EQ
     (CONTRACT ISSUED BY Name SEMI)?
-    (IMPORTS UNQUALIFIED? (Name | INTERLIS) (COMMA UNQUALIFIED? (Name | INTERLIS))* SEMI)*
+    (IMPORTS UNQUALIFIED? (Name | INTERLIS)? (COMMA UNQUALIFIED? (Name | INTERLIS)?)* SEMI?)*
     (metaDataBasketDef
     | unitDef
     | functionDef
@@ -33,7 +33,7 @@ modeldef
     | classDef
     | structureDef
     | topicDef)*
-    END Name DOT;
+    END Name? DOT?;
 
 // 3.5.2 Thèmes - Themen
 
@@ -46,7 +46,7 @@ topicDef
     (DEPENDS ON topicRef (COMMA topicRef)* SEMI)?
     (DEFERRED GENERICS genericRef (COMMA genericRef)* SEMI)?
     definitions*
-    END Name SEMI
+    END Name? SEMI?
   ;
 
 definitions : metaDataBasketDef
@@ -72,13 +72,13 @@ classDef : CLASS Name
              (EXTENDS classOrStructureRef)? EQ
              ((OID AS (Name | Name DOT Name | INTERLIS DOT (Name | UUIDOID)) | NO OID) SEMI)?
              classOrStructureDef?
-           END Name SEMI;
+           END Name? SEMI?;
 
 structureDef : STRUCTURE Name
                  (LPAR (ABSTRACT | EXTENDED | FINAL) RPAR)?
                  (EXTENDS structureRef)? EQ
                  classOrStructureDef?
-               END Name SEMI;
+               END Name? SEMI?;
 
 classRef : (INTERLIS DOT REFSYSTEM)
          | (INTERLIS DOT Name (DOT Name)*)
@@ -95,8 +95,8 @@ classOrStructureRef : classRef | structureRef;
 
 attributeDef : CONTINUOUS? SUBDIVISION?
                Name (LPAR(ABSTRACT | EXTENDED | FINAL | TRANSIENT)RPAR)?
-               COLON (attrTypeDef | lineType)
-               (ASSIGN? factor (COMMA factor)*)? SEMI;
+               COLON (attrTypeDef | lineType)?
+               (ASSIGN? factor (COMMA factor)*)? SEMI?;
 
 attrTypeDef : MANDATORY? (attrType 
             | enumeration 
@@ -109,7 +109,7 @@ attrType : type
          | referenceAttr
          | restrictedStructureRef;
 
-referenceAttr : REFERENCE TO (LPAR EXTERNAL RPAR)? restrictedClassOrAssRef;
+referenceAttr : REFERENCE TO (LPAR EXTERNAL RPAR)? restrictedClassOrAssRef?;
 
 restrictedClassOrAssRef : (classOrAssociationRef | ANYCLASS)
                         (RESTRICTION LPAR (classOrAssociationRef (SEMI classOrAssociationRef)*) RPAR)?;
@@ -135,7 +135,7 @@ associationDef : ASSOCIATION Name?
                      (ATTRIBUTE attributeDef*)?
                      (CARDINALITY EQ cardinality SEMI)?
                      constraintDef*
-                 END Name? SEMI;
+                 END Name? SEMI?;
 
 associationRef : (Name DOT (Name DOT)?)? Name;
 
@@ -529,7 +529,7 @@ viewDef : VIEW Name
         EQ
         viewAttributes?
         constraintDef*
-        END Name SEMI;
+        END Name? SEMI?;
 
 viewRef : (Name DOT (Name DOT)?)? Name;
 
@@ -583,7 +583,7 @@ graphicDef : GRAPHIC Name (ABSTRACT | FINAL)?
      (BASED ON viewableRef)? EQ
      (selection)*
      (drawingRule)*
-     END Name SEMI;
+     END Name? SEMI?;
 
 graphicRef : (Name DOT (Name DOT)?)? Name;
 
