@@ -64,7 +64,8 @@ public final class InterlisLiveAnalyzer {
 
         InterlisParser.Interlis2defContext root = parser.interlis2def();
         List<LiveToken> liveTokens = collectDefaultChannelTokens(snapshot.text(), tokens);
-        Set<String> importedModelNames = collectImportedModelNames(liveTokens);
+        List<ImportEntry> importEntries = collectImportEntries(liveTokens);
+        Set<String> importedModelNames = collectImportedModelNames(importEntries);
         ScopeGraph scopeGraph = new ScopeGraph();
         GraphBuilder graphBuilder = new GraphBuilder(snapshot.uri(), snapshot.text(), tokens, scopeGraph);
         ParseTreeWalker.DEFAULT.walk(graphBuilder, root);
@@ -84,8 +85,10 @@ public final class InterlisLiveAnalyzer {
         diagnostics.addAll(semanticDiagnosticAnalyzer.analyze(
                 snapshot,
                 scopeGraph,
+                liveTokens,
                 syntaxDiagnostics,
                 authoritativeTd,
+                importEntries,
                 importedModelNames));
         return new LiveParseResult(
                 snapshot,
@@ -95,6 +98,7 @@ public final class InterlisLiveAnalyzer {
                 rawSyntaxErrors,
                 completionContexts,
                 graphBuilder.formattedDomainIds(),
+                importEntries,
                 importedModelNames,
                 authoritativeTd != null,
                 diagnostics);
@@ -159,9 +163,10 @@ public final class InterlisLiveAnalyzer {
         return List.copyOf(liveTokens);
     }
 
-    private static Set<String> collectImportedModelNames(List<LiveToken> liveTokens) {
-        LinkedHashSet<String> importedNames = new LinkedHashSet<>();
-        List<String> pending = null;
+    private static List<ImportEntry> collectImportEntries(List<LiveToken> liveTokens) {
+        List<ImportEntry> entries = new ArrayList<>();
+        List<ImportEntry> pending = null;
+        boolean nextUnqualified = false;
         for (LiveToken token : liveTokens) {
             if (token == null || token.text() == null || token.text().isBlank()) {
                 continue;
@@ -172,42 +177,77 @@ public final class InterlisLiveAnalyzer {
             if (pending == null) {
                 if ("IMPORTS".equals(upper)) {
                     pending = new ArrayList<>();
+                    nextUnqualified = false;
                 }
                 continue;
             }
 
             if (";".equals(text)) {
-                importedNames.addAll(pending);
+                entries.addAll(markTerminated(pending));
                 pending = null;
+                nextUnqualified = false;
                 continue;
             }
-            if (",".equals(text) || "UNQUALIFIED".equals(upper)) {
+            if (",".equals(text)) {
+                nextUnqualified = false;
+                continue;
+            }
+            if ("UNQUALIFIED".equals(upper)) {
+                nextUnqualified = true;
                 continue;
             }
             if ("IMPORTS".equals(upper)) {
                 if (!pending.isEmpty()) {
-                    importedNames.addAll(pending);
+                    entries.addAll(pending);
                 }
                 pending = new ArrayList<>();
+                nextUnqualified = false;
                 continue;
             }
             if (isImportBoundary(upper)) {
                 if (!pending.isEmpty()) {
-                    importedNames.addAll(pending);
+                    entries.addAll(pending);
                 }
                 pending = null;
+                nextUnqualified = false;
                 continue;
             }
-            if (isModelNameToken(text)) {
-                pending.add(text);
+            if ("INTERLIS".equals(upper) || isModelNameToken(text)) {
+                pending.add(new ImportEntry(text, token.range(), nextUnqualified, false));
+                nextUnqualified = false;
                 continue;
             }
             pending = null;
+            nextUnqualified = false;
         }
         if (pending != null && !pending.isEmpty()) {
-            importedNames.addAll(pending);
+            entries.addAll(pending);
+        }
+        return List.copyOf(entries);
+    }
+
+    private static Set<String> collectImportedModelNames(List<ImportEntry> importEntries) {
+        LinkedHashSet<String> importedNames = new LinkedHashSet<>();
+        if (importEntries == null) {
+            return Set.of();
+        }
+        for (ImportEntry entry : importEntries) {
+            if (entry != null && entry.name() != null && !entry.name().isBlank()) {
+                importedNames.add(entry.name());
+            }
         }
         return Set.copyOf(importedNames);
+    }
+
+    private static List<ImportEntry> markTerminated(List<ImportEntry> entries) {
+        if (entries == null || entries.isEmpty()) {
+            return List.of();
+        }
+        List<ImportEntry> terminated = new ArrayList<>(entries.size());
+        for (ImportEntry entry : entries) {
+            terminated.add(new ImportEntry(entry.name(), entry.range(), entry.unqualified(), true));
+        }
+        return terminated;
     }
 
     private static boolean isModelNameToken(String tokenText) {

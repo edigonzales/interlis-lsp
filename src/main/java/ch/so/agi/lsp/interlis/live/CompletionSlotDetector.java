@@ -23,6 +23,7 @@ public final class CompletionSlotDetector {
     private static final Pattern END_CONTEXT_PATTERN = Pattern.compile("(?i)\\bEND\\s+([A-Za-z0-9_]*)\\s*$");
     private static final Pattern EXTENDS_CONTEXT_PATTERN = Pattern.compile(
             "(?i)\\bEXTENDS\\s+([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*\\.?)?\\s*$");
+    private static final Pattern CONTAINER_BODY_CONTEXT_PATTERN = Pattern.compile("^\\s*([A-Za-z_][A-Za-z0-9_]*)?\\s*$");
 
     public List<CompletionContext> detect(DocumentSnapshot snapshot,
                                           ScopeGraph scopeGraph,
@@ -57,6 +58,7 @@ public final class CompletionSlotDetector {
                 continue;
             }
             collectAttributeContext(text, lineStart, lineEnd, scopeGraph, lineTokens, contexts);
+            collectContainerBodyContext(text, lineStart, lineEnd, scopeGraph, contexts);
 
             if (lineEnd >= text.length()) {
                 break;
@@ -256,6 +258,38 @@ public final class CompletionSlotDetector {
                 replaceRange,
                 owner,
                 ATTRIBUTE_TYPE_ROOT_KINDS));
+    }
+
+    private void collectContainerBodyContext(String text,
+                                             int lineStartOffset,
+                                             int lineEndOffset,
+                                             ScopeGraph scopeGraph,
+                                             List<CompletionContext> contexts) {
+        String line = text.substring(lineStartOffset, lineEndOffset);
+        Matcher matcher = CONTAINER_BODY_CONTEXT_PATTERN.matcher(line);
+        if (!matcher.matches()) {
+            return;
+        }
+
+        LiveSymbol owner = enclosingOwner(text, scopeGraph, lineEndOffset);
+        if (!supportsContainerBodyContext(owner != null ? owner.kind() : null)) {
+            return;
+        }
+
+        String prefix = groupValue(matcher, 1);
+        int replaceStart = lineStartOffset;
+        if (prefix != null && !prefix.isBlank()) {
+            replaceStart = lineStartOffset + matcher.start(1);
+        }
+        contexts.add(new CompletionContext(
+                CompletionContext.Kind.CONTAINER_BODY_ROOT,
+                prefix != null ? prefix : "",
+                prefix != null ? prefix : "",
+                null,
+                range(text, replaceStart, lineEndOffset),
+                owner != null ? owner.id() : null,
+                null,
+                owner != null ? owner.kind() : null));
     }
 
     private CompletionContext detectTextLengthContext(String text,
@@ -685,5 +719,9 @@ public final class CompletionSlotDetector {
         return ownerKind == InterlisSymbolKind.CLASS
                 || ownerKind == InterlisSymbolKind.STRUCTURE
                 || ownerKind == InterlisSymbolKind.ASSOCIATION;
+    }
+
+    private static boolean supportsContainerBodyContext(InterlisSymbolKind ownerKind) {
+        return ownerKind == InterlisSymbolKind.TOPIC;
     }
 }

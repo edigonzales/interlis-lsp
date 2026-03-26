@@ -14,12 +14,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.eclipse.lsp4j.Diagnostic;
+import org.eclipse.lsp4j.DiagnosticSeverity;
+import org.eclipse.lsp4j.DiagnosticTag;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
 import org.eclipse.lsp4j.TextDocumentContentChangeEvent;
@@ -326,10 +330,61 @@ class CommandHandlersTest {
         assertTrue(ree.getMessage().contains(nonexistent.getFileName().toString()));
     }
 
+    @Test
+    void compilePublishesUnusedImportWarningAsLint() throws Exception {
+        Path baseFile = tempDir.resolve("BaseTypes.ili");
+        Files.writeString(baseFile, """
+                INTERLIS 2.3;
+                MODEL BaseTypes (en) AT "http://example.org" VERSION "2024-01-01" =
+                  DOMAIN ImportedDomain = TEXT*20;
+                END BaseTypes.
+                """);
+
+        Path usingFile = tempDir.resolve("UsingModel.ili");
+        Files.writeString(usingFile, """
+                INTERLIS 2.3;
+                MODEL UsingModel (en) AT "http://example.org" VERSION "2024-01-01" =
+                  IMPORTS BaseTypes;
+                  TOPIC T =
+                  END T;
+                END UsingModel.
+                """);
+
+        RecordingServer server = new RecordingServer();
+        ClientSettings settings = new ClientSettings();
+        settings.setModelRepositories(tempDir.toAbsolutePath().toString());
+        server.setClientSettings(settings);
+
+        CommandHandlers handlers = new CommandHandlers(server);
+        handlers.compile(usingFile.toUri().toString()).get(30, TimeUnit.SECONDS);
+
+        Diagnostic diagnostic = server.getDiagnostics(usingFile.toUri().toString()).stream()
+                .filter(item -> item.getMessage() != null && item.getMessage().contains("never used"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Expected unused-import warning after compile command"));
+        assertEquals(DiagnosticSeverity.Warning, diagnostic.getSeverity());
+        assertEquals("lint", diagnostic.getSource());
+        assertNotNull(diagnostic.getTags());
+        assertTrue(diagnostic.getTags().contains(DiagnosticTag.Unnecessary));
+    }
+
     private static DidChangeTextDocumentParams fullDocumentChange(String uri, int version, String text) {
         VersionedTextDocumentIdentifier identifier = new VersionedTextDocumentIdentifier(uri, version);
         TextDocumentContentChangeEvent change = new TextDocumentContentChangeEvent();
         change.setText(text);
         return new DidChangeTextDocumentParams(identifier, java.util.List.of(change));
+    }
+
+    private static final class RecordingServer extends InterlisLanguageServer {
+        private List<Diagnostic> diagnostics = List.of();
+
+        @Override
+        public void publishDiagnostics(String uri, List<Diagnostic> diagnostics) {
+            this.diagnostics = diagnostics != null ? List.copyOf(diagnostics) : List.of();
+        }
+
+        List<Diagnostic> getDiagnostics(String uri) {
+            return diagnostics;
+        }
     }
 }

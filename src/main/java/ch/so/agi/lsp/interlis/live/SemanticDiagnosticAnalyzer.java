@@ -9,6 +9,7 @@ import ch.so.agi.lsp.interlis.text.InterlisNameResolver;
 import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.DiagnosticRelatedInformation;
 import org.eclipse.lsp4j.DiagnosticSeverity;
+import org.eclipse.lsp4j.DiagnosticTag;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.Range;
 
@@ -25,8 +26,10 @@ import java.util.Iterator;
 public final class SemanticDiagnosticAnalyzer {
     public List<Diagnostic> analyze(DocumentSnapshot snapshot,
                                     ScopeGraph scopeGraph,
+                                    List<LiveToken> liveTokens,
                                     List<Diagnostic> syntaxDiagnostics,
                                     TransferDescription authoritativeTd,
+                                    List<ImportEntry> importEntries,
                                     Set<String> importedModelNames) {
         if (snapshot == null || scopeGraph == null) {
             return List.of();
@@ -35,6 +38,7 @@ public final class SemanticDiagnosticAnalyzer {
         List<Diagnostic> diagnostics = new ArrayList<>();
         diagnostics.addAll(duplicateDeclarationDiagnostics(snapshot, scopeGraph, syntaxDiagnostics));
         diagnostics.addAll(referenceDiagnostics(snapshot, scopeGraph, syntaxDiagnostics, authoritativeTd, importedModelNames));
+        diagnostics.addAll(unusedImportDiagnostics(scopeGraph, liveTokens, syntaxDiagnostics, authoritativeTd, importEntries, importedModelNames));
         return List.copyOf(diagnostics);
     }
 
@@ -115,6 +119,134 @@ public final class SemanticDiagnosticAnalyzer {
             }
         }
         return diagnostics;
+    }
+
+    private List<Diagnostic> unusedImportDiagnostics(ScopeGraph scopeGraph,
+                                                     List<LiveToken> liveTokens,
+                                                     List<Diagnostic> syntaxDiagnostics,
+                                                     TransferDescription authoritativeTd,
+                                                     List<ImportEntry> importEntries,
+                                                     Set<String> importedModelNames) {
+        if (importEntries == null || importEntries.isEmpty()) {
+            return List.of();
+        }
+
+        Set<String> normalizedImports = normalizeAll(importedModelNames);
+        Set<String> usedImports = collectUsedImportedModels(scopeGraph, liveTokens, syntaxDiagnostics, authoritativeTd, importedModelNames);
+        List<Diagnostic> diagnostics = new ArrayList<>();
+        for (ImportEntry entry : importEntries) {
+            if (entry == null || entry.name() == null || entry.name().isBlank() || entry.range() == null) {
+                continue;
+            }
+            if (!entry.terminated()) {
+                continue;
+            }
+            if (overlapsAny(entry.range(), syntaxDiagnostics)) {
+                continue;
+            }
+            String normalizedName = normalize(entry.name());
+            if (normalizedName.isBlank() || usedImports.contains(normalizedName)) {
+                continue;
+            }
+            if (entry.unqualified() && authoritativeTd == null) {
+                continue;
+            }
+            if (!normalizedImports.isEmpty() && !normalizedImports.contains(normalizedName)) {
+                continue;
+            }
+            Diagnostic diagnostic = new Diagnostic(
+                    entry.range(),
+                    "Imported model '" + entry.name() + "' is never used",
+                    DiagnosticSeverity.Warning,
+                    "live");
+            diagnostic.setTags(List.of(DiagnosticTag.Unnecessary));
+            diagnostics.add(diagnostic);
+        }
+        return diagnostics;
+    }
+
+    private Set<String> collectUsedImportedModels(ScopeGraph scopeGraph,
+                                                  List<LiveToken> liveTokens,
+                                                  List<Diagnostic> syntaxDiagnostics,
+                                                  TransferDescription authoritativeTd,
+                                                  Set<String> importedModelNames) {
+        Set<String> normalizedImports = normalizeAll(importedModelNames);
+        if (normalizedImports.isEmpty()) {
+            return Set.of();
+        }
+
+        LinkedHashSet<String> used = new LinkedHashSet<>();
+
+        for (ReferenceHit reference : scopeGraph.references()) {
+            if (reference == null || reference.range() == null || overlapsAny(reference.range(), syntaxDiagnostics)) {
+                continue;
+            }
+            String rawText = reference.rawText() != null ? reference.rawText().trim() : "";
+            if (rawText.isBlank()) {
+                continue;
+            }
+            if (rawText.indexOf('.') >= 0) {
+                String firstSegment = rawText.substring(0, rawText.indexOf('.'));
+                String normalizedFirst = normalize(firstSegment);
+                if (normalizedImports.contains(normalizedFirst)) {
+                    used.add(normalizedFirst);
+                    continue;
+                }
+            }
+            String resolvedImport = resolveImportedModelName(reference, authoritativeTd, importedModelNames);
+            if (resolvedImport != null) {
+                String normalizedResolved = normalize(resolvedImport);
+                if (normalizedImports.contains(normalizedResolved)) {
+                    used.add(normalizedResolved);
+                }
+            }
+        }
+
+        if (liveTokens != null) {
+            for (int i = 0; i + 1 < liveTokens.size(); i++) {
+                LiveToken current = liveTokens.get(i);
+                LiveToken next = liveTokens.get(i + 1);
+                if (current == null || next == null || current.text() == null) {
+                    continue;
+                }
+                if (next.tokenType() != ch.so.agi.lsp.interlis.antlr.InterlisLexer.DOT) {
+                    continue;
+                }
+                String normalizedCurrent = normalize(current.text());
+                if (normalizedImports.contains(normalizedCurrent)) {
+                    used.add(normalizedCurrent);
+                }
+            }
+        }
+
+        return used.isEmpty() ? Set.of() : Set.copyOf(used);
+    }
+
+    private String resolveImportedModelName(ReferenceHit reference,
+                                            TransferDescription authoritativeTd,
+                                            Set<String> importedModelNames) {
+        if (reference == null || authoritativeTd == null || importedModelNames == null || importedModelNames.isEmpty()) {
+            return null;
+        }
+        Element resolved = resolveImportedElement(
+                authoritativeTd,
+                importedModelNames,
+                normalizeAll(importedModelNames),
+                reference.rawText(),
+                reference.allowedKinds());
+        if (resolved == null) {
+            return null;
+        }
+        Model enclosingModel = InterlisNameResolver.findEnclosingModel(resolved);
+        if (enclosingModel == null || enclosingModel.getName() == null) {
+            return null;
+        }
+        for (String importName : importedModelNames) {
+            if (normalize(importName).equals(normalize(enclosingModel.getName()))) {
+                return importName;
+            }
+        }
+        return null;
     }
 
     private ResolutionState classifyReference(ScopeGraph scopeGraph,

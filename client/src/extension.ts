@@ -19,6 +19,32 @@ const TEXT_TAIL_PATTERN = /:\s*(?:MANDATORY\s+)?(?:TEXT|MTEXT)\s*$/i;
 const TEXT_LENGTH_VALUE_TAIL_PATTERN = /:\s*(?:MANDATORY\s+)?(?:TEXT|MTEXT)\s*\*\s*$/i;
 const NUMERIC_TAIL_PATTERN = /:\s*(?:MANDATORY\s+)?([-+]?[0-9]+(?:\.[0-9]+)?)\s*$/;
 const NUMERIC_UPPER_BOUND_TAIL_PATTERN = /:\s*(?:MANDATORY\s+)?[-+]?[0-9]+(?:\.[0-9]+)?\s*\.\.\s*$/;
+const CONTAINER_BODY_PREFIX_PATTERN = /^\s*[A-Za-z_][A-Za-z0-9_]*\s*$/;
+const TOPIC_BODY_AUTO_TRIGGER_LABELS = new Set<string>([
+  "CLASS",
+  "STRUCTURE",
+  "ASSOCIATION",
+  "VIEW",
+  "GRAPHIC",
+  "DOMAIN",
+  "UNIT",
+  "FUNCTION",
+  "CONTEXT",
+  "CONSTRAINTS",
+  "SIGN BASKET",
+  "REFSYSTEM BASKET",
+  "CLASS NAME = ... END NAME;",
+  "STRUCTURE NAME = ... END NAME;",
+  "ASSOCIATION NAME = ... END NAME;",
+  "VIEW NAME = ... END NAME;",
+  "GRAPHIC NAME = ... END NAME;",
+  "DOMAIN NAME = ...;",
+  "UNIT NAME = ...;",
+  "CONTEXT NAME = ...;",
+  "CONSTRAINTS OF ... = ... END;",
+  "SIGN BASKET ...",
+  "REFSYSTEM BASKET ..."
+]);
 let umlPanel: vscode.WebviewPanel | undefined;
 let htmlPanel: vscode.WebviewPanel | undefined;
 let lastDiagramSource: vscode.Uri | undefined;
@@ -28,7 +54,10 @@ type PendingCaret = { version: number; position: vscode.Position };
 
 const pendingCarets = new Map<string, PendingCaret>();
 const pendingTailSuggestTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const pendingSelectionTailSuggestTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const tailSuggestVersions = new Map<string, number>();
+const recentTailEditVersions = new Map<string, number>();
+const recentTailEditCleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 class TimestampedOutputChannel implements vscode.OutputChannel {
   readonly name: string;
@@ -292,6 +321,13 @@ export async function activate(context: vscode.ExtensionContext) {
       }
 
       scheduleTailSuggest(event);
+      scheduleContainerBodySuggest(event);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.window.onDidChangeTextEditorSelection(event => {
+      scheduleSelectionTailSuggest(event);
     })
   );
 
@@ -311,7 +347,18 @@ export async function activate(context: vscode.ExtensionContext) {
         clearTimeout(timer);
         pendingTailSuggestTimers.delete(key);
       }
+      const selectionTimer = pendingSelectionTailSuggestTimers.get(key);
+      if (selectionTimer) {
+        clearTimeout(selectionTimer);
+        pendingSelectionTailSuggestTimers.delete(key);
+      }
+      const cleanupTimer = recentTailEditCleanupTimers.get(key);
+      if (cleanupTimer) {
+        clearTimeout(cleanupTimer);
+        recentTailEditCleanupTimers.delete(key);
+      }
       tailSuggestVersions.delete(key);
+      recentTailEditVersions.delete(key);
     })
   );
 
@@ -579,6 +626,61 @@ function scheduleTailSuggest(event: vscode.TextDocumentChangeEvent): void {
     return;
   }
 
+  rememberRecentTailEdit(event.document);
+
+  const key = event.document.uri.toString();
+  const existing = pendingTailSuggestTimers.get(key);
+  if (existing) {
+    clearTimeout(existing);
+  }
+
+  const timer = setTimeout(() => {
+    const change = event.contentChanges[0];
+    if (!change) {
+      pendingTailSuggestTimers.delete(key);
+      return;
+    }
+    void maybeTriggerTailSuggest(event.document, change);
+    if (!shouldScheduleTailRetry(change)) {
+      pendingTailSuggestTimers.delete(key);
+      return;
+    }
+    const retryTimer = setTimeout(() => {
+      if (pendingTailSuggestTimers.get(key) === retryTimer) {
+        pendingTailSuggestTimers.delete(key);
+      }
+      void maybeTriggerTailSuggest(event.document, change);
+    }, 100);
+    pendingTailSuggestTimers.set(key, retryTimer);
+  }, 25);
+  pendingTailSuggestTimers.set(key, timer);
+}
+
+function scheduleSelectionTailSuggest(event: vscode.TextEditorSelectionChangeEvent): void {
+  if (!isEligibleSelectionTailSuggestEvent(event)) {
+    return;
+  }
+
+  const key = event.textEditor.document.uri.toString();
+  const existing = pendingSelectionTailSuggestTimers.get(key);
+  if (existing) {
+    clearTimeout(existing);
+  }
+
+  const timer = setTimeout(() => {
+    if (pendingSelectionTailSuggestTimers.get(key) === timer) {
+      pendingSelectionTailSuggestTimers.delete(key);
+    }
+    void maybeTriggerTailSuggestForEditor(event.textEditor);
+  }, 25);
+  pendingSelectionTailSuggestTimers.set(key, timer);
+}
+
+function scheduleContainerBodySuggest(event: vscode.TextDocumentChangeEvent): void {
+  if (!isEligibleContainerBodySuggestChange(event)) {
+    return;
+  }
+
   const key = event.document.uri.toString();
   const existing = pendingTailSuggestTimers.get(key);
   if (existing) {
@@ -587,7 +689,7 @@ function scheduleTailSuggest(event: vscode.TextDocumentChangeEvent): void {
 
   const timer = setTimeout(() => {
     pendingTailSuggestTimers.delete(key);
-    void maybeTriggerTailSuggest(event.document, event.contentChanges[0]?.text ?? "");
+    void maybeTriggerContainerBodySuggest(event.document, event.contentChanges[0]?.text ?? "");
   }, 25);
   pendingTailSuggestTimers.set(key, timer);
 }
@@ -607,7 +709,99 @@ function isEligibleTailSuggestChange(event: vscode.TextDocumentChangeEvent): boo
   return change.range.start.line === change.range.end.line;
 }
 
-async function maybeTriggerTailSuggest(document: vscode.TextDocument, insertedText: string): Promise<void> {
+function isEligibleContainerBodySuggestChange(event: vscode.TextDocumentChangeEvent): boolean {
+  if (!event || event.document.languageId !== "interlis" || event.contentChanges.length !== 1) {
+    return false;
+  }
+  const active = vscode.window.activeTextEditor;
+  if (!active || active.document.uri.toString() !== event.document.uri.toString()) {
+    return false;
+  }
+  const change = event.contentChanges[0];
+  if (!change || !change.text || /\r|\n/.test(change.text)) {
+    return false;
+  }
+  return change.range.start.line === change.range.end.line;
+}
+
+function isEligibleSelectionTailSuggestEvent(event: vscode.TextEditorSelectionChangeEvent): boolean {
+  if (!event || event.textEditor.document.languageId !== "interlis") {
+    return false;
+  }
+  const active = vscode.window.activeTextEditor;
+  if (!active || active.document.uri.toString() !== event.textEditor.document.uri.toString()) {
+    return false;
+  }
+  if (event.selections.length !== 1 || !event.selections[0]?.isEmpty) {
+    return false;
+  }
+  return recentTailEditVersions.get(event.textEditor.document.uri.toString()) === event.textEditor.document.version;
+}
+
+async function maybeTriggerTailSuggest(document: vscode.TextDocument,
+                                      change: vscode.TextDocumentContentChangeEvent): Promise<void> {
+  void change;
+  const active = vscode.window.activeTextEditor;
+  if (!active || active.document.uri.toString() !== document.uri.toString()) {
+    return;
+  }
+  await maybeTriggerTailSuggestForEditor(active);
+}
+
+async function maybeTriggerTailSuggestForEditor(editor: vscode.TextEditor): Promise<void> {
+  const document = editor.document;
+  const key = document.uri.toString();
+  const active = vscode.window.activeTextEditor;
+  if (!active || active.document.uri.toString() !== key || active.document.version !== document.version) {
+    return;
+  }
+  if (editor.selections.length !== 1 || !editor.selection.isEmpty) {
+    return;
+  }
+  if (tailSuggestVersions.get(key) === document.version) {
+    return;
+  }
+
+  const selection = editor.selection;
+  const line = document.lineAt(selection.active.line).text;
+  const prefix = line.slice(0, selection.active.character);
+  const suffix = line.slice(selection.active.character);
+  if (suffix.trim().length > 0) {
+    return;
+  }
+  const expectedLabels = expectedTailLabels(prefix);
+  if (!expectedLabels) {
+    return;
+  }
+  if (!await hasExpectedTailSuggestions(document, selection.active, expectedLabels)) {
+    return;
+  }
+
+  tailSuggestVersions.set(key, document.version);
+  await refreshSuggestWidget();
+}
+
+function rememberRecentTailEdit(document: vscode.TextDocument): void {
+  const key = document.uri.toString();
+  recentTailEditVersions.set(key, document.version);
+
+  const existing = recentTailEditCleanupTimers.get(key);
+  if (existing) {
+    clearTimeout(existing);
+  }
+
+  const timer = setTimeout(() => {
+    if (recentTailEditVersions.get(key) === document.version) {
+      recentTailEditVersions.delete(key);
+    }
+    if (recentTailEditCleanupTimers.get(key) === timer) {
+      recentTailEditCleanupTimers.delete(key);
+    }
+  }, 250);
+  recentTailEditCleanupTimers.set(key, timer);
+}
+
+async function maybeTriggerContainerBodySuggest(document: vscode.TextDocument, insertedText: string): Promise<void> {
   const key = document.uri.toString();
   const active = vscode.window.activeTextEditor;
   if (!active || active.document.uri.toString() !== key || active.document.version !== document.version) {
@@ -624,13 +818,10 @@ async function maybeTriggerTailSuggest(document: vscode.TextDocument, insertedTe
   const line = document.lineAt(selection.active.line).text;
   const prefix = line.slice(0, selection.active.character);
   const suffix = line.slice(selection.active.character);
-  if (suffix.trim().length > 0) {
+  if (!shouldTriggerContainerBodySuggest(prefix, suffix, insertedText)) {
     return;
   }
-  if (!shouldTriggerTextTail(prefix, insertedText)
-    && !shouldTriggerTextLengthValueTail(prefix, insertedText)
-    && !shouldTriggerNumericTail(prefix, insertedText)
-    && !shouldTriggerNumericUpperBoundTail(prefix, insertedText)) {
+  if (!await hasTopicBodySuggestions(document, selection.active)) {
     return;
   }
 
@@ -684,6 +875,85 @@ function shouldTriggerNumericUpperBoundTail(prefix: string, insertedText: string
   }
   const trimmed = insertedText.trim();
   return trimmed.endsWith(".");
+}
+
+function expectedTailLabels(prefix: string): string[] | null {
+  if (TEXT_LENGTH_VALUE_TAIL_PATTERN.test(prefix)) {
+    return ["<length>"];
+  }
+  if (TEXT_TAIL_PATTERN.test(prefix)) {
+    return ["*", "* <length>"];
+  }
+  if (NUMERIC_UPPER_BOUND_TAIL_PATTERN.test(prefix)) {
+    return ["<upper>"];
+  }
+  if (NUMERIC_TAIL_PATTERN.test(prefix)) {
+    return ["..", ".. <upper>"];
+  }
+  return null;
+}
+
+function shouldScheduleTailRetry(change: vscode.TextDocumentContentChangeEvent): boolean {
+  const insertedText = change?.text ?? "";
+  return insertedText.length > 1 || (change.rangeLength ?? 0) > 0;
+}
+
+function shouldTriggerContainerBodySuggest(prefix: string, suffix: string, insertedText: string): boolean {
+  if (!insertedText.trim() || /\r|\n/.test(insertedText)) {
+    return false;
+  }
+  if (suffix.trim().length > 0) {
+    return false;
+  }
+  return CONTAINER_BODY_PREFIX_PATTERN.test(prefix);
+}
+
+async function hasTopicBodySuggestions(document: vscode.TextDocument, position: vscode.Position): Promise<boolean> {
+  try {
+    const completions = await vscode.commands.executeCommand<vscode.CompletionList | vscode.CompletionItem[]>(
+      "vscode.executeCompletionItemProvider",
+      document.uri,
+      position
+    );
+    const items = Array.isArray(completions) ? completions : completions?.items ?? [];
+    return items.some(isTopicBodySuggestionItem);
+  } catch {
+    return false;
+  }
+}
+
+async function hasExpectedTailSuggestions(document: vscode.TextDocument,
+                                          position: vscode.Position,
+                                          expectedLabels: string[]): Promise<boolean> {
+  if (!expectedLabels || expectedLabels.length === 0) {
+    return false;
+  }
+  try {
+    const completions = await vscode.commands.executeCommand<vscode.CompletionList | vscode.CompletionItem[]>(
+      "vscode.executeCompletionItemProvider",
+      document.uri,
+      position
+    );
+    const items = Array.isArray(completions) ? completions : completions?.items ?? [];
+    const available = new Set(items.map(item => normalizeCompletionLabel(item.label).toUpperCase()));
+    return expectedLabels.every(label => available.has(label.toUpperCase()));
+  } catch {
+    return false;
+  }
+}
+
+function isTopicBodySuggestionItem(item: vscode.CompletionItem | undefined): boolean {
+  if (!item) {
+    return false;
+  }
+  if (item.kind !== vscode.CompletionItemKind.Keyword && item.kind !== vscode.CompletionItemKind.Snippet) {
+    return false;
+  }
+  return TOPIC_BODY_AUTO_TRIGGER_LABELS.has(normalizeCompletionLabel(item.label).toUpperCase());
+}
+
+function normalizeCompletionLabel(label: string | vscode.CompletionItemLabel): string {
+  return typeof label === "string" ? label : label.label;
 }
 
 async function ensurePanelVisible(preserveEditorFocus = true) {

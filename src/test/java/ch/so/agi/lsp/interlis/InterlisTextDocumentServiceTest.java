@@ -20,6 +20,8 @@ import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.CompletionList;
 import org.eclipse.lsp4j.CompletionParams;
 import org.eclipse.lsp4j.Diagnostic;
+import org.eclipse.lsp4j.DiagnosticSeverity;
+import org.eclipse.lsp4j.DiagnosticTag;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.SymbolKind;
 import org.eclipse.lsp4j.Position;
@@ -308,6 +310,61 @@ class InterlisTextDocumentServiceTest {
                                 && diagnostic.getMessage().contains("Unknown")
                                 && diagnostic.getMessage().contains("ImportedDomain")),
                 "Expected imported type to stay valid after whitespace-only dirty edits");
+    }
+
+    @Test
+    void didChangePublishesUnusedImportWarning(@TempDir Path tempDir) throws Exception {
+        Path baseFile = tempDir.resolve("BaseTypes.ili");
+        Files.writeString(baseFile, """
+                INTERLIS 2.3;
+                MODEL BaseTypes (en) AT "http://example.org" VERSION "2024-01-01" =
+                  DOMAIN ImportedDomain = TEXT*20;
+                END BaseTypes.
+                """);
+
+        Path usingFile = tempDir.resolve("UsingModel.ili");
+        String usingContent = """
+                INTERLIS 2.3;
+                MODEL UsingModel (en) AT "http://example.org" VERSION "2024-01-01" =
+                  IMPORTS BaseTypes;
+                  TOPIC T =
+                  END T;
+                END UsingModel.
+                """;
+        Files.writeString(usingFile, usingContent);
+
+        CompilationCache cache = new CompilationCache();
+        RecordingServer server = new RecordingServer();
+        ClientSettings settings = new ClientSettings();
+        settings.setModelRepositories(tempDir.toAbsolutePath().toString());
+        server.setClientSettings(settings);
+
+        AtomicInteger compileCount = new AtomicInteger();
+        InterlisTextDocumentService service = new InterlisTextDocumentService(
+                server,
+                cache,
+                (cfg, path) -> {
+                    compileCount.incrementAndGet();
+                    return Ili2cUtil.compile(cfg, path);
+                });
+
+        String uri = usingFile.toUri().toString();
+        service.didOpen(new DidOpenTextDocumentParams(new TextDocumentItem(uri, "interlis", 1, usingContent)));
+        assertEquals(1, compileCount.get(), "Expected didOpen to compile the authoritative snapshot once");
+
+        String dirty = usingContent + "\n";
+        service.didChange(fullDocumentChange(uri, 2, dirty));
+
+        waitForDiagnostics(server, uri, 2);
+
+        assertEquals(1, compileCount.get(), "Expected didChange live diagnostics to reuse the saved snapshot");
+        Diagnostic diagnostic = server.getDiagnostics(uri).stream()
+                .filter(item -> item.getMessage() != null && item.getMessage().contains("never used"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Expected unused-import warning"));
+        assertEquals(DiagnosticSeverity.Warning, diagnostic.getSeverity());
+        assertNotNull(diagnostic.getTags());
+        assertTrue(diagnostic.getTags().contains(DiagnosticTag.Unnecessary));
     }
 
     @Test
@@ -736,6 +793,97 @@ class InterlisTextDocumentServiceTest {
         assertEquals("LOG-2", cached.getLogText(), "Expected cache to hold the latest compilation outcome");
         assertEquals("LOG-2", cache.getSavedAttempt(modelPath.toString()).getLogText(),
                 "Expected saved-attempt cache to track the latest authoritative compile");
+    }
+
+    @Test
+    void didSavePublishesUnusedImportWarningAsLintAfterSuccessfulCompile(@TempDir Path tempDir) throws Exception {
+        Path baseFile = tempDir.resolve("BaseTypes.ili");
+        Files.writeString(baseFile, """
+                INTERLIS 2.3;
+                MODEL BaseTypes (en) AT "http://example.org" VERSION "2024-01-01" =
+                  DOMAIN ImportedDomain = TEXT*20;
+                END BaseTypes.
+                """);
+
+        Path usingFile = tempDir.resolve("UsingModel.ili");
+        String usingContent = """
+                INTERLIS 2.3;
+                MODEL UsingModel (en) AT "http://example.org" VERSION "2024-01-01" =
+                  IMPORTS BaseTypes;
+                  TOPIC T =
+                  END T;
+                END UsingModel.
+                """;
+        Files.writeString(usingFile, usingContent);
+
+        CompilationCache cache = new CompilationCache();
+        RecordingServer server = new RecordingServer();
+        ClientSettings settings = new ClientSettings();
+        settings.setModelRepositories(tempDir.toAbsolutePath().toString());
+        server.setClientSettings(settings);
+
+        InterlisTextDocumentService service = new InterlisTextDocumentService(
+                server,
+                cache,
+                Ili2cUtil::compile);
+
+        String uri = usingFile.toUri().toString();
+        service.didOpen(new DidOpenTextDocumentParams(new TextDocumentItem(uri, "interlis", 1, usingContent)));
+
+        DidSaveTextDocumentParams saveParams = new DidSaveTextDocumentParams();
+        saveParams.setTextDocument(new TextDocumentIdentifier(uri));
+        service.didSave(saveParams);
+
+        Diagnostic diagnostic = server.getDiagnostics(uri).stream()
+                .filter(item -> item.getMessage() != null && item.getMessage().contains("never used"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Expected unused-import warning after didSave"));
+        assertEquals(DiagnosticSeverity.Warning, diagnostic.getSeverity());
+        assertEquals("lint", diagnostic.getSource());
+        assertNotNull(diagnostic.getTags());
+        assertTrue(diagnostic.getTags().contains(DiagnosticTag.Unnecessary));
+    }
+
+    @Test
+    void didSaveDoesNotPublishUnusedImportWarningWhenCompileFails(@TempDir Path tempDir) throws Exception {
+        Path baseFile = tempDir.resolve("BaseTypes.ili");
+        Files.writeString(baseFile, """
+                INTERLIS 2.3;
+                MODEL BaseTypes (en) AT "http://example.org" VERSION "2024-01-01" =
+                  DOMAIN ImportedDomain = TEXT*20;
+                END BaseTypes.
+                """);
+
+        Path usingFile = tempDir.resolve("UsingModelBroken.ili");
+        String brokenContent = """
+                INTERLIS 2.3;
+                MODEL UsingModelBroken (en) AT "http://example.org" VERSION "2024-01-01" =
+                  IMPORTS BaseTypes;
+                  TOPIC T =
+                    CLASS C =
+                      attr :
+                    END C;
+                  END T;
+                END UsingModelBroken.
+                """;
+        Files.writeString(usingFile, brokenContent);
+
+        CompilationCache cache = new CompilationCache();
+        RecordingServer server = new RecordingServer();
+        ClientSettings settings = new ClientSettings();
+        settings.setModelRepositories(tempDir.toAbsolutePath().toString());
+        server.setClientSettings(settings);
+
+        InterlisTextDocumentService service = new InterlisTextDocumentService(
+                server,
+                cache,
+                Ili2cUtil::compile);
+
+        String uri = usingFile.toUri().toString();
+        service.didOpen(new DidOpenTextDocumentParams(new TextDocumentItem(uri, "interlis", 1, brokenContent)));
+
+        assertTrue(server.getDiagnostics(uri).stream()
+                .noneMatch(item -> item.getMessage() != null && item.getMessage().contains("never used")));
     }
 
     private static DidChangeTextDocumentParams fullDocumentChange(String uri, int version, String text) {

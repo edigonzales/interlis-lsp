@@ -16,6 +16,7 @@ vereinbarten Regeln fuer editorisch sinnvolle Vorschlaege beim Tippen.
 - Seltene Meta-Konstrukte werden zurueckhaltend exponiert.
 - `ATTRIBUTE OF ...` wird nicht als Default-Snippet angeboten.
 - Gleichrangige Grammatikalternativen muessen in der Completion symmetrisch behandelt werden, insbesondere `LIST` und `BAG`.
+- Container-Body-Completion wird v1 nur fuer `TOPIC` aktiviert und bleibt dort keyword-/snippet-first.
 
 ## Icon-Legende
 
@@ -67,6 +68,8 @@ Wie diese `CompletionItemKind`s konkret gerendert werden, entscheidet der Editor
 - In VS Code wird die Suggest-Box nach `TEXT` und `MTEXT` aktiv erneut geoeffnet, sobald der aktuelle Prefix auf diesen Tail-Slot endet; sie ist dabei nicht von einem nachfolgenden Leerschlag abhaengig.
 - In VS Code wird die Suggest-Box auch nach einem nackten `*` hinter `TEXT`/`MTEXT` erneut geoeffnet, damit die Länge direkt vorgeschlagen wird.
 - Damit alte Root-Vorschlaege nicht stehenbleiben, wird das Suggest-Widget bei diesen Tail-Uebergaengen sichtbar geschlossen und erneut geoeffnet.
+- In VS Code wird der Tail-Retrigger fuer `TEXT`/`MTEXT` und Inline-Numerics zusaetzlich ueber einen stillen Completion-Probe-Call bestaetigt.
+- Bei Replacement-/Accept-Faellen mit mehrzeichenigem Insert oder `rangeLength > 0` wird ein zweiter verzoegerter Retry eingeplant, damit Tail-Vorschlaege auch nach Completion-Accept stabil sichtbar werden.
 
 ## Inline Numeric Ranges
 
@@ -114,6 +117,18 @@ Wie diese `CompletionItemKind`s konkret gerendert werden, entscheidet der Editor
 - Die Live-Validierung darf lokale Vorwaertsverweise nicht ueber den Snapshot gruen rechnen.
 - Auf `didChange` wird dafuer kein neuer `ili2c`-Compile gestartet; verwendet wird nur der letzte erfolgreiche Snapshot.
 
+## Unused Imports
+
+- Unbenutzte `IMPORTS` werden live als `Warning` markiert, nicht als Error.
+- Die Warning wird nur auf dem Modellnamen im `IMPORTS`-Block gesetzt.
+- Der Diagnostic-Tag dafuer ist `Unnecessary`.
+- Nach erfolgreichem `didSave` oder explizitem Compile bleibt diese Warning ebenfalls sichtbar; sie wird dann als eigener persistenter Lint-Diagnostic neben den ili2c-Diagnostics publiziert.
+- Bei Compile-Fehlern wird keine zusaetzliche unused-import-Warning an die ili2c-Diagnostics angehaengt.
+- Qualifizierte Verwendungen wie `BaseModel.T.Type` zaehlen sofort als Nutzung.
+- Unqualifizierte Verwendungen zaehlen als Nutzung, wenn sie ueber den letzten autoritativen Snapshot auf ein Element des importierten Modells aufgeloest werden koennen.
+- Halbfertige qualifizierte Pfade wie `BaseModel.` oder `BaseModel.T.` zaehlen bereits konservativ als Nutzung.
+- Bei kaputten `IMPORTS`-Zeilen oder ueberlappender Syntaxdiagnostik wird keine unused-import-Warning erzeugt.
+
 ## Fehlendes Semikolon
 
 - Wenn nach einer Attributdefinition nur der Strichpunkt fehlt, wird die Typklausel markiert, nicht das nachfolgende `END`.
@@ -137,3 +152,32 @@ Wie diese `CompletionItemKind`s konkret gerendert werden, entscheidet der Editor
 - In `INTERLIS 2.3;` werden bevorzugt bzw. bei bekannter Metadatenlage ausschliesslich `ili2_3`-Modelle vorgeschlagen.
 - In `INTERLIS 2.4;` werden bevorzugt bzw. bei bekannter Metadatenlage ausschliesslich `ili2_4`-Modelle vorgeschlagen.
 - Wenn die Dokumentversion oder die Repository-Metadaten eines Modells nicht sicher auswertbar sind, wird das Modell nicht weggefiltert.
+
+## TOPIC-Body-Completion
+
+- Auf leerer oder nur mit einem Identifier-Prefix begonnenen Zeile innerhalb eines `TOPIC`-Bodies werden nur grammatikalisch erlaubte Topic-Starts angeboten.
+- Erlaubt sind in v1:
+  - `CLASS`
+  - `STRUCTURE`
+  - `ASSOCIATION`
+  - `VIEW`
+  - `GRAPHIC`
+  - `DOMAIN`
+  - `UNIT`
+  - `FUNCTION`
+  - `CONTEXT`
+  - `CONSTRAINTS`
+  - `SIGN BASKET`
+  - `REFSYSTEM BASKET`
+- Nicht angeboten werden dort insbesondere `TOPIC`, `MODEL`, `IMPORTS`, `LINE FORM` und andere model-only Starts.
+- `FUNCTION` ist in v1 keyword-only; die anderen haeufigen Topic-Starts duerfen zusaetzlich Starter-Snippets liefern.
+- Innerhalb von `CLASS`-, `STRUCTURE`- oder anderen nicht-Topic-Containern darf dieser Slot nicht feuern.
+- Topic-Body-Snippets richten ihre Block-Einrueckung an der semantischen Body-Einrueckung des `TOPIC`-Containers aus, nicht an der aktuellen Leerzeile.
+- Bei Block-Snippets wie `CLASS Name = ... END Name;` muessen `CLASS` und `END Name;` gleich eingerueckt sein.
+- Mehrzeilige Topic-Body-Snippets sind name-first: zuerst wird der Blockname editiert, danach der Body.
+- `END Name;` spiegelt den Namen ueber einen nicht-aktiven Mirror, nicht ueber einen zweiten aktiven Cursor.
+- Der Body dieser mehrzeiligen Block-Snippets liegt auf der finalen Cursor-Position `$0`, damit `Tab` den Namen direkt in den Body bestaetigt und die Snippet-Navigation dort endet.
+- Mehrzeilige Topic-Body-Block-Snippets werden mit `InsertTextMode.AsIs` ausgeliefert, damit der Editor ihre Einrueckung beim Einfuegen nicht nochmals automatisch umformt.
+- In VS Code darf `Enter` bei einem weiteren Snippet-Placeholder in INTERLIS-Dateien denselben Sprung wie `Tab` ausloesen; im Body verhaelt sich `Enter` danach wieder als normales Newline.
+- In VS Code gibt es im `TOPIC`-Body kein Auto-Popup direkt nach `Enter` auf leerer Zeile.
+- Das Auto-Popup erfolgt dort erst nach einem Identifier-Prefix wie `CL`, `STR` oder `SIG`; manuelle Completion auf leerer Topic-Zeile bleibt moeglich.

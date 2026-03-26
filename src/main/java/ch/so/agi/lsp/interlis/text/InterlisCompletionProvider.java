@@ -20,6 +20,7 @@ import org.eclipse.lsp4j.CompletionItemKind;
 import org.eclipse.lsp4j.CompletionList;
 import org.eclipse.lsp4j.CompletionParams;
 import org.eclipse.lsp4j.InsertTextFormat;
+import org.eclipse.lsp4j.InsertTextMode;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.TextEdit;
@@ -62,6 +63,7 @@ final class InterlisCompletionProvider {
             "(?i):\\s*(?:MANDATORY\\s+)?FORMAT\\s+(INTERLIS\\.(?:XMLDate|XMLDateTime|XMLTime))\\s*$");
     private static final Pattern ATTRIBUTE_ROOT_PATTERN = Pattern.compile(
             ":\\s*(?:MANDATORY\\s+)?([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*\\.?)?\\s*$");
+    private static final Pattern CONTAINER_BODY_ROOT_PATTERN = Pattern.compile("^\\s*([A-Za-z_][A-Za-z0-9_]*)?\\s*$");
 
     private static final Set<InterlisSymbolKind> ATTRIBUTE_TYPE_SYMBOL_KINDS =
             Set.of(InterlisSymbolKind.DOMAIN, InterlisSymbolKind.STRUCTURE);
@@ -79,6 +81,19 @@ final class InterlisCompletionProvider {
             "CLASS", "STRUCTURE", "ATTRIBUTE", "ANYSTRUCTURE");
     private static final List<String> PORTABLE_DATE_TIME_TYPES = List.of(
             "INTERLIS.XMLDate", "INTERLIS.XMLDateTime", "INTERLIS.XMLTime");
+    private static final List<String> TOPIC_BODY_KEYWORDS = List.of(
+            "CLASS",
+            "STRUCTURE",
+            "ASSOCIATION",
+            "VIEW",
+            "GRAPHIC",
+            "DOMAIN",
+            "UNIT",
+            "FUNCTION",
+            "CONTEXT",
+            "CONSTRAINTS",
+            "SIGN BASKET",
+            "REFSYSTEM BASKET");
 
     private static final int PRIORITY_TOKEN = 5;
     private static final int PRIORITY_LOCAL = 10;
@@ -159,6 +174,7 @@ final class InterlisCompletionProvider {
 
             TransferDescription td = needsTransferDescription(context) ? obtainTransferDescription(uri) : null;
             List<CompletionItem> items = switch (context.kind()) {
+                case CONTAINER_BODY_ROOT -> completeContainerBodyRoot(context, live);
                 case ATTRIBUTE_TYPE_ROOT -> completeAttributeTypeRoot(context, live, td, offset);
                 case TEXT_LENGTH_TAIL -> completeTextLengthTail(context);
                 case TEXT_LENGTH_VALUE_TAIL -> completeTextLengthValueTail(context);
@@ -202,6 +218,17 @@ final class InterlisCompletionProvider {
             return Collections.emptyList();
         }
         return List.of(item(container.name(), container.kind().toCompletionKind(), replaceRange, PRIORITY_LOCAL, typedPrefix));
+    }
+
+    private List<CompletionItem> completeContainerBodyRoot(CompletionContext context, LiveParseResult live) {
+        if (context.ownerKind() != InterlisSymbolKind.TOPIC) {
+            return Collections.emptyList();
+        }
+
+        List<CompletionItem> items = new ArrayList<>();
+        addKeywords(items, TOPIC_BODY_KEYWORDS, context, PRIORITY_KEYWORD);
+        addTopicBodySnippets(items, context, live);
+        return items;
     }
 
     private List<CompletionItem> completeAttributeTypeRoot(CompletionContext context,
@@ -612,16 +639,68 @@ final class InterlisCompletionProvider {
         addSnippet(items, "REFERENCE TO ...", "REFERENCE TO ${1:Target}", context, PRIORITY_SNIPPET, "REFERENCE");
     }
 
+    private void addTopicBodySnippets(List<CompletionItem> items,
+                                      CompletionContext context,
+                                      LiveParseResult live) {
+        String baseIndent = topicBodyIndentation(live, context);
+        String childIndent = baseIndent + "  ";
+        String firstLineIndent = topicBodySnippetFirstLineIndent(live, context, baseIndent);
+
+        addSnippet(items, "CLASS Name = ... END Name;",
+                firstLineIndent + "CLASS ${1:Name} =\n" + childIndent + "$0\n" + baseIndent + "END ${1/(.*)/$1/};",
+                context, PRIORITY_SNIPPET, "CLASS", InsertTextMode.AsIs);
+        addSnippet(items, "STRUCTURE Name = ... END Name;",
+                firstLineIndent + "STRUCTURE ${1:Name} =\n" + childIndent + "$0\n" + baseIndent + "END ${1/(.*)/$1/};",
+                context, PRIORITY_SNIPPET, "STRUCTURE", InsertTextMode.AsIs);
+        addSnippet(items, "ASSOCIATION Name = ... END Name;",
+                firstLineIndent + "ASSOCIATION ${1:Name} =\n" + childIndent + "$0\n" + baseIndent + "END ${1/(.*)/$1/};",
+                context, PRIORITY_SNIPPET, "ASSOCIATION", InsertTextMode.AsIs);
+        addSnippet(items, "VIEW Name = ... END Name;",
+                firstLineIndent + "VIEW ${1:Name} =\n" + childIndent + "$0\n" + baseIndent + "END ${1/(.*)/$1/};",
+                context, PRIORITY_SNIPPET, "VIEW", InsertTextMode.AsIs);
+        addSnippet(items, "GRAPHIC Name = ... END Name;",
+                firstLineIndent + "GRAPHIC ${1:Name} =\n" + childIndent + "$0\n" + baseIndent + "END ${1/(.*)/$1/};",
+                context, PRIORITY_SNIPPET, "GRAPHIC", InsertTextMode.AsIs);
+        addSnippet(items, "DOMAIN Name = ...;",
+                firstLineIndent + "DOMAIN ${1:Name} = ${2};",
+                context, PRIORITY_SNIPPET, "DOMAIN");
+        addSnippet(items, "UNIT Name = ...;",
+                firstLineIndent + "UNIT ${1:Name} = ${2};",
+                context, PRIORITY_SNIPPET, "UNIT");
+        addSnippet(items, "CONTEXT Name = ...;",
+                firstLineIndent + "CONTEXT ${1:Name} = ${2};",
+                context, PRIORITY_SNIPPET, "CONTEXT");
+        addSnippet(items, "CONSTRAINTS OF ... = ... END;",
+                firstLineIndent + "CONSTRAINTS OF ${1:Class} =\n" + childIndent + "$0\n" + baseIndent + "END;",
+                context, PRIORITY_SNIPPET, "CONSTRAINTS", InsertTextMode.AsIs);
+        addSnippet(items, "SIGN BASKET ...",
+                firstLineIndent + "SIGN BASKET ${1:Name} ~ ${2:Topic};",
+                context, PRIORITY_SNIPPET, "SIGN BASKET");
+        addSnippet(items, "REFSYSTEM BASKET ...",
+                firstLineIndent + "REFSYSTEM BASKET ${1:Name} ~ ${2:Topic};",
+                context, PRIORITY_SNIPPET, "REFSYSTEM BASKET");
+    }
+
     private void addSnippet(List<CompletionItem> items,
                             String label,
                             String snippetText,
                             CompletionContext context,
                             int priority,
                             String filterText) {
+        addSnippet(items, label, snippetText, context, priority, filterText, null);
+    }
+
+    private void addSnippet(List<CompletionItem> items,
+                            String label,
+                            String snippetText,
+                            CompletionContext context,
+                            int priority,
+                            String filterText,
+                            InsertTextMode insertTextMode) {
         if (!startsWithIgnoreCase(filterText, context.prefix())) {
             return;
         }
-        items.add(snippet(label, snippetText, context.replaceRange(), priority, context.prefix(), filterText));
+        items.add(snippet(label, snippetText, context.replaceRange(), priority, context.prefix(), filterText, insertTextMode));
     }
 
     private CompletionContext findLiveContext(LiveParseResult live, Position position) {
@@ -644,7 +723,7 @@ final class InterlisCompletionProvider {
     private boolean isPlausibleCompletionContext(String text, int caretOffset) {
         String lineText = text.substring(lineStartOffset(text, caretOffset), Math.min(caretOffset, text.length()));
         if (lineText.isBlank()) {
-            return false;
+            return true;
         }
         if (lineText.indexOf(':') >= 0) {
             return true;
@@ -655,7 +734,10 @@ final class InterlisCompletionProvider {
         if (EXTENDS_CONTEXT_PATTERN.matcher(lineText).find()) {
             return true;
         }
-        return lineText.endsWith(".");
+        if (lineText.endsWith(".")) {
+            return true;
+        }
+        return CONTAINER_BODY_ROOT_PATTERN.matcher(lineText).matches();
     }
 
     private CompletionContext detectHeuristicContext(String text,
@@ -831,6 +913,24 @@ final class InterlisCompletionProvider {
                     ATTRIBUTE_TYPE_SYMBOL_KINDS);
         }
 
+        Matcher containerBodyMatcher = CONTAINER_BODY_ROOT_PATTERN.matcher(lineText);
+        if (containerBodyMatcher.matches() && scopeOwner != null && scopeOwner.kind() == InterlisSymbolKind.TOPIC) {
+            String prefix = groupValue(containerBodyMatcher, 1);
+            int replaceStart = lineStart;
+            if (prefix != null && !prefix.isBlank()) {
+                replaceStart = lineStart + containerBodyMatcher.start(1);
+            }
+            return new CompletionContext(
+                    CompletionContext.Kind.CONTAINER_BODY_ROOT,
+                    prefix != null ? prefix : "",
+                    prefix != null ? prefix : "",
+                    null,
+                    new Range(DocumentTracker.positionAt(text, replaceStart), DocumentTracker.positionAt(text, caretOffset)),
+                    scopeOwner.id(),
+                    null,
+                    scopeOwner.kind());
+        }
+
         return null;
     }
 
@@ -886,6 +986,7 @@ final class InterlisCompletionProvider {
             return true;
         }
         return switch (context.kind()) {
+            case CONTAINER_BODY_ROOT -> false;
             case QUALIFIED_MEMBER -> true;
             case ATTRIBUTE_TYPE_ROOT, FORMAT_TYPE_TARGET, COLLECTION_OF_TARGET, REFERENCE_TARGET, EXTENDS_TARGET ->
                     context.prefix() != null && !context.prefix().isBlank();
@@ -893,6 +994,67 @@ final class InterlisCompletionProvider {
                     INLINE_NUMERIC_RANGE_TAIL, INLINE_NUMERIC_UPPER_BOUND_TAIL, FORMAT_BOUNDS_TAIL,
                     COLLECTION_POST_KEYWORD, REFERENCE_POST_KEYWORD, META_TYPE_TAIL, NONE -> false;
         };
+    }
+
+    private String topicBodyIndentation(LiveParseResult live, CompletionContext context) {
+        String containerIndent = containerIndentation(live, context);
+        if (containerIndent != null) {
+            return containerIndent + "  ";
+        }
+        return lineIndentationAt(live, context);
+    }
+
+    private String topicBodySnippetFirstLineIndent(LiveParseResult live,
+                                                   CompletionContext context,
+                                                   String baseIndent) {
+        if (context == null || context.replaceRange() == null || context.replaceRange().getStart() == null) {
+            return "";
+        }
+        return context.replaceRange().getStart().getCharacter() == 0 ? baseIndent : "";
+    }
+
+    private String containerIndentation(LiveParseResult live, CompletionContext context) {
+        if (live == null || context == null || context.scopeOwnerId() == null || live.scopeGraph() == null) {
+            return null;
+        }
+        LiveSymbol owner = live.scopeGraph().symbol(context.scopeOwnerId());
+        if (owner == null) {
+            return null;
+        }
+        Range anchor = owner.fullRange() != null ? owner.fullRange() : owner.nameRange();
+        if (anchor == null || anchor.getStart() == null || live.snapshot() == null) {
+            return null;
+        }
+        return indentationAtPosition(live.snapshot().text(), anchor.getStart());
+    }
+
+    private String lineIndentationAt(LiveParseResult live, CompletionContext context) {
+        if (live == null || live.snapshot() == null || context == null || context.replaceRange() == null) {
+            return "";
+        }
+        Position start = context.replaceRange().getStart();
+        return indentationAtPosition(live.snapshot().text(), start);
+    }
+
+    private String indentationAtPosition(String text, Position start) {
+        if (text == null || start == null) {
+            return "";
+        }
+        int lineOffset = DocumentTracker.toOffset(text, new Position(start.getLine(), 0));
+        int caretOffset = DocumentTracker.toOffset(text, start);
+        if (lineOffset < 0 || caretOffset < lineOffset || caretOffset > text.length()) {
+            return "";
+        }
+        String linePrefix = text.substring(lineOffset, caretOffset);
+        int indentLength = 0;
+        while (indentLength < linePrefix.length()) {
+            char ch = linePrefix.charAt(indentLength);
+            if (ch != ' ' && ch != '\t') {
+                break;
+            }
+            indentLength++;
+        }
+        return linePrefix.substring(0, indentLength);
     }
 
     private TransferDescription obtainTransferDescription(String uri) {
@@ -955,9 +1117,22 @@ final class InterlisCompletionProvider {
                                    int priority,
                                    String prefix,
                                    String filterText) {
+        return snippet(label, snippetText, range, priority, prefix, filterText, null);
+    }
+
+    private CompletionItem snippet(String label,
+                                   String snippetText,
+                                   Range range,
+                                   int priority,
+                                   String prefix,
+                                   String filterText,
+                                   InsertTextMode insertTextMode) {
         CompletionItem item = new CompletionItem(label);
         item.setKind(CompletionItemKind.Snippet);
         item.setInsertTextFormat(InsertTextFormat.Snippet);
+        if (insertTextMode != null) {
+            item.setInsertTextMode(insertTextMode);
+        }
         item.setSortText(sortText(priority, filterText, prefix, label));
         item.setFilterText(filterText);
         if (range != null) {

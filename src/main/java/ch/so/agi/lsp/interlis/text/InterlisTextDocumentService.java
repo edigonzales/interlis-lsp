@@ -311,7 +311,7 @@ public class InterlisTextDocumentService implements TextDocumentService {
             }
             recordAuthoritativeOutcome(pathOrUri, outcome);
 
-            server.publishDiagnostics(documentUri, DiagnosticsMapper.toDiagnostics(outcome.getMessages()));
+            server.publishDiagnostics(documentUri, buildCompilePublishDiagnostics(documentUri, outcome));
             server.logToClient(outcome.getLogText());
             server.notifyCompileFinished(documentUri, outcome.getTransferDescription() != null);
         } catch (Exception ex) {
@@ -468,5 +468,87 @@ public class InterlisTextDocumentService implements TextDocumentService {
             return;
         }
         server.publishDiagnostics(snapshot.uri(), result.diagnostics());
+    }
+
+    public List<Diagnostic> buildCompilePublishDiagnostics(String uriOrPath, Ili2cUtil.CompilationOutcome outcome) {
+        List<Diagnostic> diagnostics = new ArrayList<>(DiagnosticsMapper.toDiagnostics(
+                outcome != null ? outcome.getMessages() : Collections.emptyList()));
+        diagnostics.addAll(savedLintDiagnostics(uriOrPath, outcome));
+        return List.copyOf(diagnostics);
+    }
+
+    private List<Diagnostic> savedLintDiagnostics(String uriOrPath, Ili2cUtil.CompilationOutcome outcome) {
+        if (outcome == null || outcome.getTransferDescription() == null) {
+            return List.of();
+        }
+
+        DocumentSnapshot snapshot = savedSnapshot(uriOrPath);
+        if (snapshot == null) {
+            return List.of();
+        }
+
+        try {
+            LiveParseResult result = liveAnalysis.analyze(snapshot, outcome.getTransferDescription());
+            if (result == null || result.diagnostics() == null || result.diagnostics().isEmpty()) {
+                return List.of();
+            }
+
+            List<Diagnostic> diagnostics = new ArrayList<>();
+            for (Diagnostic diagnostic : result.diagnostics()) {
+                if (!isUnusedImportLintDiagnostic(diagnostic)) {
+                    continue;
+                }
+                Diagnostic copy = new Diagnostic(
+                        diagnostic.getRange(),
+                        diagnostic.getMessage(),
+                        diagnostic.getSeverity(),
+                        "lint");
+                copy.setTags(diagnostic.getTags());
+                copy.setCode(diagnostic.getCode());
+                copy.setCodeDescription(diagnostic.getCodeDescription());
+                copy.setRelatedInformation(diagnostic.getRelatedInformation());
+                copy.setData(diagnostic.getData());
+                diagnostics.add(copy);
+            }
+            return diagnostics.isEmpty() ? List.of() : List.copyOf(diagnostics);
+        } catch (Exception ex) {
+            LOG.debug("Unable to derive saved lint diagnostics for {}", uriOrPath, ex);
+            return List.of();
+        }
+    }
+
+    private DocumentSnapshot savedSnapshot(String uriOrPath) {
+        String documentUri = toDocumentUriIfPossible(uriOrPath);
+        if (documentUri != null && documents.isTracked(documentUri) && !documents.isDirty(documentUri)) {
+            DocumentSnapshot snapshot = currentSnapshot(documentUri);
+            if (snapshot != null) {
+                return snapshot;
+            }
+        }
+
+        try {
+            String documentText = readDocument(uriOrPath);
+            return new DocumentSnapshot(
+                    documentUri != null ? documentUri : uriOrPath,
+                    toFilesystemPathIfPossible(uriOrPath),
+                    documentText,
+                    documents.getVersion(documentUri));
+        } catch (Exception ex) {
+            LOG.debug("Unable to read saved snapshot for {}", uriOrPath, ex);
+            return null;
+        }
+    }
+
+    private static boolean isUnusedImportLintDiagnostic(Diagnostic diagnostic) {
+        if (diagnostic == null || diagnostic.getSeverity() != DiagnosticSeverity.Warning) {
+            return false;
+        }
+        if (diagnostic.getTags() == null || !diagnostic.getTags().contains(DiagnosticTag.Unnecessary)) {
+            return false;
+        }
+        String message = diagnostic.getMessage();
+        return message != null
+                && message.contains("Imported model '")
+                && message.contains("' is never used");
     }
 }

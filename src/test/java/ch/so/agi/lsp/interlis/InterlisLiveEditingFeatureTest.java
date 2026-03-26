@@ -14,6 +14,7 @@ import org.eclipse.lsp4j.PrepareRenameParams;
 import org.eclipse.lsp4j.ReferenceContext;
 import org.eclipse.lsp4j.ReferenceParams;
 import org.eclipse.lsp4j.RenameParams;
+import org.eclipse.lsp4j.InsertTextMode;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.TextDocumentItem;
 import org.eclipse.lsp4j.TextEdit;
@@ -512,6 +513,174 @@ class InterlisLiveEditingFeatureTest {
         assertFalse(labels.contains("LocalDomain"));
         assertTrue(labels.contains("FORMAT"));
         assertFalse(labels.contains("MANDATORY"));
+    }
+
+    @Test
+    void completionOnBlankTopicLineOffersOnlyAllowedTopicStarts(@TempDir Path tempDir) throws Exception {
+        Path file = tempDir.resolve("TopicBodyCompletion.ili");
+        String valid = """
+                INTERLIS 2.3;
+                MODEL TopicBodyCompletion (en) AT "http://example.org" VERSION "2024-01-01" =
+                  TOPIC T =
+                    
+                  END T;
+                END TopicBodyCompletion.
+                """;
+        Files.writeString(file, valid);
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        server.setClientSettings(new ClientSettings());
+        InterlisTextDocumentService service = server.getInterlisTextDocumentService();
+
+        String uri = file.toUri().toString();
+        service.didOpen(new DidOpenTextDocumentParams(new TextDocumentItem(uri, "interlis", 1, valid)));
+
+        int offset = valid.indexOf("  END T;") - 1;
+        List<CompletionItem> items = completionItems(service, uri, valid, offset);
+        List<String> labels = items.stream().map(CompletionItem::getLabel).toList();
+
+        assertTrue(labels.contains("CLASS"));
+        assertTrue(labels.contains("STRUCTURE"));
+        assertTrue(labels.contains("ASSOCIATION"));
+        assertTrue(labels.contains("VIEW"));
+        assertTrue(labels.contains("GRAPHIC"));
+        assertTrue(labels.contains("DOMAIN"));
+        assertTrue(labels.contains("UNIT"));
+        assertTrue(labels.contains("FUNCTION"));
+        assertTrue(labels.contains("CONTEXT"));
+        assertTrue(labels.contains("CONSTRAINTS"));
+        assertTrue(labels.contains("SIGN BASKET"));
+        assertTrue(labels.contains("REFSYSTEM BASKET"));
+        assertFalse(labels.contains("TOPIC"));
+        assertFalse(labels.contains("MODEL"));
+        assertFalse(labels.contains("IMPORTS"));
+        assertFalse(labels.contains("LINE FORM"));
+
+        assertEquals(InsertTextFormat.Snippet, findItemByLabel(items, "CLASS Name = ... END Name;").getInsertTextFormat());
+        assertEquals(InsertTextFormat.Snippet, findItemByLabel(items, "STRUCTURE Name = ... END Name;").getInsertTextFormat());
+        assertEquals(InsertTextFormat.Snippet, findItemByLabel(items, "SIGN BASKET ...").getInsertTextFormat());
+        assertNull(findItemByLabel(items, "FUNCTION Name = ..."));
+    }
+
+    @Test
+    void completionOnPrefixedTopicLineFiltersAllowedStarts(@TempDir Path tempDir) throws Exception {
+        Path file = tempDir.resolve("TopicBodyPrefixCompletion.ili");
+        String valid = """
+                INTERLIS 2.3;
+                MODEL TopicBodyPrefixCompletion (en) AT "http://example.org" VERSION "2024-01-01" =
+                  TOPIC T =
+                    CL
+                  END T;
+                END TopicBodyPrefixCompletion.
+                """;
+        Files.writeString(file, valid);
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        server.setClientSettings(new ClientSettings());
+        InterlisTextDocumentService service = server.getInterlisTextDocumentService();
+
+        String uri = file.toUri().toString();
+        service.didOpen(new DidOpenTextDocumentParams(new TextDocumentItem(uri, "interlis", 1, valid)));
+
+        int offset = valid.indexOf("    CL") + "    CL".length();
+        List<String> labels = completionLabels(service, uri, valid, offset);
+        assertTrue(labels.contains("CLASS"));
+        assertFalse(labels.contains("STRUCTURE"));
+
+        String sigDirty = valid.replace("    CL", "    SIG");
+        service.didChange(fullDocumentChange(uri, 2, sigDirty));
+        int sigOffset = sigDirty.indexOf("    SIG") + "    SIG".length();
+        List<String> sigLabels = completionLabels(service, uri, sigDirty, sigOffset);
+        assertTrue(sigLabels.contains("SIGN BASKET"));
+        assertFalse(sigLabels.contains("CLASS"));
+    }
+
+    @Test
+    void topicBodySnippetUsesTopicBodyIndentOnBlankLine(@TempDir Path tempDir) throws Exception {
+        Path file = tempDir.resolve("TopicBodySnippetIndent.ili");
+        String valid = """
+                INTERLIS 2.3;
+                MODEL TopicBodySnippetIndent (en) AT "http://example.org" VERSION "2024-01-01" =
+                  TOPIC T =
+                    
+                  END T;
+                END TopicBodySnippetIndent.
+                """;
+        Files.writeString(file, valid);
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        server.setClientSettings(new ClientSettings());
+        InterlisTextDocumentService service = server.getInterlisTextDocumentService();
+
+        String uri = file.toUri().toString();
+        service.didOpen(new DidOpenTextDocumentParams(new TextDocumentItem(uri, "interlis", 1, valid)));
+
+        int offset = valid.indexOf("  END T;") - 1;
+        List<CompletionItem> items = completionItems(service, uri, valid, offset);
+        CompletionItem classSnippet = findItemByLabel(items, "CLASS Name = ... END Name;");
+
+        assertNotNull(classSnippet);
+        assertEquals(0, classSnippet.getTextEdit().getLeft().getRange().getStart().getCharacter());
+        assertEquals(InsertTextMode.AsIs, classSnippet.getInsertTextMode());
+        assertEquals("    CLASS ${1:Name} =\n      $0\n    END ${1/(.*)/$1/};", newText(classSnippet));
+    }
+
+    @Test
+    void topicBodySnippetIgnoresOverIndentedBlankLine(@TempDir Path tempDir) throws Exception {
+        Path file = tempDir.resolve("TopicBodySnippetOverIndent.ili");
+        String valid = """
+                INTERLIS 2.3;
+                MODEL TopicBodySnippetOverIndent (en) AT "http://example.org" VERSION "2024-01-01" =
+                  TOPIC T =
+                          
+                  END T;
+                END TopicBodySnippetOverIndent.
+                """;
+        Files.writeString(file, valid);
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        server.setClientSettings(new ClientSettings());
+        InterlisTextDocumentService service = server.getInterlisTextDocumentService();
+
+        String uri = file.toUri().toString();
+        service.didOpen(new DidOpenTextDocumentParams(new TextDocumentItem(uri, "interlis", 1, valid)));
+
+        int offset = valid.indexOf("  END T;") - 1;
+        List<CompletionItem> items = completionItems(service, uri, valid, offset);
+        assertEquals("    CLASS ${1:Name} =\n      $0\n    END ${1/(.*)/$1/};",
+                newText(findItemByLabel(items, "CLASS Name = ... END Name;")));
+        assertEquals(InsertTextMode.AsIs, findItemByLabel(items, "CLASS Name = ... END Name;").getInsertTextMode());
+        assertEquals("    CONSTRAINTS OF ${1:Class} =\n      $0\n    END;",
+                newText(findItemByLabel(items, "CONSTRAINTS OF ... = ... END;")));
+        assertEquals(InsertTextMode.AsIs, findItemByLabel(items, "CONSTRAINTS OF ... = ... END;").getInsertTextMode());
+        assertNull(findItemByLabel(items, "DOMAIN Name = ...;").getInsertTextMode());
+    }
+
+    @Test
+    void completionInsideClassBodyDoesNotUseTopicBodySlot(@TempDir Path tempDir) throws Exception {
+        Path file = tempDir.resolve("TopicBodyIsolation.ili");
+        String valid = """
+                INTERLIS 2.3;
+                MODEL TopicBodyIsolation (en) AT "http://example.org" VERSION "2024-01-01" =
+                  TOPIC T =
+                    CLASS C =
+                      
+                    END C;
+                  END T;
+                END TopicBodyIsolation.
+                """;
+        Files.writeString(file, valid);
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        server.setClientSettings(new ClientSettings());
+        InterlisTextDocumentService service = server.getInterlisTextDocumentService();
+
+        String uri = file.toUri().toString();
+        service.didOpen(new DidOpenTextDocumentParams(new TextDocumentItem(uri, "interlis", 1, valid)));
+
+        int offset = valid.indexOf("    END C;") - 1;
+        List<CompletionItem> items = completionItems(service, uri, valid, offset);
+        assertTrue(items.isEmpty(), "Expected no topic-body completion inside class body");
     }
 
     @Test

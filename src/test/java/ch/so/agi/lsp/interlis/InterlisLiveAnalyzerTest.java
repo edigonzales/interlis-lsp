@@ -8,6 +8,8 @@ import ch.so.agi.lsp.interlis.live.InterlisLiveAnalyzer;
 import ch.so.agi.lsp.interlis.live.LiveParseResult;
 import ch.so.agi.lsp.interlis.text.DocumentTracker;
 import org.eclipse.lsp4j.Diagnostic;
+import org.eclipse.lsp4j.DiagnosticSeverity;
+import org.eclipse.lsp4j.DiagnosticTag;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
 import org.junit.jupiter.api.Test;
@@ -447,6 +449,164 @@ class InterlisLiveAnalyzerTest {
                                 && diagnostic.getMessage().contains("Unknown")
                                 && diagnostic.getMessage().contains("ImportedDomain")),
                 "Expected imported names to stay valid in dirty mode but got: " + result.diagnostics());
+    }
+
+    @Test
+    void unusedImportProducesWarningDiagnosticWithUnnecessaryTag(@TempDir Path tempDir) throws Exception {
+        Path baseFile = tempDir.resolve("BaseTypes.ili");
+        Files.writeString(baseFile, """
+                INTERLIS 2.3;
+                MODEL BaseTypes (en) AT "http://example.org" VERSION "2024-01-01" =
+                  DOMAIN ImportedDomain = TEXT*20;
+                END BaseTypes.
+                """);
+
+        Path usingFile = tempDir.resolve("UsingModel.ili");
+        String usingContent = """
+                INTERLIS 2.3;
+                MODEL UsingModel (en) AT "http://example.org" VERSION "2024-01-01" =
+                  IMPORTS BaseTypes;
+                  TOPIC T =
+                  END T;
+                END UsingModel.
+                """;
+        Files.writeString(usingFile, usingContent);
+
+        TransferDescription authoritativeTd = compile(tempDir, usingFile);
+        String dirty = usingContent + "\n";
+
+        LiveParseResult result = analyze(usingFile.toUri().toString(), usingFile.toString(), dirty, authoritativeTd);
+
+        Diagnostic diagnostic = result.diagnostics().stream()
+                .filter(item -> item.getMessage() != null && item.getMessage().contains("never used"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Expected unused-import warning"));
+        assertEquals(DiagnosticSeverity.Warning, diagnostic.getSeverity());
+        assertNotNull(diagnostic.getTags());
+        assertTrue(diagnostic.getTags().contains(DiagnosticTag.Unnecessary));
+        assertTrue(sameRange(range(usingContent, "BaseTypes"), diagnostic.getRange()));
+    }
+
+    @Test
+    void qualifiedImportedUseSuppressesUnusedImportWarning(@TempDir Path tempDir) throws Exception {
+        Path baseFile = tempDir.resolve("BaseTypes.ili");
+        Files.writeString(baseFile, """
+                INTERLIS 2.3;
+                MODEL BaseTypes (en) AT "http://example.org" VERSION "2024-01-01" =
+                  TOPIC T =
+                    DOMAIN ImportedDomain = TEXT*20;
+                  END T;
+                END BaseTypes.
+                """);
+
+        Path usingFile = tempDir.resolve("UsingModel.ili");
+        String usingContent = """
+                INTERLIS 2.3;
+                MODEL UsingModel (en) AT "http://example.org" VERSION "2024-01-01" =
+                  IMPORTS BaseTypes;
+                  TOPIC T =
+                    CLASS C =
+                      attr : BaseTypes.T.ImportedDomain;
+                    END C;
+                  END T;
+                END UsingModel.
+                """;
+        Files.writeString(usingFile, usingContent);
+
+        TransferDescription authoritativeTd = compile(tempDir, usingFile);
+        String dirty = usingContent.replace("attr : BaseTypes.T.ImportedDomain;", "attr  : BaseTypes.T.ImportedDomain;");
+
+        LiveParseResult result = analyze(usingFile.toUri().toString(), usingFile.toString(), dirty, authoritativeTd);
+
+        assertTrue(result.diagnostics().stream()
+                        .noneMatch(item -> item.getMessage() != null && item.getMessage().contains("never used")),
+                "Expected qualified imported usage to suppress unused-import warnings but got: " + result.diagnostics());
+    }
+
+    @Test
+    void unqualifiedImportedUseSuppressesUnusedImportWarning(@TempDir Path tempDir) throws Exception {
+        Path baseFile = tempDir.resolve("BaseTypes.ili");
+        Files.writeString(baseFile, """
+                INTERLIS 2.3;
+                MODEL BaseTypes (en) AT "http://example.org" VERSION "2024-01-01" =
+                  DOMAIN ImportedDomain = TEXT*20;
+                END BaseTypes.
+                """);
+
+        Path usingFile = tempDir.resolve("UsingModel.ili");
+        String usingContent = """
+                INTERLIS 2.3;
+                MODEL UsingModel (en) AT "http://example.org" VERSION "2024-01-01" =
+                  IMPORTS UNQUALIFIED BaseTypes;
+                  TOPIC T =
+                    CLASS C =
+                      attr : ImportedDomain;
+                    END C;
+                  END T;
+                END UsingModel.
+                """;
+        Files.writeString(usingFile, usingContent);
+
+        TransferDescription authoritativeTd = compile(tempDir, usingFile);
+        String dirty = usingContent.replace("attr : ImportedDomain;", "attr  : ImportedDomain;");
+
+        LiveParseResult result = analyze(usingFile.toUri().toString(), usingFile.toString(), dirty, authoritativeTd);
+
+        assertTrue(result.diagnostics().stream()
+                        .noneMatch(item -> item.getMessage() != null && item.getMessage().contains("never used")),
+                "Expected unqualified imported usage to suppress unused-import warnings but got: " + result.diagnostics());
+    }
+
+    @Test
+    void halfFinishedQualifiedImportedUseSuppressesUnusedImportWarning(@TempDir Path tempDir) throws Exception {
+        Path baseFile = tempDir.resolve("BaseTypes.ili");
+        Files.writeString(baseFile, """
+                INTERLIS 2.3;
+                MODEL BaseTypes (en) AT "http://example.org" VERSION "2024-01-01" =
+                  DOMAIN ImportedDomain = TEXT*20;
+                END BaseTypes.
+                """);
+
+        Path usingFile = tempDir.resolve("UsingModel.ili");
+        String usingContent = """
+                INTERLIS 2.3;
+                MODEL UsingModel (en) AT "http://example.org" VERSION "2024-01-01" =
+                  IMPORTS BaseTypes;
+                  TOPIC T =
+                    CLASS C =
+                      attr : BaseTypes.ImportedDomain;
+                    END C;
+                  END T;
+                END UsingModel.
+                """;
+        Files.writeString(usingFile, usingContent);
+
+        TransferDescription authoritativeTd = compile(tempDir, usingFile);
+        String dirty = usingContent.replace("BaseTypes.ImportedDomain;", "BaseTypes.");
+
+        LiveParseResult result = analyze(usingFile.toUri().toString(), usingFile.toString(), dirty, authoritativeTd);
+
+        assertTrue(result.diagnostics().stream()
+                        .noneMatch(item -> item.getMessage() != null && item.getMessage().contains("never used")),
+                "Expected partial qualified usage to suppress unused-import warnings but got: " + result.diagnostics());
+    }
+
+    @Test
+    void brokenImportClauseDoesNotProduceUnusedImportWarning() {
+        String text = """
+                INTERLIS 2.3;
+                MODEL BrokenImport (en) AT "http://example.org" VERSION "2024-01-01" =
+                  IMPORTS BaseTypes
+                  TOPIC T =
+                  END T;
+                END BrokenImport.
+                """;
+
+        LiveParseResult result = analyze("file:///BrokenImport.ili", text);
+
+        assertTrue(result.diagnostics().stream()
+                        .noneMatch(item -> item.getMessage() != null && item.getMessage().contains("never used")),
+                "Expected broken IMPORTS clause to suppress unused-import warnings but got: " + result.diagnostics());
     }
 
     @Test

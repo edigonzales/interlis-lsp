@@ -13,6 +13,7 @@ public record LiveParseResult(DocumentSnapshot snapshot,
                               List<RawSyntaxError> rawSyntaxErrors,
                               List<CompletionContext> completionContexts,
                               Set<SymbolId> formattedDomainIds,
+                              List<ImportEntry> importEntries,
                               Set<String> importedModelNames,
                               boolean authoritativeFallbackEnabled,
                               List<Diagnostic> diagnostics) {
@@ -22,6 +23,7 @@ public record LiveParseResult(DocumentSnapshot snapshot,
         rawSyntaxErrors = rawSyntaxErrors != null ? List.copyOf(rawSyntaxErrors) : List.of();
         completionContexts = completionContexts != null ? List.copyOf(completionContexts) : List.of();
         formattedDomainIds = formattedDomainIds != null ? Set.copyOf(formattedDomainIds) : Set.of();
+        importEntries = importEntries != null ? List.copyOf(importEntries) : List.of();
         importedModelNames = importedModelNames != null ? Set.copyOf(importedModelNames) : Set.of();
         diagnostics = diagnostics != null ? List.copyOf(diagnostics) : List.of();
     }
@@ -40,6 +42,10 @@ public record LiveParseResult(DocumentSnapshot snapshot,
 
     public Set<SymbolId> formattedDomainIds() {
         return Collections.unmodifiableSet(formattedDomainIds);
+    }
+
+    public List<ImportEntry> importEntries() {
+        return Collections.unmodifiableList(importEntries);
     }
 
     public Set<String> importedModelNames() {
