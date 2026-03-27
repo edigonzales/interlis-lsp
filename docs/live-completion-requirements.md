@@ -175,9 +175,159 @@ Wie diese `CompletionItemKind`s konkret gerendert werden, entscheidet der Editor
 - Topic-Body-Snippets richten ihre Block-Einrueckung an der semantischen Body-Einrueckung des `TOPIC`-Containers aus, nicht an der aktuellen Leerzeile.
 - Bei Block-Snippets wie `CLASS Name = ... END Name;` muessen `CLASS` und `END Name;` gleich eingerueckt sein.
 - Mehrzeilige Topic-Body-Snippets sind name-first: zuerst wird der Blockname editiert, danach der Body.
-- `END Name;` spiegelt den Namen ueber einen nicht-aktiven Mirror, nicht ueber einen zweiten aktiven Cursor.
+- Mehrzeilige Block-Snippets fuer `CLASS` und `STRUCTURE` trennen den Header in zwei Stopps:
+  - Placeholder `1` ist nur der reine Name
+  - Placeholder `2` ist ein optionaler Header-Suffix direkt vor einem festen `=`
+- `END Name;` spiegelt nur Placeholder `1`; Modifier und spaetere `EXTENDS`-Teile des Headers werden nicht nach `END` gespiegelt.
 - Der Body dieser mehrzeiligen Block-Snippets liegt auf der finalen Cursor-Position `$0`, damit `Tab` den Namen direkt in den Body bestaetigt und die Snippet-Navigation dort endet.
 - Mehrzeilige Topic-Body-Block-Snippets werden mit `InsertTextMode.AsIs` ausgeliefert, damit der Editor ihre Einrueckung beim Einfuegen nicht nochmals automatisch umformt.
 - In VS Code darf `Enter` bei einem weiteren Snippet-Placeholder in INTERLIS-Dateien denselben Sprung wie `Tab` ausloesen; im Body verhaelt sich `Enter` danach wieder als normales Newline.
 - In VS Code gibt es im `TOPIC`-Body kein Auto-Popup direkt nach `Enter` auf leerer Zeile.
 - Das Auto-Popup erfolgt dort erst nach einem Identifier-Prefix wie `CL`, `STR` oder `SIG`; manuelle Completion auf leerer Topic-Zeile bleibt moeglich.
+
+## MODEL-Body-Completion
+
+- Auf leerer oder nur mit einem Identifier-Prefix begonnenen Zeile innerhalb eines `MODEL`-Bodies werden nur grammatikalisch erlaubte model-level Starts angeboten.
+- Erlaubt sind in v1:
+  - `TOPIC`
+  - `CLASS`
+  - `STRUCTURE`
+  - `DOMAIN`
+  - `UNIT`
+  - `FUNCTION`
+  - `CONTEXT`
+  - `LINE FORM`
+- Nicht angeboten werden dort insbesondere `ASSOCIATION`, `VIEW`, `GRAPHIC`, `CONSTRAINTS`, `SIGN BASKET`, `REFSYSTEM BASKET`, `MODEL` und `IMPORTS`.
+- `TOPIC` wird dort sowohl als nacktes Keyword als auch als Block-Snippet `TOPIC Name = ... END Name;` angeboten.
+- `FUNCTION` und `LINE FORM` bleiben in v1 keyword-only.
+- Weitere model-level Deklarationen wie `CLASS`, `STRUCTURE`, `DOMAIN`, `UNIT` und `CONTEXT` duerfen zusaetzlich Starter-Snippets liefern.
+- Im `MODEL`-Body gibt es in VS Code wie im `TOPIC`-Body kein Auto-Popup direkt nach leerem `Enter`; Auto-Popup beginnt erst nach einem Identifier-Prefix oder bei manueller Completion.
+
+## Header-Folge-Completion fuer `CLASS`, `STRUCTURE` und `TOPIC`
+
+- Modifier und `EXTENDS` werden nicht als Variantenflut im ersten `TOPIC`-Body-Popup angeboten.
+- Im ersten Popup bleiben die Basisstarter wie `CLASS` und `STRUCTURE`; das nackte Keyword steht dort vor dem Full-Block-Snippet.
+- Die Folge-Completion ist gestuft:
+  - nach `CLASS Name ` bzw. `STRUCTURE Name ` werden `(ABSTRACT)`, `(EXTENDED)`, `(FINAL)`, `EXTENDS` und `=` angeboten
+  - nach `TOPIC Name ` werden `(ABSTRACT)`, `(FINAL)`, `EXTENDS` und `=` angeboten
+  - nach `(` werden nur die fuer den jeweiligen Header erlaubten Modifier-Keywords angeboten
+  - nach einem vollstaendigen Modifier ohne `)` wird nur `)` angeboten
+  - nach `)` werden `EXTENDS` und `=` angeboten
+  - nach `EXTENDS <target> ` wird nur `=` angeboten
+- Nach dem nackten Namensende ohne bestaetigende Boundary, z.B. `CLASS Foo` oder `TOPIC T`, gibt es keine Header-Folge-Completion.
+- Im zweiten Header-Stopp der Block-Snippets direkt vor dem festen `=` gibt es dieselbe gestufte Folge-Completion, aber ohne redundantes `=`-Item:
+  - `CLASS Name <caret>=` bzw. `STRUCTURE Name <caret>=` bieten Modifier und `EXTENDS`, aber kein `=`
+  - `TOPIC Name <caret>=` bietet `(ABSTRACT)`, `(FINAL)` und `EXTENDS`, aber kein `=`
+  - nach `(` werden nur die erlaubten Modifier angeboten
+  - nach einem vollstaendigen Modifier ohne `)` wird nur `)` angeboten
+  - nach `)` wird nur `EXTENDS` angeboten
+  - nach `EXTENDS ` werden nur passende Ziele angeboten
+- `CLASS` und `STRUCTURE` erlauben als Modifier `(ABSTRACT)`, `(EXTENDED)` und `(FINAL)`.
+- `TOPIC` erlaubt als Modifier nur `(ABSTRACT)` und `(FINAL)`.
+- `EXTENDS` bleibt zielgerichtet:
+  - `CLASS` darf `CLASS` und `STRUCTURE` erweitern
+  - `STRUCTURE` darf nur `STRUCTURE` erweitern
+  - `TOPIC` darf nur `TOPIC` erweitern
+- Die automatische VS-Code-Completion fuer diese Folge-Slots erfolgt nur auf committed boundaries wie `CLASS Foo `, `)`, `EXTENDS ` oder `EXTENDS Base `, nicht mitten im Namens-Tippen.
+- Im aktiven Namens-Placeholder der Block-Snippets wie `CLASS Name = ... END Name;` darf ohne bestaetigende Boundary keine Modifier-Folge-Completion erscheinen.
+- Der Wechsel vom Namen in den leeren zweiten Header-Stopp oeffnet in VS Code nicht automatisch erneut das Popup; Auto-Popup beginnt dort erst nach einem getippten Header-Prefix wie `(` oder `E`.
+- `ASSOCIATION`, `VIEW` und `GRAPHIC` bleiben in dieser Ausbaustufe ausserhalb der Header-Folge-Completion.
+- In VS Code springt `Enter` in INTERLIS-Snippets nur dann wie `Tab`, wenn kein Suggest-Widget sichtbar ist; bei sichtbarer Completion akzeptiert `Enter` den selektierten Vorschlag normal.
+
+## Header-Folge-Completion fuer `DOMAIN`
+
+- `DOMAIN` folgt demselben staged-completion-Prinzip wie `CLASS`, `STRUCTURE` und `TOPIC`.
+- Nach `DOMAIN Name ` werden `(ABSTRACT)`, `(FINAL)`, `(GENERIC)`, `EXTENDS` und `=` angeboten.
+- Nach `DOMAIN Name (` werden nur `ABSTRACT`, `FINAL` und `GENERIC` angeboten.
+- Nach einem vollstaendigen Modifier ohne `)` wird nur `)` angeboten.
+- Nach `DOMAIN Name (FINAL) ` werden `EXTENDS` und `=` angeboten.
+- Nach `DOMAIN Name EXTENDS ` werden nur Domain-Ziele angeboten.
+- Nach `DOMAIN Name EXTENDS Base ` wird `=` angeboten.
+- Im einzeiligen `DOMAIN`-Snippet `DOMAIN Name = ...;` gibt es denselben zweiten Header-Stopp direkt vor dem festen `=`:
+  - dort erscheinen Modifier und `EXTENDS`, aber kein redundantes `=`
+  - nach `DOMAIN Name <caret>= ...;` werden `(ABSTRACT)`, `(FINAL)`, `(GENERIC)` und `EXTENDS` angeboten
+  - nach `DOMAIN Name (FINAL) <caret>= ...;` wird nur `EXTENDS` angeboten
+  - der Wechsel in diesen leeren zweiten Header-Stopp oeffnet in VS Code noch kein RHS-Popup
+
+## RHS-Completion fuer `DOMAIN = ...`
+
+- Rechts von `=` in einer `DOMAIN`-Definition werden nur domain-legale Typausdruecke angeboten.
+- Angeboten werden insbesondere:
+  - `MANDATORY`
+  - Basistypen wie `TEXT`, `MTEXT`, `NAME`, `URI`, `BOOLEAN`, `NUMERIC`, `FORMAT`, `DATE`, `TIMEOFDAY`, `DATETIME`, `COORD`, `MULTICOORD`, `POLYLINE`, `AREA`, `SURFACE`, `OID`, `UUIDOID`, `BLACKBOX`
+  - Meta-/Typkonstrukte wie `CLASS`, `STRUCTURE`, `ATTRIBUTE` und `ALL OF`
+  - kuratierte Snippets wie `TEXT*<length>`, `MTEXT*<length>`, `1 .. 10`, `(A, B, C)`, `CLASS RESTRICTION (...)` und `ALL OF BaseDomain`
+- Nicht angeboten werden dort Attribut-only Konstrukte wie `REFERENCE`, `BAG` oder `LIST`.
+- Die bestehenden Tail-Mechanismen gelten auch im `DOMAIN`-RHS:
+  - nach `TEXT` bzw. `MTEXT` werden `*` und `* <length>` angeboten
+  - die Root-Snippets `TEXT*<length>` und `MTEXT*<length>` verwenden als Insert-Text weiterhin `${1:255}` als Defaultlänge
+  - das allgemeine `DOMAIN`-Root bietet aktiv nur ein Numeric-Range-Snippet `1 .. 10` an, auch wenn String-Ranges grammatikalisch weiterhin erlaubt sind
+  - nach einem nackten numerischen Literal werden `..` und `.. <upper>` angeboten
+  - nach `FORMAT` greift die bestehende format-spezifische Folge-Completion
+  - nach `CLASS`, `STRUCTURE` und `ATTRIBUTE` greift die bestehende `RESTRICTION`-/`OF`-Folge-Completion
+- In VS Code wird die Suggest-Box fuer `DOMAIN`-Header wie bei den anderen Deklarationen provider-bestaetigt auto-geoeffnet; nach `=` in einem `DOMAIN`-RHS wird ebenfalls auto-geoeffnet, wenn der Provider domain-legale RHS-Vorschlaege liefert.
+- Im `DOMAIN`-Snippet oeffnet sich dieses RHS-Popup auch nach reiner Snippet-Navigation:
+  - nach dem ersten `Tab`/`Enter` bleibt der Cursor im optionalen Header-Suffix vor `=` ohne Popup
+  - nach dem zweiten `Tab`/`Enter` landet der Cursor hinter `=` und vor `;`; dort wird das RHS-Popup ohne zusaetzlichen Leerschlag geoeffnet
+  - beliebige Maus-Klicks oder normale Cursorbewegungen in bestehende `DOMAIN ... = ;`-Zeilen duerfen dieses Popup nicht automatisch ausloesen
+
+## Header- und RHS-Completion fuer `UNIT`
+
+- `UNIT` folgt wie `DOMAIN` einem gestuften Flow aus Header-Folge-Completion und RHS-Completion.
+- Nach `UNIT Name ` werden `[Name]`, `(ABSTRACT)`, `EXTENDS` und `=` angeboten.
+- Nach `UNIT Name [abbr] ` werden `(ABSTRACT)`, `EXTENDS` und `=` angeboten; `[Name]` wird dort nicht erneut angeboten.
+- Nach `UNIT Name (` wird nur `ABSTRACT` angeboten.
+- Nach einem vollstaendigen Modifier ohne `)` wird nur `)` angeboten.
+- Nach `UNIT Name (ABSTRACT) ` werden `EXTENDS` und `=` angeboten.
+- Nach `UNIT Name EXTENDS ` werden nur `UNIT`-Ziele angeboten.
+- Im einzeiligen `UNIT`-Snippet `UNIT Name = ...;` gibt es denselben zweiten Header-Stopp direkt vor dem festen `=` wie bei `DOMAIN`:
+  - dort erscheinen `[Name]`, `(ABSTRACT)` und `EXTENDS`, aber kein redundantes `=`
+  - nach dem finalen `Tab`/`Enter` landet der Cursor hinter `=` und vor `;`
+- Rechts von `=` in einer `UNIT`-Definition werden in v1 nur kuratierte, unit-spezifische Formen aktiv angeboten:
+  - `[BaseUnit]`
+  - `1000 [BaseUnit]`
+  - `(UnitA / UnitB)`
+  - `(UnitA * UnitB)`
+- Die Kompositions-Snippets behalten diese lesbaren Labels, lassen im Insert-Text aber den zweiten Operand leer:
+  - `(UnitA / UnitB)` -> `(${1:UnitA} / ${2})`
+  - `(UnitA * UnitB)` -> `(${1:UnitA} * ${2})`
+- Nicht aktiv angeboten werden dort allgemeine freie Ausdruecke, `functionDef`-Formen oder fachfremde Domain-/Attribut-Typen.
+- Die RHS-Folge-Completion fuer `UNIT` ist eng gefuehrt:
+  - nach `= [` werden nur `UNIT`-Referenzen angeboten
+  - nach `= (` sowie nach `*`, `/` oder `**` in einer komponierten Unit werden nur `UNIT`-Referenzen angeboten
+  - nach einer `UNIT`-Referenz in einer komponierten Unit werden `*`, `/`, `**` und `)` angeboten
+- In VS Code wird die Suggest-Box fuer `UNIT` provider-bestaetigt auto-geoeffnet:
+  - nach `UNIT Name `, `UNIT Name [abbr] `, `UNIT Name (ABSTRACT) ` und `UNIT Name EXTENDS `
+  - nach `=` im `UNIT`-RHS
+  - nach `[` sowie nach `(`, `*`, `/` und `**` in komponierten Units
+  - ein rechter literaler `)`-Suffix blockiert diese komponierten `UNIT`-Auto-Popups nicht
+
+## Kontextuelle `!!@`-Metaattribute
+
+- `!!@`-Completion wird heuristisch auf Kommentarzeilen umgesetzt; die Grammatik und die Live-Slots bleiben dafuer unveraendert.
+- In v1 werden nur Metaattribute aus den Familien `ili2db` und `ilivalidator` aktiv vorgeschlagen.
+- Vorschlaege erscheinen nur dann, wenn die `!!@`-Zeile einem klar erkennbaren Folgetarget zugeordnet werden kann; verwaiste `!!@`-Zeilen ohne erkennbares Zielelement liefern nichts.
+- Die `!!@`-Completion ist zweistufig:
+  - nach `!!@` erscheinen kontextsensitive Assignment-Snippets
+  - nach `=` erscheinen bei bekannten Metaattributen enge Wertvorschlaege
+- Die Zielmatrix ist konservativ:
+  - vor `STRUCTURE` nur struktur-sinnvolle `ili2db.mapping`-Varianten (`MultiSurface`, `MultiLine`, `MultiPoint`, `Multilingual`, `Localised`) sowie `ili2db.dispName`
+  - vor `CLASS` nur `ili2db.dispName`, `ili2db.oid`, `ilivalid.keymsg` und `ilivalid.keymsg_<lang>`
+  - vor Attributen immer `ili2db.dispName`, `ilivalid.type` und `ilivalid.multiplicity`
+  - zusaetzlich bei strukturartigen Attributen bzw. `LIST`/`BAG OF` Strukturattributen `ili2db.mapping=ARRAY|JSON|EXPAND`
+  - zusaetzlich bei Referenz- oder strukturartigen Attributen `ilivalid.requiredIn`
+  - vor Rollen nur `ilivalid.target`, `ilivalid.multiplicity` und `ilivalid.requiredIn`
+  - vor Constraints nur `ilivalid.check`, `category`, `ilivalid.msg`, `ilivalid.msg_<lang>`, `message`, `message_<lang>` und `name`
+  - vor Enum-Elementen nur `ili2db.dispName`
+- Die Value-Completion ist ebenfalls zielgerichtet:
+  - `ili2db.mapping=` bietet auf `STRUCTURE` nur die strukturbezogenen Mapping-Werte und auf strukturartigen Attributen nur `ARRAY`, `JSON`, `EXPAND`
+  - `ilivalid.type=`, `ilivalid.multiplicity=`, `ilivalid.target=` und `ilivalid.check=` bieten nur `on`, `warning`, `off`
+  - `ili2db.dispName=`, `ilivalid.keymsg=`, `ilivalid.msg=` und `message=` bieten ein quoted Placeholder-Snippet
+  - `ili2db.oid=`, `ilivalid.requiredIn=`, `category=` und `name=` bieten jeweils nur einen passenden Placeholder-Default
+- In VS Code wird die Suggest-Box provider-bestaetigt geoeffnet:
+  - auf `!!@`-Zeilen beim Tippen des Metaattributnamens
+  - nach `=` bei bekannten Metaattributen mit enger Value-Completion
+  - normale Cursorbewegung oder verwaiste `!!@`-Zeilen duerfen kein Fallback-Popup erzwingen
+- V1 bleibt completion-only:
+  - es gibt keine Diagnostics fuer falsche Metaattribute am falschen Ort
+  - allgemeine Modell-Metaattribute wie `technicalContact`, `title` oder `tags` gehoeren weiterhin nicht zu dieser `!!@`-Completion

@@ -19,20 +19,68 @@ const TEXT_TAIL_PATTERN = /:\s*(?:MANDATORY\s+)?(?:TEXT|MTEXT)\s*$/i;
 const TEXT_LENGTH_VALUE_TAIL_PATTERN = /:\s*(?:MANDATORY\s+)?(?:TEXT|MTEXT)\s*\*\s*$/i;
 const NUMERIC_TAIL_PATTERN = /:\s*(?:MANDATORY\s+)?([-+]?[0-9]+(?:\.[0-9]+)?)\s*$/;
 const NUMERIC_UPPER_BOUND_TAIL_PATTERN = /:\s*(?:MANDATORY\s+)?[-+]?[0-9]+(?:\.[0-9]+)?\s*\.\.\s*$/;
+const DOMAIN_TEXT_TAIL_PATTERN =
+  /^\s*DOMAIN\s+(?:[A-Za-z_][A-Za-z0-9_]*|UUIDOID)(?:\s*\(\s*(?:ABSTRACT|FINAL|GENERIC)\s*\))?(?:\s+EXTENDS\s+[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)?\s*=\s*(?:MANDATORY\s+)?(?:TEXT|MTEXT)\s*$/i;
+const DOMAIN_TEXT_LENGTH_VALUE_TAIL_PATTERN =
+  /^\s*DOMAIN\s+(?:[A-Za-z_][A-Za-z0-9_]*|UUIDOID)(?:\s*\(\s*(?:ABSTRACT|FINAL|GENERIC)\s*\))?(?:\s+EXTENDS\s+[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)?\s*=\s*(?:MANDATORY\s+)?(?:TEXT|MTEXT)\s*\*\s*$/i;
+const DOMAIN_NUMERIC_TAIL_PATTERN =
+  /^\s*DOMAIN\s+(?:[A-Za-z_][A-Za-z0-9_]*|UUIDOID)(?:\s*\(\s*(?:ABSTRACT|FINAL|GENERIC)\s*\))?(?:\s+EXTENDS\s+[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)?\s*=\s*(?:MANDATORY\s+)?([-+]?[0-9]+(?:\.[0-9]+)?)\s*$/;
+const DOMAIN_NUMERIC_UPPER_BOUND_TAIL_PATTERN =
+  /^\s*DOMAIN\s+(?:[A-Za-z_][A-Za-z0-9_]*|UUIDOID)(?:\s*\(\s*(?:ABSTRACT|FINAL|GENERIC)\s*\))?(?:\s+EXTENDS\s+[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)?\s*=\s*(?:MANDATORY\s+)?[-+]?[0-9]+(?:\.[0-9]+)?\s*\.\.\s*$/;
+const DOTTED_NAME_REGEX = "[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*";
+const UNIT_DECLARATION_PREFIX_REGEX =
+  `^\\s*UNIT\\s+[A-Za-z_][A-Za-z0-9_]*(?:\\s*\\[\\s*[A-Za-z_][A-Za-z0-9_]*\\s*\\])?(?:\\s*\\(\\s*ABSTRACT\\s*\\))?(?:\\s+EXTENDS\\s+${DOTTED_NAME_REGEX})?\\s*=\\s*`;
 const CONTAINER_BODY_PREFIX_PATTERN = /^\s*[A-Za-z_][A-Za-z0-9_]*\s*$/;
-const TOPIC_BODY_AUTO_TRIGGER_LABELS = new Set<string>([
+const HEADER_AFTER_NAME_TRIGGER_PATTERN = /^\s*(CLASS|STRUCTURE|TOPIC|DOMAIN|UNIT)\s+[A-Za-z_][A-Za-z0-9_]*\s+$/i;
+const BLOCK_HEADER_AFTER_NAME_TRIGGER_PATTERN = /^\s*(CLASS|STRUCTURE|TOPIC|DOMAIN|UNIT)\s+[A-Za-z_][A-Za-z0-9_]*\s+[A-Za-z_]*$/i;
+const HEADER_MODIFIER_VALUE_TRIGGER_PATTERN = /^\s*(CLASS|STRUCTURE|TOPIC|DOMAIN|UNIT)\s+[A-Za-z_][A-Za-z0-9_]*\s*\(\s*[A-Za-z_]*$/i;
+const HEADER_MODIFIER_CLOSE_TRIGGER_PATTERN = /^\s*(CLASS|STRUCTURE|TOPIC|DOMAIN|UNIT)\s+[A-Za-z_][A-Za-z0-9_]*\s*\(\s*(ABSTRACT|EXTENDED|FINAL|GENERIC)\s*$/i;
+const HEADER_AFTER_MODIFIER_TRIGGER_PATTERN = /^\s*(CLASS|STRUCTURE|TOPIC|DOMAIN|UNIT)\s+[A-Za-z_][A-Za-z0-9_]*\s*\(\s*(ABSTRACT|EXTENDED|FINAL|GENERIC)\s*\)\s*$/i;
+const BLOCK_HEADER_AFTER_MODIFIER_TRIGGER_PATTERN =
+  /^\s*(CLASS|STRUCTURE|TOPIC|DOMAIN|UNIT)\s+[A-Za-z_][A-Za-z0-9_]*\s+\(\s*(ABSTRACT|EXTENDED|FINAL|GENERIC)\s*\)\s+[A-Za-z_]*$/i;
+const HEADER_EXTENDS_OPEN_TRIGGER_PATTERN = /^\s*(CLASS|STRUCTURE|TOPIC|DOMAIN|UNIT)\s+[A-Za-z_][A-Za-z0-9_]*(?:\s*\(\s*(ABSTRACT|EXTENDED|FINAL|GENERIC)\s*\))?\s+EXTENDS\s*$/i;
+const HEADER_AFTER_EXTENDS_TARGET_TRIGGER_PATTERN =
+  /^\s*(CLASS|STRUCTURE|TOPIC|DOMAIN|UNIT)\s+[A-Za-z_][A-Za-z0-9_]*(?:\s*\(\s*(ABSTRACT|EXTENDED|FINAL|GENERIC)\s*\))?\s+EXTENDS\s+[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\s+$/i;
+const UNIT_HEADER_AFTER_NAME_WITH_ABBR_TRIGGER_PATTERN =
+  /^\s*UNIT\s+[A-Za-z_][A-Za-z0-9_]*\s*\[\s*[A-Za-z_][A-Za-z0-9_]*\s*\]\s+$/i;
+const UNIT_BLOCK_HEADER_AFTER_NAME_WITH_ABBR_TRIGGER_PATTERN =
+  /^\s*UNIT\s+[A-Za-z_][A-Za-z0-9_]*\s*\[\s*[A-Za-z_][A-Za-z0-9_]*\s*\]\s+[A-Za-z_]*$/i;
+const UNIT_HEADER_MODIFIER_VALUE_WITH_ABBR_TRIGGER_PATTERN =
+  /^\s*UNIT\s+[A-Za-z_][A-Za-z0-9_]*\s*\[\s*[A-Za-z_][A-Za-z0-9_]*\s*\]\s*\(\s*[A-Za-z_]*$/i;
+const UNIT_HEADER_MODIFIER_CLOSE_WITH_ABBR_TRIGGER_PATTERN =
+  /^\s*UNIT\s+[A-Za-z_][A-Za-z0-9_]*\s*\[\s*[A-Za-z_][A-Za-z0-9_]*\s*\]\s*\(\s*ABSTRACT\s*$/i;
+const UNIT_HEADER_AFTER_MODIFIER_WITH_ABBR_TRIGGER_PATTERN =
+  /^\s*UNIT\s+[A-Za-z_][A-Za-z0-9_]*\s*\[\s*[A-Za-z_][A-Za-z0-9_]*\s*\]\s*\(\s*ABSTRACT\s*\)\s*$/i;
+const UNIT_BLOCK_HEADER_AFTER_MODIFIER_WITH_ABBR_TRIGGER_PATTERN =
+  /^\s*UNIT\s+[A-Za-z_][A-Za-z0-9_]*\s*\[\s*[A-Za-z_][A-Za-z0-9_]*\s*\]\s*\(\s*ABSTRACT\s*\)\s+[A-Za-z_]*$/i;
+const UNIT_HEADER_EXTENDS_OPEN_WITH_ABBR_TRIGGER_PATTERN =
+  new RegExp(`^\\s*UNIT\\s+[A-Za-z_][A-Za-z0-9_]*\\s*\\[\\s*[A-Za-z_][A-Za-z0-9_]*\\s*\\](?:\\s*\\(\\s*ABSTRACT\\s*\\))?\\s+EXTENDS\\s*$`, "i");
+const UNIT_HEADER_AFTER_EXTENDS_TARGET_WITH_ABBR_TRIGGER_PATTERN =
+  new RegExp(`^\\s*UNIT\\s+[A-Za-z_][A-Za-z0-9_]*\\s*\\[\\s*[A-Za-z_][A-Za-z0-9_]*\\s*\\](?:\\s*\\(\\s*ABSTRACT\\s*\\))?\\s+EXTENDS\\s+${DOTTED_NAME_REGEX}\\s+$`, "i");
+const DOMAIN_RHS_TRIGGER_PATTERN =
+  /^\s*DOMAIN\s+(?:[A-Za-z_][A-Za-z0-9_]*|UUIDOID)(?:\s*\(\s*(ABSTRACT|FINAL|GENERIC)\s*\))?(?:\s+EXTENDS\s+[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)?\s*=\s*$/i;
+const UNIT_RHS_TRIGGER_PATTERN = new RegExp(`${UNIT_DECLARATION_PREFIX_REGEX}$`, "i");
+const UNIT_BRACKET_TARGET_TRIGGER_PATTERN = new RegExp(`${UNIT_DECLARATION_PREFIX_REGEX}\\[\\s*(?:${DOTTED_NAME_REGEX}\\.?)?\\s*$`, "i");
+const UNIT_COMPOSED_TARGET_TRIGGER_PATTERN = new RegExp(`${UNIT_DECLARATION_PREFIX_REGEX}\\((?:[^;)]*(?:\\*\\*|\\*|/)\\s*)?(?:${DOTTED_NAME_REGEX}\\.?)?\\s*$`, "i");
+const UNIT_COMPOSED_OPERATOR_TRIGGER_PATTERN = new RegExp(`${UNIT_DECLARATION_PREFIX_REGEX}\\([^;)]*${DOTTED_NAME_REGEX}\\s*$`, "i");
+const METAATTRIBUTE_ROOT_TRIGGER_PATTERN = /^\s*!!@\s*[A-Za-z0-9_.]*$/i;
+const METAATTRIBUTE_VALUE_TRIGGER_PATTERN = /^\s*!!@\s*[A-Za-z0-9_.]+\s*=\s*.*$/i;
+const CONTAINER_BODY_AUTO_TRIGGER_LABELS = new Set<string>([
+  "TOPIC",
   "CLASS",
   "STRUCTURE",
-  "ASSOCIATION",
-  "VIEW",
-  "GRAPHIC",
   "DOMAIN",
   "UNIT",
   "FUNCTION",
   "CONTEXT",
+  "LINE FORM",
+  "ASSOCIATION",
+  "VIEW",
+  "GRAPHIC",
   "CONSTRAINTS",
   "SIGN BASKET",
   "REFSYSTEM BASKET",
+  "TOPIC NAME = ... END NAME;",
   "CLASS NAME = ... END NAME;",
   "STRUCTURE NAME = ... END NAME;",
   "ASSOCIATION NAME = ... END NAME;",
@@ -54,10 +102,14 @@ type PendingCaret = { version: number; position: vscode.Position };
 
 const pendingCarets = new Map<string, PendingCaret>();
 const pendingTailSuggestTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const pendingHeaderSuggestTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const pendingSelectionTailSuggestTimers = new Map<string, ReturnType<typeof setTimeout>>();
-const tailSuggestVersions = new Map<string, number>();
+const pendingSelectionHeaderSuggestTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const recentSuggestFingerprints = new Map<string, string>();
 const recentTailEditVersions = new Map<string, number>();
 const recentTailEditCleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const recentHeaderEditVersions = new Map<string, number>();
+const recentHeaderEditCleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 class TimestampedOutputChannel implements vscode.OutputChannel {
   readonly name: string;
@@ -303,6 +355,24 @@ export async function activate(context: vscode.ExtensionContext) {
   }
 
   context.subscriptions.push(
+    vscode.commands.registerCommand("interlis.snippet.nextPlaceholder", async () => {
+      const before = vscode.window.activeTextEditor;
+      const uri = before?.document.uri.toString();
+      await vscode.commands.executeCommand("jumpToNextSnippetPlaceholder");
+      if (!before || before.document.languageId !== "interlis" || !uri) {
+        return;
+      }
+      setTimeout(() => {
+        const active = vscode.window.activeTextEditor;
+        if (!active || active.document.uri.toString() !== uri) {
+          return;
+        }
+        void maybeTriggerSnippetPlaceholderSuggest(active);
+      }, 25);
+    })
+  );
+
+  context.subscriptions.push(
     vscode.workspace.onDidChangeTextDocument(event => {
       const key = event.document.uri.toString();
       const pending = pendingCarets.get(key);
@@ -322,12 +392,14 @@ export async function activate(context: vscode.ExtensionContext) {
 
       scheduleTailSuggest(event);
       scheduleContainerBodySuggest(event);
+      scheduleHeaderSuggest(event);
     })
   );
 
   context.subscriptions.push(
     vscode.window.onDidChangeTextEditorSelection(event => {
       scheduleSelectionTailSuggest(event);
+      scheduleSelectionHeaderSuggest(event);
     })
   );
 
@@ -352,12 +424,28 @@ export async function activate(context: vscode.ExtensionContext) {
         clearTimeout(selectionTimer);
         pendingSelectionTailSuggestTimers.delete(key);
       }
+      const selectionHeaderTimer = pendingSelectionHeaderSuggestTimers.get(key);
+      if (selectionHeaderTimer) {
+        clearTimeout(selectionHeaderTimer);
+        pendingSelectionHeaderSuggestTimers.delete(key);
+      }
+      const headerTimer = pendingHeaderSuggestTimers.get(key);
+      if (headerTimer) {
+        clearTimeout(headerTimer);
+        pendingHeaderSuggestTimers.delete(key);
+      }
       const cleanupTimer = recentTailEditCleanupTimers.get(key);
       if (cleanupTimer) {
         clearTimeout(cleanupTimer);
         recentTailEditCleanupTimers.delete(key);
       }
-      tailSuggestVersions.delete(key);
+      const headerCleanupTimer = recentHeaderEditCleanupTimers.get(key);
+      if (headerCleanupTimer) {
+        clearTimeout(headerCleanupTimer);
+        recentHeaderEditCleanupTimers.delete(key);
+      }
+      recentHeaderEditVersions.delete(key);
+      recentSuggestFingerprints.delete(key);
       recentTailEditVersions.delete(key);
     })
   );
@@ -694,6 +782,26 @@ function scheduleContainerBodySuggest(event: vscode.TextDocumentChangeEvent): vo
   pendingTailSuggestTimers.set(key, timer);
 }
 
+function scheduleHeaderSuggest(event: vscode.TextDocumentChangeEvent): void {
+  if (!isEligibleHeaderSuggestChange(event)) {
+    return;
+  }
+
+  rememberRecentHeaderEdit(event.document);
+
+  const key = event.document.uri.toString();
+  const existing = pendingHeaderSuggestTimers.get(key);
+  if (existing) {
+    clearTimeout(existing);
+  }
+
+  const timer = setTimeout(() => {
+    pendingHeaderSuggestTimers.delete(key);
+    void maybeTriggerHeaderSuggest(event.document, event.contentChanges[0]?.text ?? "");
+  }, 25);
+  pendingHeaderSuggestTimers.set(key, timer);
+}
+
 function isEligibleTailSuggestChange(event: vscode.TextDocumentChangeEvent): boolean {
   if (!event || event.document.languageId !== "interlis" || event.contentChanges.length !== 1) {
     return false;
@@ -724,6 +832,21 @@ function isEligibleContainerBodySuggestChange(event: vscode.TextDocumentChangeEv
   return change.range.start.line === change.range.end.line;
 }
 
+function isEligibleHeaderSuggestChange(event: vscode.TextDocumentChangeEvent): boolean {
+  if (!event || event.document.languageId !== "interlis" || event.contentChanges.length !== 1) {
+    return false;
+  }
+  const active = vscode.window.activeTextEditor;
+  if (!active || active.document.uri.toString() !== event.document.uri.toString()) {
+    return false;
+  }
+  const change = event.contentChanges[0];
+  if (!change || !change.text || /\r|\n/.test(change.text)) {
+    return false;
+  }
+  return change.range.start.line === change.range.end.line;
+}
+
 function isEligibleSelectionTailSuggestEvent(event: vscode.TextEditorSelectionChangeEvent): boolean {
   if (!event || event.textEditor.document.languageId !== "interlis") {
     return false;
@@ -736,6 +859,20 @@ function isEligibleSelectionTailSuggestEvent(event: vscode.TextEditorSelectionCh
     return false;
   }
   return recentTailEditVersions.get(event.textEditor.document.uri.toString()) === event.textEditor.document.version;
+}
+
+function isEligibleSelectionHeaderSuggestEvent(event: vscode.TextEditorSelectionChangeEvent): boolean {
+  if (!event || event.textEditor.document.languageId !== "interlis") {
+    return false;
+  }
+  const active = vscode.window.activeTextEditor;
+  if (!active || active.document.uri.toString() !== event.textEditor.document.uri.toString()) {
+    return false;
+  }
+  if (event.selections.length !== 1 || !event.selections[0]?.isEmpty) {
+    return false;
+  }
+  return recentHeaderEditVersions.get(event.textEditor.document.uri.toString()) === event.textEditor.document.version;
 }
 
 async function maybeTriggerTailSuggest(document: vscode.TextDocument,
@@ -758,7 +895,34 @@ async function maybeTriggerTailSuggestForEditor(editor: vscode.TextEditor): Prom
   if (editor.selections.length !== 1 || !editor.selection.isEmpty) {
     return;
   }
-  if (tailSuggestVersions.get(key) === document.version) {
+
+  const selection = editor.selection;
+  const line = document.lineAt(selection.active.line).text;
+  const prefix = line.slice(0, selection.active.character);
+  const suffix = line.slice(selection.active.character);
+  const expectedLabels = expectedTailLabels(prefix);
+  if (!expectedLabels) {
+    return;
+  }
+  if (!hasAllowedTailSuffix(prefix, suffix)) {
+    return;
+  }
+  if (!await hasExpectedTailSuggestions(document, selection.active, expectedLabels)) {
+    return;
+  }
+
+  rememberSuggestFingerprint(document, selection.active, "tail");
+  await refreshSuggestWidget();
+}
+
+async function maybeTriggerDomainRhsSuggestForEditor(editor: vscode.TextEditor): Promise<void> {
+  const document = editor.document;
+  const key = document.uri.toString();
+  const active = vscode.window.activeTextEditor;
+  if (!active || active.document.uri.toString() !== key || active.document.version !== document.version) {
+    return;
+  }
+  if (editor.selections.length !== 1 || !editor.selection.isEmpty) {
     return;
   }
 
@@ -766,19 +930,67 @@ async function maybeTriggerTailSuggestForEditor(editor: vscode.TextEditor): Prom
   const line = document.lineAt(selection.active.line).text;
   const prefix = line.slice(0, selection.active.character);
   const suffix = line.slice(selection.active.character);
-  if (suffix.trim().length > 0) {
+  if (!isDomainRhsTriggerContext(prefix, suffix)) {
     return;
   }
-  const expectedLabels = expectedTailLabels(prefix);
-  if (!expectedLabels) {
-    return;
-  }
-  if (!await hasExpectedTailSuggestions(document, selection.active, expectedLabels)) {
+  if (hasRecentSuggestFingerprint(document, selection.active, "domain-rhs")) {
     return;
   }
 
-  tailSuggestVersions.set(key, document.version);
+  const expectedLabels = expectedHeaderLabels(prefix, suffix);
+  if (!expectedLabels || !await hasExpectedTailSuggestions(document, selection.active, expectedLabels)) {
+    return;
+  }
+
+  rememberSuggestFingerprint(document, selection.active, "domain-rhs");
   await refreshSuggestWidget();
+}
+
+async function maybeTriggerUnitRhsSuggestForEditor(editor: vscode.TextEditor): Promise<void> {
+  const document = editor.document;
+  const key = document.uri.toString();
+  const active = vscode.window.activeTextEditor;
+  if (!active || active.document.uri.toString() !== key || active.document.version !== document.version) {
+    return;
+  }
+  if (editor.selections.length !== 1 || !editor.selection.isEmpty) {
+    return;
+  }
+
+  const selection = editor.selection;
+  const line = document.lineAt(selection.active.line).text;
+  const prefix = line.slice(0, selection.active.character);
+  const suffix = line.slice(selection.active.character);
+  const isUnitContext = isUnitRhsTriggerContext(prefix, suffix)
+    || isUnitBracketTargetContext(prefix, suffix)
+    || isUnitComposedTargetContext(prefix, suffix)
+    || isUnitComposedOperatorContext(prefix, suffix);
+  if (!isUnitContext) {
+    return;
+  }
+  if (hasRecentSuggestFingerprint(document, selection.active, "unit-rhs")) {
+    return;
+  }
+
+  const expectedLabels = expectedHeaderLabels(prefix, suffix);
+  const hasSuggestions = expectedLabels
+    ? await hasExpectedTailSuggestions(document, selection.active, expectedLabels)
+    : await hasAnySuggestions(document, selection.active);
+  if (!hasSuggestions) {
+    return;
+  }
+
+  rememberSuggestFingerprint(document, selection.active, "unit-rhs");
+  await refreshSuggestWidget();
+}
+
+async function maybeTriggerDeclarationRhsSuggestForEditor(editor: vscode.TextEditor): Promise<void> {
+  await maybeTriggerDomainRhsSuggestForEditor(editor);
+  await maybeTriggerUnitRhsSuggestForEditor(editor);
+}
+
+async function maybeTriggerSnippetPlaceholderSuggest(editor: vscode.TextEditor): Promise<void> {
+  await maybeTriggerDeclarationRhsSuggestForEditor(editor);
 }
 
 function rememberRecentTailEdit(document: vscode.TextDocument): void {
@@ -801,6 +1013,46 @@ function rememberRecentTailEdit(document: vscode.TextDocument): void {
   recentTailEditCleanupTimers.set(key, timer);
 }
 
+function rememberRecentHeaderEdit(document: vscode.TextDocument): void {
+  const key = document.uri.toString();
+  recentHeaderEditVersions.set(key, document.version);
+
+  const existing = recentHeaderEditCleanupTimers.get(key);
+  if (existing) {
+    clearTimeout(existing);
+  }
+
+  const timer = setTimeout(() => {
+    if (recentHeaderEditVersions.get(key) === document.version) {
+      recentHeaderEditVersions.delete(key);
+    }
+    if (recentHeaderEditCleanupTimers.get(key) === timer) {
+      recentHeaderEditCleanupTimers.delete(key);
+    }
+  }, 250);
+  recentHeaderEditCleanupTimers.set(key, timer);
+}
+
+function scheduleSelectionHeaderSuggest(event: vscode.TextEditorSelectionChangeEvent): void {
+  if (!isEligibleSelectionHeaderSuggestEvent(event)) {
+    return;
+  }
+
+  const key = event.textEditor.document.uri.toString();
+  const existing = pendingSelectionHeaderSuggestTimers.get(key);
+  if (existing) {
+    clearTimeout(existing);
+  }
+
+  const timer = setTimeout(() => {
+    if (pendingSelectionHeaderSuggestTimers.get(key) === timer) {
+      pendingSelectionHeaderSuggestTimers.delete(key);
+    }
+    void maybeTriggerDeclarationRhsSuggestForEditor(event.textEditor);
+  }, 25);
+  pendingSelectionHeaderSuggestTimers.set(key, timer);
+}
+
 async function maybeTriggerContainerBodySuggest(document: vscode.TextDocument, insertedText: string): Promise<void> {
   const key = document.uri.toString();
   const active = vscode.window.activeTextEditor;
@@ -810,7 +1062,7 @@ async function maybeTriggerContainerBodySuggest(document: vscode.TextDocument, i
   if (active.selections.length !== 1 || !active.selection.isEmpty) {
     return;
   }
-  if (tailSuggestVersions.get(key) === document.version) {
+  if (hasRecentSuggestFingerprint(document, active.selection.active, "container-body")) {
     return;
   }
 
@@ -821,11 +1073,45 @@ async function maybeTriggerContainerBodySuggest(document: vscode.TextDocument, i
   if (!shouldTriggerContainerBodySuggest(prefix, suffix, insertedText)) {
     return;
   }
-  if (!await hasTopicBodySuggestions(document, selection.active)) {
+  if (!await hasContainerBodySuggestions(document, selection.active)) {
     return;
   }
 
-  tailSuggestVersions.set(key, document.version);
+  rememberSuggestFingerprint(document, selection.active, "container-body");
+  await refreshSuggestWidget();
+}
+
+async function maybeTriggerHeaderSuggest(document: vscode.TextDocument, insertedText: string): Promise<void> {
+  const key = document.uri.toString();
+  const active = vscode.window.activeTextEditor;
+  if (!active || active.document.uri.toString() !== key || active.document.version !== document.version) {
+    return;
+  }
+  if (active.selections.length !== 1 || !active.selection.isEmpty) {
+    return;
+  }
+
+  const selection = active.selection;
+  const line = document.lineAt(selection.active.line).text;
+  const prefix = line.slice(0, selection.active.character);
+  const suffix = line.slice(selection.active.character);
+  if (!shouldTriggerHeaderSuggest(prefix, suffix, insertedText)) {
+    return;
+  }
+  const triggerKind = headerSuggestTriggerKind(prefix, suffix);
+  if (hasRecentSuggestFingerprint(document, selection.active, triggerKind)) {
+    return;
+  }
+
+  const expectedLabels = expectedHeaderLabels(prefix, suffix);
+  const hasSuggestions = expectedLabels
+    ? await hasExpectedTailSuggestions(document, selection.active, expectedLabels)
+    : await hasAnySuggestions(document, selection.active);
+  if (!hasSuggestions) {
+    return;
+  }
+
+  rememberSuggestFingerprint(document, selection.active, triggerKind);
   await refreshSuggestWidget();
 }
 
@@ -837,11 +1123,11 @@ async function refreshSuggestWidget(): Promise<void> {
 
 function shouldTriggerTextTail(prefix: string, insertedText: string): boolean {
   void insertedText;
-  return TEXT_TAIL_PATTERN.test(prefix);
+  return TEXT_TAIL_PATTERN.test(prefix) || DOMAIN_TEXT_TAIL_PATTERN.test(prefix);
 }
 
 function shouldTriggerTextLengthValueTail(prefix: string, insertedText: string): boolean {
-  if (!TEXT_LENGTH_VALUE_TAIL_PATTERN.test(prefix)) {
+  if (!TEXT_LENGTH_VALUE_TAIL_PATTERN.test(prefix) && !DOMAIN_TEXT_LENGTH_VALUE_TAIL_PATTERN.test(prefix)) {
     return false;
   }
   const trimmed = insertedText.trim();
@@ -850,11 +1136,8 @@ function shouldTriggerTextLengthValueTail(prefix: string, insertedText: string):
 
 function shouldTriggerNumericTail(prefix: string, insertedText: string): boolean {
   const trimmed = insertedText.trim();
-  if (!trimmed || !NUMERIC_TAIL_PATTERN.test(prefix)) {
-    return false;
-  }
-  const literal = prefix.match(NUMERIC_TAIL_PATTERN)?.[1] ?? "";
-  if (!literal) {
+  const literal = matchNumericTailLiteral(prefix);
+  if (!trimmed || !literal) {
     return false;
   }
   if (trimmed.length > 1) {
@@ -870,7 +1153,7 @@ function shouldTriggerNumericTail(prefix: string, insertedText: string): boolean
 }
 
 function shouldTriggerNumericUpperBoundTail(prefix: string, insertedText: string): boolean {
-  if (!NUMERIC_UPPER_BOUND_TAIL_PATTERN.test(prefix)) {
+  if (!NUMERIC_UPPER_BOUND_TAIL_PATTERN.test(prefix) && !DOMAIN_NUMERIC_UPPER_BOUND_TAIL_PATTERN.test(prefix)) {
     return false;
   }
   const trimmed = insertedText.trim();
@@ -878,19 +1161,40 @@ function shouldTriggerNumericUpperBoundTail(prefix: string, insertedText: string
 }
 
 function expectedTailLabels(prefix: string): string[] | null {
-  if (TEXT_LENGTH_VALUE_TAIL_PATTERN.test(prefix)) {
+  if (TEXT_LENGTH_VALUE_TAIL_PATTERN.test(prefix) || DOMAIN_TEXT_LENGTH_VALUE_TAIL_PATTERN.test(prefix)) {
     return ["<length>"];
   }
-  if (TEXT_TAIL_PATTERN.test(prefix)) {
+  if (TEXT_TAIL_PATTERN.test(prefix) || DOMAIN_TEXT_TAIL_PATTERN.test(prefix)) {
     return ["*", "* <length>"];
   }
-  if (NUMERIC_UPPER_BOUND_TAIL_PATTERN.test(prefix)) {
+  if (NUMERIC_UPPER_BOUND_TAIL_PATTERN.test(prefix) || DOMAIN_NUMERIC_UPPER_BOUND_TAIL_PATTERN.test(prefix)) {
     return ["<upper>"];
   }
-  if (NUMERIC_TAIL_PATTERN.test(prefix)) {
+  if (NUMERIC_TAIL_PATTERN.test(prefix) || DOMAIN_NUMERIC_TAIL_PATTERN.test(prefix)) {
     return ["..", ".. <upper>"];
   }
   return null;
+}
+
+function matchNumericTailLiteral(prefix: string): string {
+  return prefix.match(NUMERIC_TAIL_PATTERN)?.[1]
+    ?? prefix.match(DOMAIN_NUMERIC_TAIL_PATTERN)?.[1]
+    ?? "";
+}
+
+function isDomainTailContext(prefix: string): boolean {
+  return DOMAIN_TEXT_TAIL_PATTERN.test(prefix)
+    || DOMAIN_TEXT_LENGTH_VALUE_TAIL_PATTERN.test(prefix)
+    || DOMAIN_NUMERIC_TAIL_PATTERN.test(prefix)
+    || DOMAIN_NUMERIC_UPPER_BOUND_TAIL_PATTERN.test(prefix);
+}
+
+function hasAllowedTailSuffix(prefix: string, suffix: string): boolean {
+  const trimmedSuffix = suffix.trim();
+  if (trimmedSuffix.length === 0) {
+    return true;
+  }
+  return trimmedSuffix === ";" && isDomainTailContext(prefix);
 }
 
 function shouldScheduleTailRetry(change: vscode.TextDocumentContentChangeEvent): boolean {
@@ -908,7 +1212,193 @@ function shouldTriggerContainerBodySuggest(prefix: string, suffix: string, inser
   return CONTAINER_BODY_PREFIX_PATTERN.test(prefix);
 }
 
-async function hasTopicBodySuggestions(document: vscode.TextDocument, position: vscode.Position): Promise<boolean> {
+function shouldTriggerHeaderSuggest(prefix: string, suffix: string, insertedText: string): boolean {
+  if (!insertedText || /\r|\n/.test(insertedText)) {
+    return false;
+  }
+  if (isMetaAttributeRootContext(prefix, suffix) || isMetaAttributeValueContext(prefix, suffix)) {
+    return true;
+  }
+  const trimmedSuffix = suffix.trim();
+  const fixedEqualsSuffix = isFixedEqualsHeaderSuffix(trimmedSuffix);
+  if (isDomainRhsTriggerContext(prefix, suffix)) {
+    return true;
+  }
+  if (isUnitRhsTriggerContext(prefix, suffix)
+      || isUnitBracketTargetContext(prefix, suffix)
+      || isUnitComposedTargetContext(prefix, suffix)
+      || isUnitComposedOperatorContext(prefix, suffix)) {
+    return true;
+  }
+  if (trimmedSuffix.length > 0 && !fixedEqualsSuffix) {
+    return false;
+  }
+  if (fixedEqualsSuffix) {
+    if (HEADER_AFTER_EXTENDS_TARGET_TRIGGER_PATTERN.test(prefix)
+        || UNIT_HEADER_AFTER_EXTENDS_TARGET_WITH_ABBR_TRIGGER_PATTERN.test(prefix)) {
+      return false;
+    }
+    return BLOCK_HEADER_AFTER_NAME_TRIGGER_PATTERN.test(prefix)
+      || UNIT_BLOCK_HEADER_AFTER_NAME_WITH_ABBR_TRIGGER_PATTERN.test(prefix)
+      || HEADER_MODIFIER_VALUE_TRIGGER_PATTERN.test(prefix)
+      || UNIT_HEADER_MODIFIER_VALUE_WITH_ABBR_TRIGGER_PATTERN.test(prefix)
+      || HEADER_MODIFIER_CLOSE_TRIGGER_PATTERN.test(prefix)
+      || UNIT_HEADER_MODIFIER_CLOSE_WITH_ABBR_TRIGGER_PATTERN.test(prefix)
+      || BLOCK_HEADER_AFTER_MODIFIER_TRIGGER_PATTERN.test(prefix)
+      || UNIT_BLOCK_HEADER_AFTER_MODIFIER_WITH_ABBR_TRIGGER_PATTERN.test(prefix)
+      || HEADER_EXTENDS_OPEN_TRIGGER_PATTERN.test(prefix)
+      || UNIT_HEADER_EXTENDS_OPEN_WITH_ABBR_TRIGGER_PATTERN.test(prefix);
+  }
+  return HEADER_AFTER_NAME_TRIGGER_PATTERN.test(prefix)
+    || UNIT_HEADER_AFTER_NAME_WITH_ABBR_TRIGGER_PATTERN.test(prefix)
+    || HEADER_MODIFIER_VALUE_TRIGGER_PATTERN.test(prefix)
+    || UNIT_HEADER_MODIFIER_VALUE_WITH_ABBR_TRIGGER_PATTERN.test(prefix)
+    || HEADER_MODIFIER_CLOSE_TRIGGER_PATTERN.test(prefix)
+    || UNIT_HEADER_MODIFIER_CLOSE_WITH_ABBR_TRIGGER_PATTERN.test(prefix)
+    || HEADER_AFTER_MODIFIER_TRIGGER_PATTERN.test(prefix)
+    || UNIT_HEADER_AFTER_MODIFIER_WITH_ABBR_TRIGGER_PATTERN.test(prefix)
+    || HEADER_EXTENDS_OPEN_TRIGGER_PATTERN.test(prefix)
+    || UNIT_HEADER_EXTENDS_OPEN_WITH_ABBR_TRIGGER_PATTERN.test(prefix)
+    || HEADER_AFTER_EXTENDS_TARGET_TRIGGER_PATTERN.test(prefix)
+    || UNIT_HEADER_AFTER_EXTENDS_TARGET_WITH_ABBR_TRIGGER_PATTERN.test(prefix);
+}
+
+function expectedHeaderLabels(prefix: string, suffix: string): string[] | null {
+  const fixedEqualsSuffix = isFixedEqualsHeaderSuffix(suffix.trim());
+  if (isMetaAttributeRootContext(prefix, suffix) || isMetaAttributeValueContext(prefix, suffix)) {
+    return null;
+  }
+  if (isDomainRhsTriggerContext(prefix, suffix)) {
+    return ["TEXT", "BOOLEAN", "NUMERIC"];
+  }
+  if (isUnitRhsTriggerContext(prefix, suffix)) {
+    return ["[BaseUnit]", "1000 [BaseUnit]"];
+  }
+  if (isUnitBracketTargetContext(prefix, suffix)
+      || isUnitComposedTargetContext(prefix, suffix)
+      || isUnitComposedOperatorContext(prefix, suffix)) {
+    return null;
+  }
+  const afterNameMatch = prefix.match(fixedEqualsSuffix ? BLOCK_HEADER_AFTER_NAME_TRIGGER_PATTERN : HEADER_AFTER_NAME_TRIGGER_PATTERN);
+  if (afterNameMatch) {
+    return headerAfterNameLabels(afterNameMatch[1], !fixedEqualsSuffix, hasUnitHeaderAbbreviation(prefix));
+  }
+  if ((fixedEqualsSuffix ? UNIT_BLOCK_HEADER_AFTER_NAME_WITH_ABBR_TRIGGER_PATTERN : UNIT_HEADER_AFTER_NAME_WITH_ABBR_TRIGGER_PATTERN).test(prefix)) {
+    return headerAfterNameLabels("UNIT", !fixedEqualsSuffix, true);
+  }
+  if (HEADER_MODIFIER_VALUE_TRIGGER_PATTERN.test(prefix) || UNIT_HEADER_MODIFIER_VALUE_WITH_ABBR_TRIGGER_PATTERN.test(prefix)) {
+    return headerModifierValueLabels(prefix);
+  }
+  if (HEADER_MODIFIER_CLOSE_TRIGGER_PATTERN.test(prefix) || UNIT_HEADER_MODIFIER_CLOSE_WITH_ABBR_TRIGGER_PATTERN.test(prefix)) {
+    return [")"];
+  }
+  if ((fixedEqualsSuffix ? BLOCK_HEADER_AFTER_MODIFIER_TRIGGER_PATTERN : HEADER_AFTER_MODIFIER_TRIGGER_PATTERN).test(prefix)
+      || (fixedEqualsSuffix ? UNIT_BLOCK_HEADER_AFTER_MODIFIER_WITH_ABBR_TRIGGER_PATTERN : UNIT_HEADER_AFTER_MODIFIER_WITH_ABBR_TRIGGER_PATTERN).test(prefix)) {
+    return fixedEqualsSuffix ? ["EXTENDS"] : ["EXTENDS", "="];
+  }
+  if (HEADER_AFTER_EXTENDS_TARGET_TRIGGER_PATTERN.test(prefix) || UNIT_HEADER_AFTER_EXTENDS_TARGET_WITH_ABBR_TRIGGER_PATTERN.test(prefix)) {
+    return ["="];
+  }
+  return null;
+}
+
+function headerAfterNameLabels(declarationKind: string | undefined, includeEquals: boolean, hasAbbreviation = false): string[] {
+  const normalized = (declarationKind ?? "").toUpperCase();
+  if (normalized === "TOPIC") {
+    return includeEquals ? ["(ABSTRACT)", "(FINAL)", "EXTENDS", "="] : ["(ABSTRACT)", "(FINAL)", "EXTENDS"];
+  }
+  if (normalized === "DOMAIN") {
+    return includeEquals
+      ? ["(ABSTRACT)", "(FINAL)", "(GENERIC)", "EXTENDS", "="]
+      : ["(ABSTRACT)", "(FINAL)", "(GENERIC)", "EXTENDS"];
+  }
+  if (normalized === "UNIT") {
+    const labels = hasAbbreviation ? ["(ABSTRACT)", "EXTENDS"] : ["[Name]", "(ABSTRACT)", "EXTENDS"];
+    return includeEquals ? [...labels, "="] : labels;
+  }
+  return includeEquals
+    ? ["(ABSTRACT)", "(EXTENDED)", "(FINAL)", "EXTENDS", "="]
+    : ["(ABSTRACT)", "(EXTENDED)", "(FINAL)", "EXTENDS"];
+}
+
+function headerModifierValueLabels(prefix: string): string[] {
+  const declarationMatch = prefix.match(HEADER_MODIFIER_VALUE_TRIGGER_PATTERN);
+  const declarationKind = (declarationMatch?.[1] ?? "").toUpperCase();
+  if (declarationKind === "TOPIC") {
+    return ["ABSTRACT", "FINAL"];
+  }
+  if (declarationKind === "DOMAIN") {
+    return ["ABSTRACT", "FINAL", "GENERIC"];
+  }
+  if (declarationKind === "UNIT") {
+    return ["ABSTRACT"];
+  }
+  return ["ABSTRACT", "EXTENDED", "FINAL"];
+}
+
+function isFixedEqualsHeaderSuffix(trimmedSuffix: string): boolean {
+  return /^=\s*;?$/.test(trimmedSuffix);
+}
+
+function isDomainRhsTriggerContext(prefix: string, suffix: string): boolean {
+  const trimmedSuffix = suffix.trim();
+  return DOMAIN_RHS_TRIGGER_PATTERN.test(prefix) && (trimmedSuffix.length === 0 || trimmedSuffix === ";");
+}
+
+function isUnitRhsTriggerContext(prefix: string, suffix: string): boolean {
+  const trimmedSuffix = suffix.trim();
+  return UNIT_RHS_TRIGGER_PATTERN.test(prefix) && (trimmedSuffix.length === 0 || trimmedSuffix === ";");
+}
+
+function isUnitBracketTargetContext(prefix: string, suffix: string): boolean {
+  const trimmedSuffix = suffix.trim();
+  return UNIT_BRACKET_TARGET_TRIGGER_PATTERN.test(prefix) && (trimmedSuffix.length === 0 || trimmedSuffix === ";");
+}
+
+function isUnitComposedTargetContext(prefix: string, suffix: string): boolean {
+  const trimmedSuffix = suffix.trim();
+  return UNIT_COMPOSED_TARGET_TRIGGER_PATTERN.test(prefix)
+    && (trimmedSuffix.length === 0 || trimmedSuffix === ";" || trimmedSuffix === ")");
+}
+
+function isUnitComposedOperatorContext(prefix: string, suffix: string): boolean {
+  const trimmedSuffix = suffix.trim();
+  return UNIT_COMPOSED_OPERATOR_TRIGGER_PATTERN.test(prefix)
+    && (trimmedSuffix.length === 0 || trimmedSuffix === ";" || trimmedSuffix === ")");
+}
+
+function headerSuggestTriggerKind(prefix: string, suffix: string): string {
+  if (isMetaAttributeRootContext(prefix, suffix)) {
+    return "metaattr-root";
+  }
+  if (isMetaAttributeValueContext(prefix, suffix)) {
+    return "metaattr-value";
+  }
+  if (isDomainRhsTriggerContext(prefix, suffix)) {
+    return "domain-rhs";
+  }
+  if (isUnitRhsTriggerContext(prefix, suffix)
+      || isUnitBracketTargetContext(prefix, suffix)
+      || isUnitComposedTargetContext(prefix, suffix)
+      || isUnitComposedOperatorContext(prefix, suffix)) {
+    return "unit-rhs";
+  }
+  return "header";
+}
+
+function hasUnitHeaderAbbreviation(prefix: string): boolean {
+  return /\[[^\]]+\]/.test(prefix);
+}
+
+function isMetaAttributeRootContext(prefix: string, suffix: string): boolean {
+  return METAATTRIBUTE_ROOT_TRIGGER_PATTERN.test(prefix) && suffix.trim().length === 0;
+}
+
+function isMetaAttributeValueContext(prefix: string, suffix: string): boolean {
+  return METAATTRIBUTE_VALUE_TRIGGER_PATTERN.test(prefix) && suffix.trim().length === 0;
+}
+
+async function hasContainerBodySuggestions(document: vscode.TextDocument, position: vscode.Position): Promise<boolean> {
   try {
     const completions = await vscode.commands.executeCommand<vscode.CompletionList | vscode.CompletionItem[]>(
       "vscode.executeCompletionItemProvider",
@@ -942,6 +1432,21 @@ async function hasExpectedTailSuggestions(document: vscode.TextDocument,
   }
 }
 
+async function hasAnySuggestions(document: vscode.TextDocument,
+                                 position: vscode.Position): Promise<boolean> {
+  try {
+    const completions = await vscode.commands.executeCommand<vscode.CompletionList | vscode.CompletionItem[]>(
+      "vscode.executeCompletionItemProvider",
+      document.uri,
+      position
+    );
+    const items = Array.isArray(completions) ? completions : completions?.items ?? [];
+    return items.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 function isTopicBodySuggestionItem(item: vscode.CompletionItem | undefined): boolean {
   if (!item) {
     return false;
@@ -949,11 +1454,29 @@ function isTopicBodySuggestionItem(item: vscode.CompletionItem | undefined): boo
   if (item.kind !== vscode.CompletionItemKind.Keyword && item.kind !== vscode.CompletionItemKind.Snippet) {
     return false;
   }
-  return TOPIC_BODY_AUTO_TRIGGER_LABELS.has(normalizeCompletionLabel(item.label).toUpperCase());
+  return CONTAINER_BODY_AUTO_TRIGGER_LABELS.has(normalizeCompletionLabel(item.label).toUpperCase());
 }
 
 function normalizeCompletionLabel(label: string | vscode.CompletionItemLabel): string {
   return typeof label === "string" ? label : label.label;
+}
+
+function suggestFingerprint(document: vscode.TextDocument,
+                            position: vscode.Position,
+                            triggerKind: string): string {
+  return `${document.version}:${position.line}:${position.character}:${triggerKind}`;
+}
+
+function hasRecentSuggestFingerprint(document: vscode.TextDocument,
+                                     position: vscode.Position,
+                                     triggerKind: string): boolean {
+  return recentSuggestFingerprints.get(document.uri.toString()) === suggestFingerprint(document, position, triggerKind);
+}
+
+function rememberSuggestFingerprint(document: vscode.TextDocument,
+                                    position: vscode.Position,
+                                    triggerKind: string): void {
+  recentSuggestFingerprints.set(document.uri.toString(), suggestFingerprint(document, position, triggerKind));
 }
 
 async function ensurePanelVisible(preserveEditorFocus = true) {

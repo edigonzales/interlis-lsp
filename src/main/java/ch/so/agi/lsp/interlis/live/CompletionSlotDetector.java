@@ -24,6 +24,26 @@ public final class CompletionSlotDetector {
     private static final Pattern EXTENDS_CONTEXT_PATTERN = Pattern.compile(
             "(?i)\\bEXTENDS\\s+([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*\\.?)?\\s*$");
     private static final Pattern CONTAINER_BODY_CONTEXT_PATTERN = Pattern.compile("^\\s*([A-Za-z_][A-Za-z0-9_]*)?\\s*$");
+    private static final Pattern HEADER_AFTER_NAME_PATTERN = Pattern.compile(
+            "(?i)^\\s*(CLASS|STRUCTURE|TOPIC|DOMAIN)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s+$");
+    private static final Pattern BLOCK_HEADER_AFTER_NAME_PATTERN = Pattern.compile(
+            "(?i)^\\s*(CLASS|STRUCTURE|TOPIC|DOMAIN)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s+([A-Za-z_]*)\\s*(=)\\s*;?\\s*$");
+    private static final Pattern HEADER_MODIFIER_OPEN_PATTERN = Pattern.compile(
+            "(?i)^\\s*(CLASS|STRUCTURE|TOPIC|DOMAIN)\\s+[A-Za-z_][A-Za-z0-9_]*\\s*\\(\\s*([A-Za-z_]*)\\s*$");
+    private static final Pattern BLOCK_HEADER_MODIFIER_OPEN_PATTERN = Pattern.compile(
+            "(?i)^\\s*(CLASS|STRUCTURE|TOPIC|DOMAIN)\\s+[A-Za-z_][A-Za-z0-9_]*\\s+\\(\\s*([A-Za-z_]*)\\s*(=)\\s*;?\\s*$");
+    private static final Pattern HEADER_MODIFIER_CLOSE_PATTERN = Pattern.compile(
+            "(?i)^\\s*(CLASS|STRUCTURE|TOPIC|DOMAIN)\\s+[A-Za-z_][A-Za-z0-9_]*\\s*\\(\\s*(ABSTRACT|EXTENDED|FINAL|GENERIC)\\s*$");
+    private static final Pattern BLOCK_HEADER_MODIFIER_CLOSE_PATTERN = Pattern.compile(
+            "(?i)^\\s*(CLASS|STRUCTURE|TOPIC|DOMAIN)\\s+[A-Za-z_][A-Za-z0-9_]*\\s+\\(\\s*(ABSTRACT|EXTENDED|FINAL|GENERIC)\\s*(=)\\s*;?\\s*$");
+    private static final Pattern HEADER_AFTER_MODIFIER_PATTERN = Pattern.compile(
+            "(?i)^\\s*(CLASS|STRUCTURE|TOPIC|DOMAIN)\\s+[A-Za-z_][A-Za-z0-9_]*\\s*\\(\\s*(ABSTRACT|EXTENDED|FINAL|GENERIC)\\s*\\)\\s*$");
+    private static final Pattern BLOCK_HEADER_AFTER_MODIFIER_PATTERN = Pattern.compile(
+            "(?i)^\\s*(CLASS|STRUCTURE|TOPIC|DOMAIN)\\s+[A-Za-z_][A-Za-z0-9_]*\\s+\\(\\s*(ABSTRACT|EXTENDED|FINAL|GENERIC)\\s*\\)\\s+([A-Za-z_]*)\\s*(=)\\s*;?\\s*$");
+    private static final Pattern HEADER_AFTER_EXTENDS_PATTERN = Pattern.compile(
+            "(?i)^\\s*(CLASS|STRUCTURE|TOPIC|DOMAIN)\\s+[A-Za-z_][A-Za-z0-9_]*(?:\\s*\\(\\s*(ABSTRACT|EXTENDED|FINAL|GENERIC)\\s*\\))?\\s+EXTENDS\\s+[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*\\s+$");
+    private static final Pattern BLOCK_HEADER_EXTENDS_TARGET_PATTERN = Pattern.compile(
+            "(?i)^\\s*(CLASS|STRUCTURE|TOPIC|DOMAIN)\\s+[A-Za-z_][A-Za-z0-9_]*(?:\\s+\\(\\s*(ABSTRACT|EXTENDED|FINAL|GENERIC)\\s*\\))?\\s+EXTENDS\\s*([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*\\.?)?\\s*(=)\\s*;?\\s*$");
 
     public List<CompletionContext> detect(DocumentSnapshot snapshot,
                                           ScopeGraph scopeGraph,
@@ -49,6 +69,14 @@ public final class CompletionSlotDetector {
             List<LiveToken> lineTokens = tokensOnLine(tokens, lineNumber);
             collectImportsContext(text, lineStart, lineEnd, contexts);
             collectEndContext(text, lineStart, lineEnd, scopeGraph, contexts);
+            if (collectDeclarationHeaderContext(text, lineStart, lineEnd, scopeGraph, contexts)) {
+                if (lineEnd >= text.length()) {
+                    break;
+                }
+                lineStart = nextLineStart(text, lineEnd);
+                lineNumber++;
+                continue;
+            }
             if (collectExtendsContext(text, lineStart, lineEnd, scopeGraph, contexts)) {
                 if (lineEnd >= text.length()) {
                     break;
@@ -135,7 +163,8 @@ public final class CompletionSlotDetector {
         if (owner == null) {
             return false;
         }
-        Set<InterlisSymbolKind> allowedKinds = allowedExtendsKinds(owner.kind());
+        InterlisSymbolKind declarationKind = declarationKindForExtendsLine(line, owner.kind());
+        Set<InterlisSymbolKind> allowedKinds = allowedExtendsKinds(declarationKind != null ? declarationKind : owner.kind());
         if (allowedKinds.isEmpty()) {
             return false;
         }
@@ -147,6 +176,198 @@ public final class CompletionSlotDetector {
                 owner,
                 allowedKinds));
         return true;
+    }
+
+    private boolean collectDeclarationHeaderContext(String text,
+                                                    int lineStartOffset,
+                                                    int lineEndOffset,
+                                                    ScopeGraph scopeGraph,
+                                                    List<CompletionContext> contexts) {
+        String line = text.substring(lineStartOffset, lineEndOffset);
+        LiveSymbol owner = enclosingOwner(text, scopeGraph, lineEndOffset);
+        InterlisSymbolKind scopeOwnerKind = owner != null ? owner.kind() : null;
+
+        Matcher blockExtendsTargetMatcher = BLOCK_HEADER_EXTENDS_TARGET_PATTERN.matcher(line);
+        if (blockExtendsTargetMatcher.matches()) {
+            InterlisSymbolKind declarationKind = declarationKind(blockExtendsTargetMatcher.group(1));
+            if (supportsDeclarationHeaderContext(scopeOwnerKind, declarationKind)
+                    && isAllowedHeaderModifier(declarationKind, blockExtendsTargetMatcher.group(2))) {
+                Range replaceRange = blockExtendsTargetMatcher.group(3) != null
+                        ? groupRange(text, blockExtendsTargetMatcher, 3, lineStartOffset, lineEndOffset)
+                        : range(text,
+                        lineStartOffset + blockExtendsTargetMatcher.start(4),
+                        lineStartOffset + blockExtendsTargetMatcher.start(4));
+                contexts.add(buildPathAwareContext(
+                        CompletionContext.Kind.DECLARATION_HEADER_BLOCK_SUFFIX_EXTENDS_TARGET,
+                        text,
+                        groupValue(blockExtendsTargetMatcher, 3),
+                        replaceRange,
+                        owner,
+                        allowedExtendsKinds(declarationKind)));
+                return true;
+            }
+        }
+
+        Matcher blockAfterModifierMatcher = BLOCK_HEADER_AFTER_MODIFIER_PATTERN.matcher(line);
+        if (blockAfterModifierMatcher.matches()) {
+            InterlisSymbolKind declarationKind = declarationKind(blockAfterModifierMatcher.group(1));
+            if (supportsDeclarationHeaderContext(scopeOwnerKind, declarationKind)
+                    && isAllowedHeaderModifier(declarationKind, blockAfterModifierMatcher.group(2))) {
+                contexts.add(new CompletionContext(
+                        CompletionContext.Kind.DECLARATION_HEADER_BLOCK_SUFFIX_AFTER_MODIFIER,
+                        groupValue(blockAfterModifierMatcher, 3),
+                        line,
+                        null,
+                        groupRange(text, blockAfterModifierMatcher, 3, lineStartOffset, lineEndOffset),
+                        owner != null ? owner.id() : null,
+                        null,
+                        declarationKind));
+                return true;
+            }
+        }
+
+        Matcher blockModifierCloseMatcher = BLOCK_HEADER_MODIFIER_CLOSE_PATTERN.matcher(line);
+        if (blockModifierCloseMatcher.matches()) {
+            InterlisSymbolKind declarationKind = declarationKind(blockModifierCloseMatcher.group(1));
+            if (supportsDeclarationHeaderContext(scopeOwnerKind, declarationKind)
+                    && isAllowedHeaderModifier(declarationKind, blockModifierCloseMatcher.group(2))) {
+                int equalsOffset = lineStartOffset + blockModifierCloseMatcher.start(3);
+                contexts.add(new CompletionContext(
+                        CompletionContext.Kind.DECLARATION_HEADER_BLOCK_SUFFIX_MODIFIER_CLOSE,
+                        "",
+                        line,
+                        null,
+                        range(text, equalsOffset, equalsOffset),
+                        owner != null ? owner.id() : null,
+                        null,
+                        declarationKind));
+                return true;
+            }
+        }
+
+        Matcher blockModifierOpenMatcher = BLOCK_HEADER_MODIFIER_OPEN_PATTERN.matcher(line);
+        if (blockModifierOpenMatcher.matches()) {
+            InterlisSymbolKind declarationKind = declarationKind(blockModifierOpenMatcher.group(1));
+            if (supportsDeclarationHeaderContext(scopeOwnerKind, declarationKind)) {
+                contexts.add(new CompletionContext(
+                        CompletionContext.Kind.DECLARATION_HEADER_BLOCK_SUFFIX_MODIFIER_VALUE,
+                        groupValue(blockModifierOpenMatcher, 2),
+                        line,
+                        null,
+                        groupRange(text, blockModifierOpenMatcher, 2, lineStartOffset, lineEndOffset),
+                        owner != null ? owner.id() : null,
+                        null,
+                        declarationKind));
+                return true;
+            }
+        }
+
+        Matcher blockAfterNameMatcher = BLOCK_HEADER_AFTER_NAME_PATTERN.matcher(line);
+        if (blockAfterNameMatcher.matches()) {
+            InterlisSymbolKind declarationKind = declarationKind(blockAfterNameMatcher.group(1));
+            if (supportsDeclarationHeaderContext(scopeOwnerKind, declarationKind)) {
+                contexts.add(new CompletionContext(
+                        CompletionContext.Kind.DECLARATION_HEADER_BLOCK_SUFFIX_AFTER_NAME,
+                        groupValue(blockAfterNameMatcher, 3),
+                        line,
+                        null,
+                        groupRange(text, blockAfterNameMatcher, 3, lineStartOffset, lineEndOffset),
+                        owner != null ? owner.id() : null,
+                        null,
+                        declarationKind));
+                return true;
+            }
+        }
+
+        Matcher afterExtendsMatcher = HEADER_AFTER_EXTENDS_PATTERN.matcher(line);
+        if (afterExtendsMatcher.matches()) {
+            InterlisSymbolKind declarationKind = declarationKind(afterExtendsMatcher.group(1));
+            if (supportsDeclarationHeaderContext(scopeOwnerKind, declarationKind)
+                    && isAllowedHeaderModifier(declarationKind, afterExtendsMatcher.group(2))) {
+                contexts.add(new CompletionContext(
+                        CompletionContext.Kind.DECLARATION_HEADER_AFTER_EXTENDS,
+                        "",
+                        line,
+                        null,
+                        range(text, lineEndOffset, lineEndOffset),
+                        owner != null ? owner.id() : null,
+                        null,
+                        declarationKind));
+                return true;
+            }
+        }
+
+        Matcher afterModifierMatcher = HEADER_AFTER_MODIFIER_PATTERN.matcher(line);
+        if (afterModifierMatcher.matches()) {
+            InterlisSymbolKind declarationKind = declarationKind(afterModifierMatcher.group(1));
+            if (supportsDeclarationHeaderContext(scopeOwnerKind, declarationKind)
+                    && isAllowedHeaderModifier(declarationKind, afterModifierMatcher.group(2))) {
+                contexts.add(new CompletionContext(
+                        CompletionContext.Kind.DECLARATION_HEADER_AFTER_MODIFIER,
+                        "",
+                        line,
+                        null,
+                        range(text, lineEndOffset, lineEndOffset),
+                        owner != null ? owner.id() : null,
+                        null,
+                        declarationKind));
+                return true;
+            }
+        }
+
+        Matcher modifierCloseMatcher = HEADER_MODIFIER_CLOSE_PATTERN.matcher(line);
+        if (modifierCloseMatcher.matches()) {
+            InterlisSymbolKind declarationKind = declarationKind(modifierCloseMatcher.group(1));
+            if (supportsDeclarationHeaderContext(scopeOwnerKind, declarationKind)
+                    && isAllowedHeaderModifier(declarationKind, modifierCloseMatcher.group(2))) {
+                contexts.add(new CompletionContext(
+                        CompletionContext.Kind.DECLARATION_HEADER_MODIFIER_CLOSE,
+                        "",
+                        line,
+                        null,
+                        range(text, lineEndOffset, lineEndOffset),
+                        owner != null ? owner.id() : null,
+                        null,
+                        declarationKind));
+                return true;
+            }
+        }
+
+        Matcher modifierOpenMatcher = HEADER_MODIFIER_OPEN_PATTERN.matcher(line);
+        if (modifierOpenMatcher.matches()) {
+            InterlisSymbolKind declarationKind = declarationKind(modifierOpenMatcher.group(1));
+            if (supportsDeclarationHeaderContext(scopeOwnerKind, declarationKind)) {
+                contexts.add(new CompletionContext(
+                        CompletionContext.Kind.DECLARATION_HEADER_MODIFIER_VALUE,
+                        groupValue(modifierOpenMatcher, 2),
+                        line,
+                        null,
+                        groupRange(text, modifierOpenMatcher, 2, lineStartOffset, lineEndOffset),
+                        owner != null ? owner.id() : null,
+                        null,
+                        declarationKind));
+                return true;
+            }
+        }
+
+        Matcher afterNameMatcher = HEADER_AFTER_NAME_PATTERN.matcher(line);
+        if (afterNameMatcher.matches()) {
+            InterlisSymbolKind declarationKind = declarationKind(afterNameMatcher.group(1));
+            if (supportsDeclarationHeaderContext(scopeOwnerKind, declarationKind)) {
+                contexts.add(new CompletionContext(
+                        CompletionContext.Kind.DECLARATION_HEADER_AFTER_NAME,
+                        "",
+                        line,
+                        null,
+                        range(text, lineEndOffset, lineEndOffset),
+                        owner != null ? owner.id() : null,
+                        null,
+                        declarationKind));
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void collectAttributeContext(String text,
@@ -709,6 +930,8 @@ public final class CompletionSlotDetector {
         return switch (ownerKind) {
             case CLASS -> EnumSet.of(InterlisSymbolKind.CLASS, InterlisSymbolKind.STRUCTURE);
             case STRUCTURE -> EnumSet.of(InterlisSymbolKind.STRUCTURE);
+            case TOPIC -> EnumSet.of(InterlisSymbolKind.TOPIC);
+            case DOMAIN -> EnumSet.of(InterlisSymbolKind.DOMAIN);
             case ASSOCIATION -> EnumSet.of(InterlisSymbolKind.ASSOCIATION);
             case VIEW -> EnumSet.of(InterlisSymbolKind.VIEW);
             default -> Set.of();
@@ -722,6 +945,64 @@ public final class CompletionSlotDetector {
     }
 
     private static boolean supportsContainerBodyContext(InterlisSymbolKind ownerKind) {
-        return ownerKind == InterlisSymbolKind.TOPIC;
+        return ownerKind == InterlisSymbolKind.TOPIC
+                || ownerKind == InterlisSymbolKind.MODEL;
+    }
+
+    private static InterlisSymbolKind declarationKindForExtendsLine(String line, InterlisSymbolKind fallback) {
+        if (line == null || line.isBlank()) {
+            return fallback;
+        }
+        Matcher matcher = Pattern.compile("(?i)^\\s*(CLASS|STRUCTURE|TOPIC|DOMAIN)\\b").matcher(line);
+        if (!matcher.find()) {
+            return fallback;
+        }
+        InterlisSymbolKind declarationKind = declarationKind(matcher.group(1));
+        return declarationKind != null ? declarationKind : fallback;
+    }
+
+    private static InterlisSymbolKind declarationKind(String text) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        return switch (text.toUpperCase(Locale.ROOT)) {
+            case "CLASS" -> InterlisSymbolKind.CLASS;
+            case "STRUCTURE" -> InterlisSymbolKind.STRUCTURE;
+            case "TOPIC" -> InterlisSymbolKind.TOPIC;
+            case "DOMAIN" -> InterlisSymbolKind.DOMAIN;
+            default -> null;
+        };
+    }
+
+    private static boolean supportsDeclarationHeaderContext(InterlisSymbolKind scopeOwnerKind,
+                                                            InterlisSymbolKind declarationKind) {
+        if (scopeOwnerKind == null || declarationKind == null) {
+            return false;
+        }
+        return switch (declarationKind) {
+            case CLASS, STRUCTURE -> scopeOwnerKind == InterlisSymbolKind.TOPIC || scopeOwnerKind == declarationKind;
+            case TOPIC -> scopeOwnerKind == InterlisSymbolKind.MODEL || scopeOwnerKind == InterlisSymbolKind.TOPIC;
+            case DOMAIN -> scopeOwnerKind == InterlisSymbolKind.MODEL || scopeOwnerKind == InterlisSymbolKind.TOPIC;
+            default -> false;
+        };
+    }
+
+    private static boolean isAllowedHeaderModifier(InterlisSymbolKind declarationKind, String modifier) {
+        if (modifier == null || modifier.isBlank()) {
+            return true;
+        }
+        return allowedHeaderModifiers(declarationKind).contains(modifier.toUpperCase(Locale.ROOT));
+    }
+
+    private static Set<String> allowedHeaderModifiers(InterlisSymbolKind declarationKind) {
+        if (declarationKind == null) {
+            return Set.of();
+        }
+        return switch (declarationKind) {
+            case CLASS, STRUCTURE -> Set.of("ABSTRACT", "EXTENDED", "FINAL");
+            case TOPIC -> Set.of("ABSTRACT", "FINAL");
+            case DOMAIN -> Set.of("ABSTRACT", "FINAL", "GENERIC");
+            default -> Set.of();
+        };
     }
 }

@@ -110,8 +110,13 @@
     "keybindings": [
       {
         "key": "enter",
-        "command": "jumpToNextSnippetPlaceholder",
-        "when": "editorTextFocus && editorLangId == interlis && inSnippetMode && hasNextTabstop"
+        "command": "interlis.snippet.nextPlaceholder",
+        "when": "editorTextFocus && editorLangId == interlis && inSnippetMode && hasNextTabstop && !suggestWidgetVisible"
+      },
+      {
+        "key": "tab",
+        "command": "interlis.snippet.nextPlaceholder",
+        "when": "editorTextFocus && editorLangId == interlis && inSnippetMode && hasNextTabstop && !suggestWidgetVisible"
       }
     ],
     "configuration": {
