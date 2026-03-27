@@ -203,6 +203,21 @@ Wie diese `CompletionItemKind`s konkret gerendert werden, entscheidet der Editor
 - Weitere model-level Deklarationen wie `CLASS`, `STRUCTURE`, `DOMAIN`, `UNIT` und `CONTEXT` duerfen zusaetzlich Starter-Snippets liefern.
 - Im `MODEL`-Body gibt es in VS Code wie im `TOPIC`-Body kein Auto-Popup direkt nach leerem `Enter`; Auto-Popup beginnt erst nach einem Identifier-Prefix oder bei manueller Completion.
 
+## Top-Level-`MODEL`
+
+- Das Dokument-Top-Level nach `INTERLIS ...;` verwendet fuer `MODEL` einen expliziten Completion-/Snippet-Pfad, nicht den On-Type-Auto-Closer auf `=`.
+- Auf leerer oder nur mit einem Identifier-Prefix begonnenen Zeile im Dokument-Root wird `MODEL` angeboten.
+- Das gilt auch nach einem bereits abgeschlossenen `MODEL` sowie nach Kommentar-, Banner- und `!!@`-Zeilen zwischen zwei Modellen, solange der Cursor weiterhin im Dokument-Root und ausserhalb aller Container steht.
+- Zusaetzlich gibt es dort ein Full-Snippet `MODEL Name (lang) AT ... VERSION ... = ... END Name.`.
+- Das `MODEL`-Snippet ist name-first mit weiteren Header-Stopps fuer Sprache, URL und `VERSION`.
+- Der Modellbody liegt auf der finalen Cursor-Position `$0`.
+- `END Name.` spiegelt nur den Modellnamen.
+- Das Modell-Snippet bleibt meinungsstark:
+  - das Banner und die Modell-Metaattribute werden als konkrete Beispielwerte eingefuegt
+  - nur Name, Sprache, URL und `VERSION` sind editierbare Placeholder
+- In den vier editierbaren `MODEL`-Header-Placeholdern gibt es in VS Code bewusst keine Completion-Popups; `Tab` und `Enter` navigieren dort immer zum naechsten Placeholder.
+- In VS Code gibt es am Dokument-Root kein Auto-Popup direkt auf leerer Zeile; Auto-Popup beginnt dort erst nach einem Identifier-Prefix wie `MO` oder bei manueller Completion.
+
 ## Header-Folge-Completion fuer `CLASS`, `STRUCTURE` und `TOPIC`
 
 - Modifier und `EXTENDS` werden nicht als Variantenflut im ersten `TOPIC`-Body-Popup angeboten.

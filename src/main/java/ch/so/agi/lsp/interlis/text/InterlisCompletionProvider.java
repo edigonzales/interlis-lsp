@@ -36,6 +36,9 @@ import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -50,9 +53,12 @@ import java.util.regex.Pattern;
 
 final class InterlisCompletionProvider {
     private static final Logger LOG = LoggerFactory.getLogger(InterlisCompletionProvider.class);
+    private static final DateTimeFormatter ISO_DAY = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    private static final ZoneId ZURICH = ZoneId.of("Europe/Zurich");
 
     private static final Pattern IMPORTS_PATTERN = Pattern.compile("(?i)\\bIMPORTS\\b");
     private static final Pattern END_PATTERN = Pattern.compile("(?i)\\bEND\\s+([A-Za-z0-9_]*)$");
+    private static final Pattern INTERLIS_HEADER_PATTERN = Pattern.compile("(?i)^\\s*INTERLIS\\s+2\\.(?:3|4)\\s*;\\s*$");
     private static final Pattern EXTENDS_CONTEXT_PATTERN = Pattern.compile(
             "(?i)\\bEXTENDS\\s+([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*\\.?)?\\s*$");
     private static final Pattern REFERENCE_TARGET_PATTERN = Pattern.compile(
@@ -327,6 +333,7 @@ final class InterlisCompletionProvider {
 
             TransferDescription td = needsTransferDescription(context) ? obtainTransferDescription(uri) : null;
             List<CompletionItem> items = switch (context.kind()) {
+                case TOP_LEVEL_ROOT -> completeTopLevelRoot(context);
                 case CONTAINER_BODY_ROOT -> completeContainerBodyRoot(context, live);
                 case DECLARATION_HEADER_AFTER_NAME -> completeDeclarationHeaderAfterName(context);
                 case DECLARATION_HEADER_BLOCK_SUFFIX_AFTER_NAME -> completeDeclarationHeaderBlockSuffixAfterName(context);
@@ -402,6 +409,19 @@ final class InterlisCompletionProvider {
             addModelBodySnippets(items, context, live);
             return items;
         }
+        return items;
+    }
+
+    private List<CompletionItem> completeTopLevelRoot(CompletionContext context) {
+        List<CompletionItem> items = new ArrayList<>();
+        addKeyword(items, "MODEL", context, PRIORITY_TOPIC_BODY_KEYWORD);
+        addSnippet(items,
+                "MODEL Name (lang) AT ... VERSION ... = ... END Name.",
+                modelTemplateSnippetText(),
+                context,
+                PRIORITY_SNIPPET,
+                "MODEL",
+                InsertTextMode.AsIs);
         return items;
     }
 
@@ -1148,6 +1168,28 @@ final class InterlisCompletionProvider {
                 context, PRIORITY_SNIPPET, "CONTEXT");
     }
 
+    private String modelTemplateSnippetText() {
+        String today = LocalDate.now(ZURICH).format(ISO_DAY);
+        String endNameMirror = "${1/^([A-Za-z_][A-Za-z0-9_]*).*$/$1/}";
+        return "/** !!------------------------------------------------------------------------------\n"
+                + " * !! Version    | wer | Änderung\n"
+                + " * !!------------------------------------------------------------------------------\n"
+                + " * !! " + today + " | abr  | Initalversion\n"
+                + " * !!==============================================================================\n"
+                + " */\n"
+                + "!!@ technicalContact=mailto:acme@example.com\n"
+                + "!!@ furtherInformation=https://example.com/path/to/information\n"
+                + "!!@ title=\"a title\"\n"
+                + "!!@ shortDescription=\"a short description\"\n"
+                + "!!@ tags=\"foo,bar,fubar\"\n"
+                + "MODEL ${1:Name} (${2:de})\n"
+                + "  AT \"${3:https://example.com}\"\n"
+                + "  VERSION \"${4:" + today + "}\"\n"
+                + "  =\n"
+                + "  $0\n"
+                + "END " + endNameMirror + ".";
+    }
+
     private void addNamedBlockSnippet(List<CompletionItem> items,
                                       String label,
                                       String keyword,
@@ -1274,6 +1316,11 @@ final class InterlisCompletionProvider {
         CompletionContext metaAttributeContext = detectMetaAttributeContext(text, lineStart, caretOffset, lineText);
         if (metaAttributeContext != null) {
             return metaAttributeContext;
+        }
+
+        CompletionContext topLevelRootContext = detectTopLevelRootContext(text, lineStart, caretOffset, lineText, scopeOwner);
+        if (topLevelRootContext != null) {
+            return topLevelRootContext;
         }
 
         if (fixedEqualsSuffix) {
@@ -1760,6 +1807,34 @@ final class InterlisCompletionProvider {
         }
 
         return null;
+    }
+
+    private CompletionContext detectTopLevelRootContext(String text,
+                                                        int lineStart,
+                                                        int caretOffset,
+                                                        String lineText,
+                                                        LiveSymbol scopeOwner) {
+        if (scopeOwner != null || !isModelTopLevelZone(text, lineStart)) {
+            return null;
+        }
+        Matcher matcher = CONTAINER_BODY_ROOT_PATTERN.matcher(lineText);
+        if (!matcher.matches()) {
+            return null;
+        }
+        String prefix = groupValue(matcher, 1);
+        int replaceStart = lineStart;
+        if (prefix != null && !prefix.isBlank()) {
+            replaceStart = lineStart + matcher.start(1);
+        }
+        return new CompletionContext(
+                CompletionContext.Kind.TOP_LEVEL_ROOT,
+                prefix != null ? prefix : "",
+                prefix != null ? prefix : "",
+                null,
+                new Range(DocumentTracker.positionAt(text, replaceStart), DocumentTracker.positionAt(text, caretOffset)),
+                null,
+                null,
+                null);
     }
 
     private CompletionContext detectMetaAttributeContext(String text,
@@ -2378,7 +2453,7 @@ final class InterlisCompletionProvider {
             return true;
         }
         return switch (context.kind()) {
-            case CONTAINER_BODY_ROOT -> false;
+            case TOP_LEVEL_ROOT, CONTAINER_BODY_ROOT -> false;
             case DECLARATION_HEADER_AFTER_NAME, DECLARATION_HEADER_BLOCK_SUFFIX_AFTER_NAME,
                     DECLARATION_HEADER_MODIFIER_VALUE, DECLARATION_HEADER_BLOCK_SUFFIX_MODIFIER_VALUE,
                     DECLARATION_HEADER_MODIFIER_CLOSE, DECLARATION_HEADER_BLOCK_SUFFIX_MODIFIER_CLOSE,
@@ -2688,6 +2763,30 @@ final class InterlisCompletionProvider {
     private static boolean looksLikeMetaAttributeContext(String lineText) {
         return METAATTRIBUTE_ROOT_PATTERN.matcher(lineText).matches()
                 || METAATTRIBUTE_VALUE_PATTERN.matcher(lineText).matches();
+    }
+
+    private static boolean isModelTopLevelZone(String text, int lineStartOffset) {
+        int cursor = 0;
+        while (cursor < lineStartOffset) {
+            int lineEnd = cursor;
+            while (lineEnd < lineStartOffset && lineEnd < text.length()) {
+                char ch = text.charAt(lineEnd);
+                if (ch == '\n' || ch == '\r') {
+                    break;
+                }
+                lineEnd++;
+            }
+            String trimmed = text.substring(cursor, lineEnd).trim();
+            if (INTERLIS_HEADER_PATTERN.matcher(trimmed).matches()) {
+                return true;
+            }
+            cursor = lineEnd;
+            while (cursor < lineStartOffset && cursor < text.length()
+                    && (text.charAt(cursor) == '\n' || text.charAt(cursor) == '\r')) {
+                cursor++;
+            }
+        }
+        return false;
     }
 
     private static boolean isMetaAttributeSeverityKey(String metaAttribute) {

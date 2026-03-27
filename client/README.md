@@ -32,8 +32,8 @@
 - **Caret-aware templates** 🧠 – caret tracking middleware makes sure auto-inserted templates leave the cursor at the expected position after edits are applied.
 - **Webview downloads** 💾 – UML previews support saving generated SVG diagrams next to the source model.
 
-### Example: auto-generated MODEL skeleton 🧱
-Typing `=` at the end of a `MODEL` header expands to a documentation banner, meta-attributes, and an `END` block. Placeholders are ready for customization while the caret jumps to the most relevant line:
+### Example: MODEL template via completion 🧱
+After `INTERLIS 2.4;`, trigger completion on a new top-level line and choose the `MODEL` template. It inserts a documentation banner, example meta-attributes, and a full `MODEL ... END` block with editable stops for model name, language, URL, and version. The four header fields are intentionally popup-free, so `Tab` and `Enter` just move to the next placeholder:
 
 ```ili
 /** !!------------------------------------------------------------------------------

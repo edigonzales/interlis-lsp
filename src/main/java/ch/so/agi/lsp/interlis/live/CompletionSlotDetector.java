@@ -21,6 +21,7 @@ public final class CompletionSlotDetector {
             InterlisSymbolKind.CLASS, InterlisSymbolKind.ASSOCIATION, InterlisSymbolKind.VIEW);
     private static final Pattern IMPORTS_CONTEXT_PATTERN = Pattern.compile("(?i)^\\s*IMPORTS\\b([^;]*)$");
     private static final Pattern END_CONTEXT_PATTERN = Pattern.compile("(?i)\\bEND\\s+([A-Za-z0-9_]*)\\s*$");
+    private static final Pattern INTERLIS_HEADER_PATTERN = Pattern.compile("(?i)^\\s*INTERLIS\\s+2\\.(?:3|4)\\s*;\\s*$");
     private static final Pattern EXTENDS_CONTEXT_PATTERN = Pattern.compile(
             "(?i)\\bEXTENDS\\s+([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*\\.?)?\\s*$");
     private static final Pattern CONTAINER_BODY_CONTEXT_PATTERN = Pattern.compile("^\\s*([A-Za-z_][A-Za-z0-9_]*)?\\s*$");
@@ -86,6 +87,7 @@ public final class CompletionSlotDetector {
                 continue;
             }
             collectAttributeContext(text, lineStart, lineEnd, scopeGraph, lineTokens, contexts);
+            collectTopLevelRootContext(text, lineStart, lineEnd, scopeGraph, contexts);
             collectContainerBodyContext(text, lineStart, lineEnd, scopeGraph, contexts);
 
             if (lineEnd >= text.length()) {
@@ -511,6 +513,38 @@ public final class CompletionSlotDetector {
                 owner != null ? owner.id() : null,
                 null,
                 owner != null ? owner.kind() : null));
+    }
+
+    private void collectTopLevelRootContext(String text,
+                                            int lineStartOffset,
+                                            int lineEndOffset,
+                                            ScopeGraph scopeGraph,
+                                            List<CompletionContext> contexts) {
+        String line = text.substring(lineStartOffset, lineEndOffset);
+        Matcher matcher = CONTAINER_BODY_CONTEXT_PATTERN.matcher(line);
+        if (!matcher.matches()) {
+            return;
+        }
+
+        LiveSymbol owner = enclosingOwner(text, scopeGraph, lineEndOffset);
+        if (owner != null || !isModelTopLevelZone(text, lineStartOffset)) {
+            return;
+        }
+
+        String prefix = groupValue(matcher, 1);
+        int replaceStart = lineStartOffset;
+        if (prefix != null && !prefix.isBlank()) {
+            replaceStart = lineStartOffset + matcher.start(1);
+        }
+        contexts.add(new CompletionContext(
+                CompletionContext.Kind.TOP_LEVEL_ROOT,
+                prefix != null ? prefix : "",
+                prefix != null ? prefix : "",
+                null,
+                range(text, replaceStart, lineEndOffset),
+                null,
+                null,
+                null));
     }
 
     private CompletionContext detectTextLengthContext(String text,
@@ -947,6 +981,30 @@ public final class CompletionSlotDetector {
     private static boolean supportsContainerBodyContext(InterlisSymbolKind ownerKind) {
         return ownerKind == InterlisSymbolKind.TOPIC
                 || ownerKind == InterlisSymbolKind.MODEL;
+    }
+
+    private static boolean isModelTopLevelZone(String text, int lineStartOffset) {
+        int cursor = 0;
+        while (cursor < lineStartOffset) {
+            int lineEnd = cursor;
+            while (lineEnd < lineStartOffset && lineEnd < text.length()) {
+                char ch = text.charAt(lineEnd);
+                if (ch == '\n' || ch == '\r') {
+                    break;
+                }
+                lineEnd++;
+            }
+            String trimmed = text.substring(cursor, lineEnd).trim();
+            if (INTERLIS_HEADER_PATTERN.matcher(trimmed).matches()) {
+                return true;
+            }
+            cursor = lineEnd;
+            while (cursor < lineStartOffset && cursor < text.length()
+                    && (text.charAt(cursor) == '\n' || text.charAt(cursor) == '\r')) {
+                cursor++;
+            }
+        }
+        return false;
     }
 
     private static InterlisSymbolKind declarationKindForExtendsLine(String line, InterlisSymbolKind fallback) {

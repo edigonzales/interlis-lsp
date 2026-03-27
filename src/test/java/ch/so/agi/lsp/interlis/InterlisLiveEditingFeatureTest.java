@@ -25,6 +25,9 @@ import org.eclipse.lsp4j.jsonrpc.messages.Either3;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -563,6 +566,88 @@ class InterlisLiveEditingFeatureTest {
         assertEquals(InsertTextFormat.Snippet, findItemByLabel(items, "STRUCTURE Name = ... END Name;").getInsertTextFormat());
         assertEquals(InsertTextFormat.Snippet, findItemByLabel(items, "SIGN BASKET ...").getInsertTextFormat());
         assertNull(findItemByLabel(items, "FUNCTION Name = ..."));
+    }
+
+    @Test
+    void completionOnTopLevelRootOffersModelSnippet(@TempDir Path tempDir) throws Exception {
+        Path file = tempDir.resolve("TopLevelModelCompletion.ili");
+        String valid = """
+                INTERLIS 2.4;
+
+                MO
+                """;
+        Files.writeString(file, valid);
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        server.setClientSettings(new ClientSettings());
+        InterlisTextDocumentService service = server.getInterlisTextDocumentService();
+
+        String uri = file.toUri().toString();
+        service.didOpen(new DidOpenTextDocumentParams(new TextDocumentItem(uri, "interlis", 1, valid)));
+
+        int offset = valid.indexOf("MO") + "MO".length();
+        List<CompletionItem> items = completionItems(service, uri, valid, offset);
+        List<String> labels = items.stream().map(CompletionItem::getLabel).toList();
+
+        assertTrue(labels.contains("MODEL"));
+        assertTrue(labels.contains("MODEL Name (lang) AT ... VERSION ... = ... END Name."));
+        assertTrue(indexOfLabel(items, "MODEL") < indexOfLabel(items, "MODEL Name (lang) AT ... VERSION ... = ... END Name."));
+
+        CompletionItem snippet = findItemByLabel(items, "MODEL Name (lang) AT ... VERSION ... = ... END Name.");
+        String today = LocalDate.now(ZoneId.of("Europe/Zurich")).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        assertEquals(InsertTextFormat.Snippet, snippet.getInsertTextFormat());
+        assertEquals(InsertTextMode.AsIs, snippet.getInsertTextMode());
+        assertEquals("/** !!------------------------------------------------------------------------------\n"
+                        + " * !! Version    | wer | Änderung\n"
+                        + " * !!------------------------------------------------------------------------------\n"
+                        + " * !! " + today + " | abr  | Initalversion\n"
+                        + " * !!==============================================================================\n"
+                        + " */\n"
+                        + "!!@ technicalContact=mailto:acme@example.com\n"
+                        + "!!@ furtherInformation=https://example.com/path/to/information\n"
+                        + "!!@ title=\"a title\"\n"
+                        + "!!@ shortDescription=\"a short description\"\n"
+                        + "!!@ tags=\"foo,bar,fubar\"\n"
+                        + "MODEL ${1:Name} (${2:de})\n"
+                        + "  AT \"${3:https://example.com}\"\n"
+                        + "  VERSION \"${4:" + today + "}\"\n"
+                        + "  =\n"
+                        + "  $0\n"
+                        + "END ${1/^([A-Za-z_][A-Za-z0-9_]*).*$/$1/}.",
+                newText(snippet));
+    }
+
+    @Test
+    void completionOnTopLevelRootOffersModelSnippetAfterExistingModel(@TempDir Path tempDir) throws Exception {
+        Path file = tempDir.resolve("TopLevelModelCompletionAfterExistingModel.ili");
+        String valid = """
+                INTERLIS 2.4;
+
+                MODEL ExistingModel (de) AT "https://example.com/existing" VERSION "2024-01-01" =
+                END ExistingModel.
+
+                !!------------------------------------------------------------------------------
+                !! Zwischen zwei Modellen
+                !!------------------------------------------------------------------------------
+                !!@ title="another model"
+
+                MO
+                """;
+        Files.writeString(file, valid);
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        server.setClientSettings(new ClientSettings());
+        InterlisTextDocumentService service = server.getInterlisTextDocumentService();
+
+        String uri = file.toUri().toString();
+        service.didOpen(new DidOpenTextDocumentParams(new TextDocumentItem(uri, "interlis", 1, valid)));
+
+        int offset = valid.lastIndexOf("MO") + "MO".length();
+        List<CompletionItem> items = completionItems(service, uri, valid, offset);
+        List<String> labels = items.stream().map(CompletionItem::getLabel).toList();
+
+        assertTrue(labels.contains("MODEL"));
+        assertTrue(labels.contains("MODEL Name (lang) AT ... VERSION ... = ... END Name."));
     }
 
     @Test

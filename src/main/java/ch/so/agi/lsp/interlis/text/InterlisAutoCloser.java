@@ -4,12 +4,7 @@ import org.eclipse.lsp4j.DocumentOnTypeFormattingParams;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.TextEdit;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import java.time.LocalDate;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -21,11 +16,7 @@ import java.util.Set;
  * Ported from the jEdit plugin implementation, but adapted to return LSP TextEdits.
  */
 public final class InterlisAutoCloser {
-    private static final Logger LOG = LoggerFactory.getLogger(InterlisAutoCloser.class);
-
     private static final int LOOKBACK_CHARS = 1200;
-    private static final DateTimeFormatter ISO_DAY = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-    private static final ZoneId ZURICH = ZoneId.of("Europe/Zurich");
     public static final String CARET_SENTINEL = "__INTERLIS_AUTOCLOSE_CARET__";
 
     private InterlisAutoCloser() {}
@@ -63,8 +54,6 @@ public final class InterlisAutoCloser {
         String indent = leadingIndent(text, tailStart + res.keywordPosInTail);
 
         switch (res.kind) {
-            case MODEL:
-                return modelTemplate(text, params, tailStart, res, indent, eqOffset);
             case VIEW_TOPIC:
                 return Collections.singletonList(insertAfter(params.getPosition(),
                         "\n" + indent + "DEPENDS ON " + CARET_SENTINEL
@@ -78,58 +67,6 @@ public final class InterlisAutoCloser {
                                 + "\n" + indent + "END " + res.name + ";"));
             default:
                 return Collections.emptyList();
-        }
-    }
-
-    private static List<TextEdit> modelTemplate(String text,
-                                                DocumentOnTypeFormattingParams params,
-                                                int tailStart,
-                                                ParseResult res,
-                                                String indent,
-                                                int eqOffset) {
-        try {
-            String today = LocalDate.now(ZURICH).format(ISO_DAY);
-
-            String banner =
-                    "/** !!------------------------------------------------------------------------------\n" +
-                            " * !! Version    | wer | Änderung\n" +
-                            " * !!------------------------------------------------------------------------------\n" +
-                            " * !! " + today + " | abr  | Initalversion\n" +
-                            " * !!==============================================================================\n" +
-                            " */\n" +
-                            "!!@ technicalContact=mailto:acme@example.com\n" +
-                            "!!@ furtherInformation=https://example.com/path/to/information\n" +
-                            "!!@ title=\"a title\"\n" +
-                            "!!@ shortDescription=\"a short description\"\n" +
-                            "!!@ tags=\"foo,bar,fubar\"\n";
-
-            int headerLine = Math.max(params.getPosition().getLine(), 0);
-            int headerLineStart = DocumentTracker.lineStartOffset(text, headerLine);
-            Position headerPos = DocumentTracker.positionAt(text, headerLineStart);
-
-            List<TextEdit> edits = new ArrayList<>();
-            edits.add(new TextEdit(new Range(headerPos, headerPos), banner));
-
-            int nameAbsStart = tailStart + res.namePosInTail;
-            int nameAbsEnd = nameAbsStart + res.nameLen;
-            int removeStart = Math.max(nameAbsEnd, 0);
-            int removeEnd = Math.min(Math.max(eqOffset + 1, removeStart), text.length());
-
-            String mid = " (de)\n"
-                    + indent + "  AT \"https://example.com\"\n"
-                    + indent + "  VERSION \"" + today + "\"\n"
-                    + indent + "  =\n"
-                    + indent + CARET_SENTINEL + "\n"
-                    + indent + "END " + res.name + ".";
-
-            Position removeStartPos = DocumentTracker.positionAt(text, removeStart);
-            Position removeEndPos = DocumentTracker.positionAt(text, removeEnd);
-            edits.add(new TextEdit(new Range(removeStartPos, removeEndPos), mid));
-
-            return edits;
-        } catch (Exception ex) {
-            LOG.warn("Failed to build MODEL template edits for {}", res.name, ex);
-            return Collections.emptyList();
         }
     }
 

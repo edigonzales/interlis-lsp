@@ -15,6 +15,7 @@ import {
 let client: LanguageClient | undefined;
 let revealOutputOnNextLog = false;
 const CARET_SENTINEL = "__INTERLIS_AUTOCLOSE_CARET__";
+const MODEL_SNIPPET_PLACEHOLDER_CONTEXT = "interlis.modelSnippetPlaceholder";
 const TEXT_TAIL_PATTERN = /:\s*(?:MANDATORY\s+)?(?:TEXT|MTEXT)\s*$/i;
 const TEXT_LENGTH_VALUE_TAIL_PATTERN = /:\s*(?:MANDATORY\s+)?(?:TEXT|MTEXT)\s*\*\s*$/i;
 const NUMERIC_TAIL_PATTERN = /:\s*(?:MANDATORY\s+)?([-+]?[0-9]+(?:\.[0-9]+)?)\s*$/;
@@ -66,6 +67,7 @@ const UNIT_COMPOSED_OPERATOR_TRIGGER_PATTERN = new RegExp(`${UNIT_DECLARATION_PR
 const METAATTRIBUTE_ROOT_TRIGGER_PATTERN = /^\s*!!@\s*[A-Za-z0-9_.]*$/i;
 const METAATTRIBUTE_VALUE_TRIGGER_PATTERN = /^\s*!!@\s*[A-Za-z0-9_.]+\s*=\s*.*$/i;
 const CONTAINER_BODY_AUTO_TRIGGER_LABELS = new Set<string>([
+  "MODEL",
   "TOPIC",
   "CLASS",
   "STRUCTURE",
@@ -80,6 +82,7 @@ const CONTAINER_BODY_AUTO_TRIGGER_LABELS = new Set<string>([
   "CONSTRAINTS",
   "SIGN BASKET",
   "REFSYSTEM BASKET",
+  "MODEL NAME (LANG) AT ... VERSION ... = ... END NAME.",
   "TOPIC NAME = ... END NAME;",
   "CLASS NAME = ... END NAME;",
   "STRUCTURE NAME = ... END NAME;",
@@ -367,7 +370,13 @@ export async function activate(context: vscode.ExtensionContext) {
         if (!active || active.document.uri.toString() !== uri) {
           return;
         }
-        void maybeTriggerSnippetPlaceholderSuggest(active);
+        void (async () => {
+          await updateModelSnippetPlaceholderContext(active, true);
+          if (isModelSnippetPlaceholderContext(active)) {
+            return;
+          }
+          await maybeTriggerSnippetPlaceholderSuggest(active);
+        })();
       }, 25);
     })
   );
@@ -393,11 +402,16 @@ export async function activate(context: vscode.ExtensionContext) {
       scheduleTailSuggest(event);
       scheduleContainerBodySuggest(event);
       scheduleHeaderSuggest(event);
+      const active = vscode.window.activeTextEditor;
+      if (active && active.document.uri.toString() === key) {
+        void updateModelSnippetPlaceholderContext(active, true);
+      }
     })
   );
 
   context.subscriptions.push(
     vscode.window.onDidChangeTextEditorSelection(event => {
+      void updateModelSnippetPlaceholderContext(event.textEditor, true);
       scheduleSelectionTailSuggest(event);
       scheduleSelectionHeaderSuggest(event);
     })
@@ -405,6 +419,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.window.onDidChangeActiveTextEditor(editor => {
+      void updateModelSnippetPlaceholderContext(editor, true);
       void maybeAutoOpenDiagram(editor, autoOpenedDiagramUris);
     })
   );
@@ -447,9 +462,11 @@ export async function activate(context: vscode.ExtensionContext) {
       recentHeaderEditVersions.delete(key);
       recentSuggestFingerprints.delete(key);
       recentTailEditVersions.delete(key);
+      void updateModelSnippetPlaceholderContext(vscode.window.activeTextEditor, true);
     })
   );
 
+  void updateModelSnippetPlaceholderContext(vscode.window.activeTextEditor, true);
   void maybeAutoOpenDiagram(vscode.window.activeTextEditor, autoOpenedDiagramUris);
 
   async function showUmlHtml(html: string, title: string) {
@@ -895,6 +912,9 @@ async function maybeTriggerTailSuggestForEditor(editor: vscode.TextEditor): Prom
   if (editor.selections.length !== 1 || !editor.selection.isEmpty) {
     return;
   }
+  if (isModelSnippetPlaceholderContext(editor)) {
+    return;
+  }
 
   const selection = editor.selection;
   const line = document.lineAt(selection.active.line).text;
@@ -985,12 +1005,70 @@ async function maybeTriggerUnitRhsSuggestForEditor(editor: vscode.TextEditor): P
 }
 
 async function maybeTriggerDeclarationRhsSuggestForEditor(editor: vscode.TextEditor): Promise<void> {
+  if (isModelSnippetPlaceholderContext(editor)) {
+    return;
+  }
   await maybeTriggerDomainRhsSuggestForEditor(editor);
   await maybeTriggerUnitRhsSuggestForEditor(editor);
 }
 
 async function maybeTriggerSnippetPlaceholderSuggest(editor: vscode.TextEditor): Promise<void> {
+  if (isModelSnippetPlaceholderContext(editor)) {
+    return;
+  }
   await maybeTriggerDeclarationRhsSuggestForEditor(editor);
+}
+
+async function updateModelSnippetPlaceholderContext(editor: vscode.TextEditor | undefined, suppressSuggest: boolean): Promise<void> {
+  const enabled = isModelSnippetPlaceholderContext(editor);
+  await vscode.commands.executeCommand("setContext", MODEL_SNIPPET_PLACEHOLDER_CONTEXT, enabled);
+  if (enabled && suppressSuggest) {
+    await vscode.commands.executeCommand("hideSuggestWidget");
+  }
+}
+
+function isModelSnippetPlaceholderContext(editor: vscode.TextEditor | undefined): boolean {
+  if (!editor || editor.document.languageId !== "interlis" || editor.selections.length !== 1) {
+    return false;
+  }
+  return isModelSnippetHeaderPlaceholderPosition(editor.document, editor.selection.active);
+}
+
+function isModelSnippetHeaderPlaceholderPosition(document: vscode.TextDocument, position: vscode.Position): boolean {
+  if (position.line < 0 || position.line >= document.lineCount) {
+    return false;
+  }
+
+  const line = document.lineAt(position.line).text;
+  const modelPrefixMatch = line.match(/^(\s*MODEL\s+)/);
+  if (modelPrefixMatch) {
+    const nameStart = modelPrefixMatch[1].length;
+    const langStart = line.indexOf(" (", nameStart);
+    const langEnd = langStart >= 0 ? line.indexOf(")", langStart + 2) : -1;
+    if (langStart > nameStart) {
+      if (position.character >= nameStart && position.character <= langStart) {
+        return true;
+      }
+      if (langEnd > langStart && position.character >= langStart + 2 && position.character <= langEnd) {
+        return true;
+      }
+    }
+  }
+
+  if (isQuotedModelSnippetField(line, position.character, /^\s*AT\s+"/)) {
+    return true;
+  }
+  return isQuotedModelSnippetField(line, position.character, /^\s*VERSION\s+"/);
+}
+
+function isQuotedModelSnippetField(line: string, character: number, prefixPattern: RegExp): boolean {
+  const prefixMatch = line.match(prefixPattern);
+  if (!prefixMatch) {
+    return false;
+  }
+  const valueStart = prefixMatch[0].length;
+  const valueEnd = line.lastIndexOf("\"");
+  return valueEnd > valueStart && character >= valueStart && character <= valueEnd;
 }
 
 function rememberRecentTailEdit(document: vscode.TextDocument): void {
@@ -1088,6 +1166,9 @@ async function maybeTriggerHeaderSuggest(document: vscode.TextDocument, inserted
     return;
   }
   if (active.selections.length !== 1 || !active.selection.isEmpty) {
+    return;
+  }
+  if (isModelSnippetPlaceholderContext(active)) {
     return;
   }
 
