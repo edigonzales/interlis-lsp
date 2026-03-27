@@ -1,6 +1,5 @@
 package ch.so.agi.lsp.interlis.workspace;
 
-import ch.so.agi.lsp.interlis.compiler.DiagnosticsMapper;
 import ch.so.agi.lsp.interlis.compiler.Ili2cUtil;
 import ch.so.agi.lsp.interlis.diagram.Ili2GraphML;
 import ch.so.agi.lsp.interlis.diagram.Ili2Mermaid;
@@ -219,7 +218,8 @@ public class CommandHandlers {
             Ili2cUtil.CompilationOutcome outcome = RuntimeDiagnostics.compile(server, Ili2cUtil::compile, cfg, filesystemPath, source);
             server.getInterlisTextDocumentService().rememberSavedCompilationOutcome(fileUriOrPath, outcome);
 
-            List<Diagnostic> diagnostics = DiagnosticsMapper.toDiagnostics(outcome.getMessages());
+            List<Diagnostic> diagnostics = server.getInterlisTextDocumentService()
+                    .buildCompilePublishDiagnostics(fileUriOrPath, outcome);
             server.publishDiagnostics(fileUriOrPath, diagnostics);
             server.logToClient(outcome.getLogText());
             if (emitCompileFinished) {

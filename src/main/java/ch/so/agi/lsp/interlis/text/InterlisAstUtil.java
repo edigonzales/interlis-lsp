@@ -1,6 +1,9 @@
 package ch.so.agi.lsp.interlis.text;
 
 import ch.interlis.ili2c.metamodel.*;
+import ch.interlis.ili2c.metamodel.PredefinedModel;
+import ch.so.agi.lsp.interlis.live.InterlisMetamodelSupport;
+import ch.so.agi.lsp.interlis.live.InterlisSymbolKind;
 
 import java.lang.reflect.Method;
 import java.util.*;
@@ -21,6 +24,22 @@ final class InterlisAstUtil {
         }
         String target = name.toUpperCase(Locale.ROOT);
 
+        Model predefined = resolvePredefinedModel(td, target);
+        if (predefined != null) {
+            return predefined;
+        }
+
+        for (Iterator<?> it = td.iterator(); it.hasNext(); ) {
+            Object next = it.next();
+            if (!(next instanceof Model model)) {
+                continue;
+            }
+            String modelName = model.getName();
+            if (modelName != null && modelName.toUpperCase(Locale.ROOT).equals(target)) {
+                return model;
+            }
+        }
+
         for (Model model : td.getModelsFromLastFile()) {
             String modelName = model != null ? model.getName() : null;
             if (modelName != null && modelName.toUpperCase(Locale.ROOT).equals(target)) {
@@ -35,6 +54,16 @@ final class InterlisAstUtil {
             }
         }
         return null;
+    }
+
+    private static Model resolvePredefinedModel(TransferDescription td, String targetUpper) {
+        if (!"INTERLIS".equals(targetUpper)) {
+            return null;
+        }
+        if (td.INTERLIS != null) {
+            return td.INTERLIS;
+        }
+        return PredefinedModel.getInstance();
     }
 
     private static Model findInImportsRecursive(Model model, String targetUpper, Set<Model> seen) {
@@ -134,19 +163,8 @@ final class InterlisAstUtil {
                 if (name == null || name.isBlank()) {
                     continue;
                 }
-                CompletionItemKind kind = CompletionItemKind.Text;
-                if (element instanceof Topic) {
-                    kind = CompletionItemKind.Module;
-                } else if (element instanceof Viewable) {
-                    kind = CompletionItemKind.Class;
-                } else if (element instanceof Domain) {
-                    kind = CompletionItemKind.Struct;
-                } else if (element instanceof Unit) {
-                    kind = CompletionItemKind.Unit;
-                } else if (element instanceof Function) {
-                    kind = CompletionItemKind.Function;
-                }
-                result.add(new ChildCandidate(name, kind));
+                InterlisSymbolKind symbolKind = InterlisMetamodelSupport.toSymbolKind(element);
+                result.add(new ChildCandidate(name, symbolKind.toCompletionKind(), symbolKind));
             }
         } else if (parent instanceof Topic topic) {
             for (Iterator<?> it = topic.iterator(); it.hasNext(); ) {
@@ -158,17 +176,8 @@ final class InterlisAstUtil {
                 if (name == null || name.isBlank()) {
                     continue;
                 }
-                CompletionItemKind kind = CompletionItemKind.Text;
-                if (element instanceof Viewable) {
-                    kind = CompletionItemKind.Class;
-                } else if (element instanceof Domain) {
-                    kind = CompletionItemKind.Struct;
-                } else if (element instanceof Unit) {
-                    kind = CompletionItemKind.Unit;
-                } else if (element instanceof Function) {
-                    kind = CompletionItemKind.Function;
-                }
-                result.add(new ChildCandidate(name, kind));
+                InterlisSymbolKind symbolKind = InterlisMetamodelSupport.toSymbolKind(element);
+                result.add(new ChildCandidate(name, symbolKind.toCompletionKind(), symbolKind));
             }
         } else if (parent instanceof Viewable viewable) {
             for (Iterator<?> it = viewable.getAttributesAndRoles2(); it.hasNext(); ) {
@@ -176,6 +185,7 @@ final class InterlisAstUtil {
                 Object obj = element.obj;
                 String name = null;
                 CompletionItemKind kind = CompletionItemKind.Field;
+                InterlisSymbolKind symbolKind = InterlisSymbolKind.ATTRIBUTE;
                 if (obj instanceof AttributeDef attribute) {
                     name = attribute.getName();
                 } else {
@@ -183,11 +193,12 @@ final class InterlisAstUtil {
                         Method method = obj.getClass().getMethod("getName");
                         name = (String) method.invoke(obj);
                         kind = CompletionItemKind.Property;
+                        symbolKind = InterlisSymbolKind.ROLE;
                     } catch (Exception ignored) {
                     }
                 }
                 if (name != null && !name.isBlank()) {
-                    result.add(new ChildCandidate(name, kind));
+                    result.add(new ChildCandidate(name, kind, symbolKind));
                 }
             }
         }
@@ -219,7 +230,7 @@ final class InterlisAstUtil {
         return new ArrayList<>(names);
     }
 
-    record ChildCandidate(String name, CompletionItemKind kind) {
+    record ChildCandidate(String name, CompletionItemKind kind, InterlisSymbolKind symbolKind) {
     }
 
 }

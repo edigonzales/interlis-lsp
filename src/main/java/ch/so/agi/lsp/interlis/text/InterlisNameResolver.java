@@ -6,15 +6,15 @@ import ch.interlis.ili2c.metamodel.TransferDescription;
 
 import java.util.Iterator;
 
-final class InterlisNameResolver {
+public final class InterlisNameResolver {
     private InterlisNameResolver() {
     }
 
-    static boolean isIdentifierPart(char ch) {
+    public static boolean isIdentifierPart(char ch) {
         return Character.isLetterOrDigit(ch) || ch == '_' || ch == '.';
     }
 
-    static String lastSegment(String token) {
+    public static String lastSegment(String token) {
         if (token == null || token.isBlank()) {
             return "";
         }
@@ -22,7 +22,7 @@ final class InterlisNameResolver {
         return idx >= 0 ? token.substring(idx + 1) : token;
     }
 
-    static Element resolveElement(TransferDescription td, String token) {
+    public static Element resolveElement(TransferDescription td, String token) {
         if (td == null || token == null || token.isBlank()) {
             return null;
         }
@@ -32,22 +32,9 @@ final class InterlisNameResolver {
             return element;
         }
 
-        String[] segments = token.split("\\.");
-        if (segments.length > 1) {
-            Element current = td.getElement(segments[0]);
-            if (current == null) {
-                return null;
-            }
-            for (int i = 1; i < segments.length && current != null; i++) {
-                if (!(current instanceof ch.interlis.ili2c.metamodel.Container<?> container)) {
-                    current = null;
-                    break;
-                }
-                current = findChild(container, segments[i]);
-            }
-            if (current != null) {
-                return current;
-            }
+        element = resolveQualifiedElement(td, token);
+        if (element != null) {
+            return element;
         }
 
         String segment = lastSegment(token);
@@ -58,7 +45,29 @@ final class InterlisNameResolver {
         return element;
     }
 
-    static Model findEnclosingModel(Element element) {
+    public static Element resolveQualifiedElement(TransferDescription td, String token) {
+        if (td == null || token == null || token.isBlank() || token.indexOf('.') < 0) {
+            return null;
+        }
+
+        String[] segments = token.split("\\.");
+        Element current = InterlisAstUtil.resolveModel(td, segments[0]);
+        if (current == null) {
+            current = td.getElement(segments[0]);
+        }
+        if (current == null) {
+            return null;
+        }
+        for (int i = 1; i < segments.length && current != null; i++) {
+            if (!(current instanceof ch.interlis.ili2c.metamodel.Container<?> container)) {
+                return null;
+            }
+            current = findChild(container, segments[i]);
+        }
+        return current;
+    }
+
+    public static Model findEnclosingModel(Element element) {
         if (element instanceof Model) {
             return (Model) element;
         }

@@ -107,6 +107,28 @@
         "title": "INTERLIS: Export documentation as DOCX"
       }
     ],
+    "keybindings": [
+      {
+        "key": "enter",
+        "command": "interlis.snippet.nextPlaceholder",
+        "when": "editorTextFocus && editorLangId == interlis && inSnippetMode && hasNextTabstop && interlis.modelSnippetPlaceholder"
+      },
+      {
+        "key": "tab",
+        "command": "interlis.snippet.nextPlaceholder",
+        "when": "editorTextFocus && editorLangId == interlis && inSnippetMode && hasNextTabstop && interlis.modelSnippetPlaceholder"
+      },
+      {
+        "key": "enter",
+        "command": "interlis.snippet.nextPlaceholder",
+        "when": "editorTextFocus && editorLangId == interlis && inSnippetMode && hasNextTabstop && !suggestWidgetVisible"
+      },
+      {
+        "key": "tab",
+        "command": "interlis.snippet.nextPlaceholder",
+        "when": "editorTextFocus && editorLangId == interlis && inSnippetMode && hasNextTabstop && !suggestWidgetVisible"
+      }
+    ],
     "configuration": {
       "title": "INTERLIS LSP",
       "properties": {

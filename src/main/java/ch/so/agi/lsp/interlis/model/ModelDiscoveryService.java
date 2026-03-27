@@ -10,6 +10,7 @@ import ch.interlis.ilirepository.impl.ModelMetadata;
 import ch.interlis.ilirepository.impl.RepositoryAccess;
 import ch.interlis.ilirepository.impl.RepositoryAccessException;
 import ch.interlis.ilirepository.impl.RepositoryVisitor;
+import ch.so.agi.lsp.interlis.live.InterlisLanguageLevel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,12 +27,13 @@ import java.util.stream.Collectors;
  * Discovers available INTERLIS models from configured repositories so completion can offer
  * suggestions in IMPORTS clauses.
  */
-public final class ModelDiscoveryService {
+public class ModelDiscoveryService {
     private static final Logger LOG = LoggerFactory.getLogger(ModelDiscoveryService.class);
 
     private static final Object LOG_LOCK = new Object();
 
-    private final Map<String, ModelMetadata> modelCache = new ConcurrentHashMap<>();
+    private final Map<String, List<ModelMetadata>> modelCache = new ConcurrentHashMap<>();
+    private final Map<String, String> displayNameCache = new ConcurrentHashMap<>();
     private volatile boolean initialized = false;
     private volatile String lastRepositoryKey = "";
 
@@ -63,6 +65,13 @@ public final class ModelDiscoveryService {
     }
 
     public List<String> searchModels(ClientSettings settings, String prefix, Set<String> excludeUppercase) {
+        return searchModels(settings, prefix, excludeUppercase, InterlisLanguageLevel.UNKNOWN);
+    }
+
+    public List<String> searchModels(ClientSettings settings,
+                                     String prefix,
+                                     Set<String> excludeUppercase,
+                                     InterlisLanguageLevel languageLevel) {
         ensureInitialized(settings);
         if (!initialized || modelCache.isEmpty()) {
             return Collections.emptyList();
@@ -70,16 +79,22 @@ public final class ModelDiscoveryService {
 
         String normalized = prefix != null ? prefix.trim().toLowerCase(Locale.ROOT) : "";
         boolean showAll = normalized.isEmpty();
+        String targetSchemaLanguage = targetSchemaLanguage(languageLevel);
 
         List<String> result = new ArrayList<>();
-        for (String modelName : modelCache.keySet()) {
+        for (Map.Entry<String, List<ModelMetadata>> entry : modelCache.entrySet()) {
+            String modelKey = entry.getKey();
+            String modelName = displayNameCache.get(modelKey);
             if (modelName == null) {
                 continue;
             }
-            if (excludeUppercase != null && excludeUppercase.contains(modelName.toUpperCase(Locale.ROOT))) {
+            if (excludeUppercase != null && excludeUppercase.contains(modelKey)) {
                 continue;
             }
             if (showAll || modelName.toLowerCase(Locale.ROOT).startsWith(normalized)) {
+                if (!matchesTargetSchema(entry.getValue(), targetSchemaLanguage)) {
+                    continue;
+                }
                 result.add(modelName);
             }
         }
@@ -108,7 +123,7 @@ public final class ModelDiscoveryService {
 
                 for (ModelMetadata metadata : latest) {
                     if (metadata != null && metadata.getName() != null) {
-                        modelCache.put(metadata.getName(), metadata);
+                        storeMetadata(metadata);
                     }
                 }
             } catch (RepositoryAccessException ex) {
@@ -186,5 +201,66 @@ public final class ModelDiscoveryService {
     private static String buildRepositoryKey(ClientSettings settings) {
         List<String> repos = parseRepositories(settings);
         return String.join(";", repos);
+    }
+
+    void replaceModelsForTesting(List<ModelMetadata> metadata) {
+        modelCache.clear();
+        displayNameCache.clear();
+        if (metadata != null) {
+            for (ModelMetadata item : metadata) {
+                storeMetadata(item);
+            }
+        }
+        initialized = true;
+        lastRepositoryKey = buildRepositoryKey(new ClientSettings());
+    }
+
+    private void storeMetadata(ModelMetadata metadata) {
+        if (metadata == null || metadata.getName() == null || metadata.getName().isBlank()) {
+            return;
+        }
+        String key = metadata.getName().toUpperCase(Locale.ROOT);
+        displayNameCache.putIfAbsent(key, metadata.getName());
+        modelCache.compute(key, (ignored, existing) -> {
+            List<ModelMetadata> updated = existing != null ? new ArrayList<>(existing) : new ArrayList<>();
+            updated.add(metadata);
+            return updated;
+        });
+    }
+
+    private static boolean matchesTargetSchema(List<ModelMetadata> variants, String targetSchemaLanguage) {
+        if (variants == null || variants.isEmpty() || targetSchemaLanguage == null || targetSchemaLanguage.isBlank()) {
+            return true;
+        }
+        for (ModelMetadata metadata : variants) {
+            String schemaLanguage = normalizedSchemaLanguage(metadata);
+            if (schemaLanguage == null) {
+                return true;
+            }
+            if (schemaLanguage.equals(targetSchemaLanguage)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String targetSchemaLanguage(InterlisLanguageLevel languageLevel) {
+        if (languageLevel == null || languageLevel.equals(InterlisLanguageLevel.UNKNOWN)) {
+            return null;
+        }
+        if (languageLevel.major() == 2 && languageLevel.minor() == 3) {
+            return ModelMetadata.ili2_3.toLowerCase(Locale.ROOT);
+        }
+        if (languageLevel.isAtLeast(2, 4)) {
+            return ModelMetadata.ili2_4.toLowerCase(Locale.ROOT);
+        }
+        return null;
+    }
+
+    private static String normalizedSchemaLanguage(ModelMetadata metadata) {
+        if (metadata == null || metadata.getSchemaLanguage() == null || metadata.getSchemaLanguage().isBlank()) {
+            return null;
+        }
+        return metadata.getSchemaLanguage().trim().toLowerCase(Locale.ROOT);
     }
 }

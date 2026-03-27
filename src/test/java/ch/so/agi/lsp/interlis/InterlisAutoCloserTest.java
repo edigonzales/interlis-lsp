@@ -8,9 +8,6 @@ import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.TextEdit;
 import org.junit.jupiter.api.Test;
 
-import java.time.LocalDate;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -48,38 +45,12 @@ class InterlisAutoCloserTest {
     }
 
     @Test
-    void modelHeaderProducesTemplate() {
+    void modelHeaderNoLongerAutoCloses() {
         String text = "INTERLIS 2.4;\n\nMODEL ModelA =";
         DocumentOnTypeFormattingParams params = params(2, "MODEL ModelA =".length(), "=");
 
         List<TextEdit> edits = InterlisAutoCloser.computeEdits(text, params);
-        assertEquals(2, edits.size());
-
-        TextEdit banner = edits.get(0);
-        assertEquals(new Position(2, 0), banner.getRange().getStart());
-        assertEquals(banner.getRange().getStart(), banner.getRange().getEnd());
-
-        String today = LocalDate.now(ZoneId.of("Europe/Zurich")).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-        String expectedBanner = "/** !!------------------------------------------------------------------------------\n" +
-                " * !! Version    | wer | Änderung\n" +
-                " * !!------------------------------------------------------------------------------\n" +
-                " * !! " + today + " | abr  | Initalversion\n" +
-                " * !!==============================================================================\n" +
-                " */\n" +
-                "!!@ technicalContact=mailto:acme@example.com\n" +
-                "!!@ furtherInformation=https://example.com/path/to/information\n" +
-                "!!@ title=\"a title\"\n" +
-                "!!@ shortDescription=\"a short description\"\n" +
-                "!!@ tags=\"foo,bar,fubar\"\n";
-        assertEquals(expectedBanner, banner.getNewText());
-
-        TextEdit mid = edits.get(1);
-        assertEquals(" (de)\n" +
-                "  AT \"https://example.com\"\n" +
-                "  VERSION \"" + today + "\"\n" +
-                "  =\n" +
-                InterlisAutoCloser.CARET_SENTINEL + "\n" +
-                "END ModelA.", mid.getNewText());
+        assertTrue(edits.isEmpty());
     }
 
     private static DocumentOnTypeFormattingParams params(int line, int character, String ch) {

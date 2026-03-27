@@ -2,6 +2,7 @@ import java.time.Instant
 
 plugins {
     id 'java'
+    id 'antlr'
     id 'application'
     id "com.github.johnrengelman.shadow" version "8.1.1"
     id 'org.graalvm.buildtools.native' version '0.10.6'
@@ -26,6 +27,8 @@ repositories {
 }
 
 dependencies {
+    antlr 'org.antlr:antlr4:4.13.2'
+
     implementation 'org.eclipse.lsp4j:org.eclipse.lsp4j:0.24.0'
     implementation 'org.eclipse.lsp4j:org.eclipse.lsp4j.jsonrpc:0.24.0'
     implementation 'org.eclipse.glsp:org.eclipse.glsp.server:2.4.0'
@@ -33,6 +36,7 @@ dependencies {
     implementation 'org.eclipse.glsp:org.eclipse.glsp.layout:2.4.0'
     implementation 'org.eclipse.elk:org.eclipse.elk.alg.layered:0.8.1'
     implementation 'commons-cli:commons-cli:1.8.0'
+    implementation 'org.antlr:antlr4-runtime:4.13.2'
 
     implementation 'ch.interlis:ili2c-tool:5.6.6'
     implementation 'ch.interlis:ili2c-core:5.6.6'
@@ -50,6 +54,18 @@ dependencies {
     //compileOnly 'org.graalvm.nativeimage:svm:21.3.15'
     
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+}
+
+sourceSets {
+    main {
+        antlr {
+            srcDirs = ['grammars-antlr4']
+        }
+    }
+}
+
+generateGrammarSource {
+    arguments += ['-package', 'ch.so.agi.lsp.interlis.antlr', '-visitor', '-long-messages']
 }
 
 test {
