@@ -292,6 +292,9 @@ class InterlisLiveAnalyzerTest {
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Expected missing-attribute-type diagnostic"));
         assertTrue(sameRange(range(text, "attr:"), diagnostic.getRange()));
+        assertTrue(result.diagnostics().stream()
+                        .noneMatch(item -> item.getMessage() != null && item.getMessage().contains("END name mismatch")),
+                "Expected missing-attribute-type diagnostic without END mismatch cascade but got: " + result.diagnostics());
     }
 
     @Test
@@ -314,6 +317,9 @@ class InterlisLiveAnalyzerTest {
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Expected missing-attribute-type diagnostic"));
         assertTrue(sameRange(range(text, "attr:"), diagnostic.getRange()));
+        assertTrue(result.diagnostics().stream()
+                        .noneMatch(item -> item.getMessage() != null && item.getMessage().contains("END name mismatch")),
+                "Expected missing-attribute-type diagnostic without END mismatch cascade but got: " + result.diagnostics());
     }
 
     @Test
@@ -340,6 +346,10 @@ class InterlisLiveAnalyzerTest {
                 DocumentTracker.positionAt(text, start),
                 DocumentTracker.positionAt(text, start + "0".length()));
         assertTrue(sameRange(expected, diagnostic.getRange()));
+        assertTrue(result.diagnostics().stream()
+                        .noneMatch(item -> item.getMessage() != null
+                                && item.getMessage().contains("Missing ';' after attribute definition")),
+                "Expected factor-only attribute diagnostic without missing-semicolon fallback but got: " + result.diagnostics());
     }
 
     @Test
@@ -366,6 +376,10 @@ class InterlisLiveAnalyzerTest {
                 DocumentTracker.positionAt(text, start),
                 DocumentTracker.positionAt(text, start + "0".length()));
         assertTrue(sameRange(expected, diagnostic.getRange()));
+        assertTrue(result.diagnostics().stream()
+                        .noneMatch(item -> item.getMessage() != null
+                                && item.getMessage().contains("Missing ';' after attribute definition")),
+                "Expected factor-only attribute diagnostic without missing-semicolon fallback but got: " + result.diagnostics());
     }
 
     @Test
@@ -388,6 +402,10 @@ class InterlisLiveAnalyzerTest {
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Expected factor-only attribute diagnostic"));
         assertTrue(sameRange(range(text, "\"x\""), diagnostic.getRange()));
+        assertTrue(result.diagnostics().stream()
+                        .noneMatch(item -> item.getMessage() != null
+                                && item.getMessage().contains("Missing ';' after attribute definition")),
+                "Expected factor-only attribute diagnostic without missing-semicolon fallback but got: " + result.diagnostics());
     }
 
     @Test

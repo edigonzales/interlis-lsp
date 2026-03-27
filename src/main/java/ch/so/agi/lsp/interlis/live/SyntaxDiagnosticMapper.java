@@ -24,18 +24,22 @@ public final class SyntaxDiagnosticMapper {
         }
 
         List<Diagnostic> diagnostics = new ArrayList<>();
+        diagnostics.addAll(missingSemicolonDiagnostics(snapshot, tokens, diagnostics));
+        diagnostics.addAll(missingAttributeTypeDiagnostics(snapshot, scopeGraph, tokens, diagnostics));
+        diagnostics.addAll(invalidAttributeValueDiagnostics(snapshot, scopeGraph, tokens, diagnostics));
+        diagnostics.addAll(missingAttributeHeadDiagnostics(snapshot, scopeGraph, tokens, diagnostics));
         if (rawErrors != null) {
             for (RawSyntaxError error : rawErrors) {
                 if (error == null) {
                     continue;
                 }
-                diagnostics.add(mapRawError(snapshot, tokens, error));
+                Diagnostic diagnostic = mapRawError(snapshot, tokens, error);
+                if (diagnostic != null && !shouldSuppressRawDiagnostic(diagnostic, error, diagnostics)) {
+                    diagnostics.add(diagnostic);
+                }
             }
         }
-        diagnostics.addAll(missingSemicolonDiagnostics(snapshot, tokens, diagnostics));
-        diagnostics.addAll(missingAttributeTypeDiagnostics(snapshot, scopeGraph, tokens, diagnostics));
-        diagnostics.addAll(missingAttributeHeadDiagnostics(snapshot, scopeGraph, tokens, diagnostics));
-        diagnostics.addAll(endNameDiagnostics(snapshot, scopeGraph));
+        diagnostics.addAll(endNameDiagnostics(snapshot, scopeGraph, diagnostics));
         return List.copyOf(diagnostics);
     }
 
@@ -77,7 +81,9 @@ public final class SyntaxDiagnosticMapper {
         return null;
     }
 
-    private List<Diagnostic> endNameDiagnostics(DocumentSnapshot snapshot, ScopeGraph scopeGraph) {
+    private List<Diagnostic> endNameDiagnostics(DocumentSnapshot snapshot,
+                                                ScopeGraph scopeGraph,
+                                                List<Diagnostic> existingDiagnostics) {
         if (scopeGraph == null || snapshot.text() == null) {
             return List.of();
         }
@@ -96,6 +102,12 @@ public final class SyntaxDiagnosticMapper {
             }
 
             Range range = expandToEndClause(snapshot.text(), symbol.endRange());
+            if (!looksLikeEndClause(snapshot.text(), range)) {
+                continue;
+            }
+            if (isRecoveryDrivenEndMismatch(snapshot.text(), scopeGraph, symbol, actual, existingDiagnostics)) {
+                continue;
+            }
             Diagnostic diagnostic = new Diagnostic(
                     range,
                     "END name mismatch: expected '" + symbol.name() + "' but found '" + actual + "'",
@@ -194,6 +206,10 @@ public final class SyntaxDiagnosticMapper {
         if (clause == null) {
             return null;
         }
+        int colonIndex = lastIndexOf(clause.tokens(), InterlisLexer.COLON);
+        if (colonIndex < 0 || !looksLikeTypeDeclaration(clause.tokens(), colonIndex)) {
+            return null;
+        }
         Range range = typeClauseRange(clause.tokens());
         if (range == null) {
             return null;
@@ -247,6 +263,34 @@ public final class SyntaxDiagnosticMapper {
                 diagnostics.add(new Diagnostic(
                         range,
                         "Missing ':' and type after attribute name",
+                        DiagnosticSeverity.Error,
+                        "live"));
+            }
+            lineStart = lineEnd + 1;
+        }
+        return diagnostics;
+    }
+
+    private static List<Diagnostic> invalidAttributeValueDiagnostics(DocumentSnapshot snapshot,
+                                                                    ScopeGraph scopeGraph,
+                                                                    List<LiveToken> tokens,
+                                                                    List<Diagnostic> existingDiagnostics) {
+        if (snapshot == null || scopeGraph == null || tokens == null || tokens.isEmpty()) {
+            return List.of();
+        }
+        List<Diagnostic> diagnostics = new ArrayList<>();
+        for (int lineStart = 0; lineStart < tokens.size(); ) {
+            int lineEnd = lineStart;
+            int line = tokens.get(lineStart).line();
+            while (lineEnd + 1 < tokens.size() && tokens.get(lineEnd + 1).line() == line) {
+                lineEnd++;
+            }
+            List<LiveToken> lineTokens = tokens.subList(lineStart, lineEnd + 1);
+            Range range = likelyInvalidAttributeValueRange(scopeGraph, lineTokens, tokens, lineEnd + 1);
+            if (range != null && !overlapsAny(range, existingDiagnostics) && !overlapsAny(range, diagnostics)) {
+                diagnostics.add(new Diagnostic(
+                        range,
+                        "Missing type before value after ':' in attribute definition",
                         DiagnosticSeverity.Error,
                         "live"));
             }
@@ -497,6 +541,40 @@ public final class SyntaxDiagnosticMapper {
                 || ownerKind == InterlisSymbolKind.ASSOCIATION;
     }
 
+    private static Range likelyInvalidAttributeValueRange(ScopeGraph scopeGraph,
+                                                          List<LiveToken> lineTokens,
+                                                          List<LiveToken> allTokens,
+                                                          int nextIndex) {
+        if (scopeGraph == null || lineTokens == null || lineTokens.isEmpty()) {
+            return null;
+        }
+        LiveToken first = lineTokens.get(0);
+        if (first == null || first.tokenType() != InterlisLexer.Name) {
+            return null;
+        }
+        int colonIndex = lastIndexOf(lineTokens, InterlisLexer.COLON);
+        if (colonIndex < 1 || lastIndexOf(lineTokens, InterlisLexer.EQ) >= 0) {
+            return null;
+        }
+        LiveSymbol owner = scopeGraph.findEnclosingContainer(first.range().getStart());
+        if (owner == null || !supportsAttributeHeadContext(owner.kind())) {
+            return null;
+        }
+
+        int valueEnd = lineTokens.size();
+        if (!lineTokens.isEmpty() && lineTokens.get(valueEnd - 1).tokenType() == InterlisLexer.SEMI) {
+            valueEnd--;
+        } else if (!startsNewClause(allTokens, nextIndex)) {
+            return null;
+        }
+        if (valueEnd != colonIndex + 2) {
+            return null;
+        }
+
+        LiveToken value = lineTokens.get(colonIndex + 1);
+        return isFactorOnlyValueToken(value) ? value.range() : null;
+    }
+
     private static boolean hasTypeClauseToken(List<LiveToken> lineTokens, int startIndex) {
         for (int i = Math.max(startIndex, 0); i < lineTokens.size(); i++) {
             LiveToken token = lineTokens.get(i);
@@ -521,6 +599,17 @@ public final class SyntaxDiagnosticMapper {
             }
         }
         return false;
+    }
+
+    private static boolean isFactorOnlyValueToken(LiveToken token) {
+        if (token == null) {
+            return false;
+        }
+        return switch (token.tokenType()) {
+            case InterlisLexer.PosNumber, InterlisLexer.Number, InterlisLexer.Dec,
+                 InterlisLexer.STRING, InterlisLexer.PI, InterlisLexer.LNBASE -> true;
+            default -> false;
+        };
     }
 
     private static boolean startsNewClause(List<LiveToken> allTokens, int nextIndex) {
@@ -660,6 +749,100 @@ public final class SyntaxDiagnosticMapper {
         int keyword = prefix.toUpperCase(Locale.ROOT).lastIndexOf("END");
         int rangeStart = keyword >= 0 ? lineStart + keyword : startOffset;
         return new Range(DocumentTracker.positionAt(text, rangeStart), endNameRange.getEnd());
+    }
+
+    private static boolean shouldSuppressRawDiagnostic(Diagnostic rawDiagnostic,
+                                                       RawSyntaxError error,
+                                                       List<Diagnostic> existingDiagnostics) {
+        if (rawDiagnostic == null || rawDiagnostic.getRange() == null) {
+            return true;
+        }
+        if (overlapsAny(rawDiagnostic.getRange(), existingDiagnostics)) {
+            return true;
+        }
+        if (error == null || !isTrailingAttributeRecoveryToken(error.offendingTokenType())) {
+            return false;
+        }
+        for (Diagnostic diagnostic : existingDiagnostics) {
+            if (!isAttributeTypeDiagnostic(diagnostic) || diagnostic.getRange() == null) {
+                continue;
+            }
+            int diagnosticLine = diagnostic.getRange().getEnd().getLine();
+            int rawLine = rawDiagnostic.getRange().getStart().getLine();
+            if (rawLine < diagnosticLine || rawLine > diagnosticLine + 1) {
+                continue;
+            }
+            if (compare(diagnostic.getRange().getStart(), rawDiagnostic.getRange().getStart()) <= 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean looksLikeEndClause(String text, Range endClauseRange) {
+        if (text == null || endClauseRange == null) {
+            return false;
+        }
+        String clause = text(text, endClauseRange).trim();
+        return clause.toUpperCase(Locale.ROOT).startsWith("END");
+    }
+
+    private static boolean isRecoveryDrivenEndMismatch(String text,
+                                                       ScopeGraph scopeGraph,
+                                                       LiveSymbol symbol,
+                                                       String actual,
+                                                       List<Diagnostic> existingDiagnostics) {
+        if (text == null || scopeGraph == null || symbol == null || actual == null || actual.isBlank()
+                || existingDiagnostics == null || existingDiagnostics.isEmpty()) {
+            return false;
+        }
+        for (LiveSymbol candidate : scopeGraph.symbols()) {
+            if (candidate == null || candidate == symbol || !candidate.kind().isContainer()) {
+                continue;
+            }
+            if (!actual.equals(candidate.name()) || !isDescendant(scopeGraph, candidate, symbol)) {
+                continue;
+            }
+            if (looksLikeEndClause(text, expandToEndClause(text, candidate.endRange()))) {
+                continue;
+            }
+            if (candidate.fullRange() != null && overlapsAny(candidate.fullRange(), existingDiagnostics)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isAttributeTypeDiagnostic(Diagnostic diagnostic) {
+        if (diagnostic == null || diagnostic.getMessage() == null) {
+            return false;
+        }
+        String message = diagnostic.getMessage();
+        return message.contains("Missing type after ':' in attribute definition")
+                || message.contains("Missing type before value after ':' in attribute definition");
+    }
+
+    private static boolean isTrailingAttributeRecoveryToken(int tokenType) {
+        return switch (tokenType) {
+            case InterlisLexer.SEMI, InterlisLexer.END, InterlisLexer.PosNumber,
+                 InterlisLexer.Number, InterlisLexer.Dec, InterlisLexer.STRING -> true;
+            default -> false;
+        };
+    }
+
+    private static boolean isDescendant(ScopeGraph scopeGraph, LiveSymbol candidate, LiveSymbol ancestor) {
+        if (scopeGraph == null || candidate == null || ancestor == null || candidate.parentId() == null || ancestor.id() == null) {
+            return false;
+        }
+        SymbolId cursor = candidate.parentId();
+        while (cursor != null) {
+            if (cursor.equals(ancestor.id())) {
+                return true;
+            }
+            LiveSymbol parent = scopeGraph.symbol(cursor);
+            cursor = parent != null ? parent.parentId() : null;
+        }
+        return false;
     }
 
     private static String text(String text, Range range) {

@@ -1,4 +1,4 @@
-parser grammar InterlisParserPy;
+parser grammar InterlisParser;
 options { tokenVocab=InterlisLexer; }
 
 // Règles syntaxiques INTERLIS 2.4 définies avec les référénce eCH-0031
@@ -80,9 +80,11 @@ structureDef : STRUCTURE Name
                  classOrStructureDef?
                END Name SEMI;
 
-classRef : (INTERLIS DOT REFSYSTEM)
-         | (INTERLIS DOT Name (DOT Name)*)
-         | Name (DOT Name)*;
+classRef
+          : INTERLIS DOT REFSYSTEM
+          | INTERLIS DOT (Name | SIGN) (DOT (Name | SIGN))*
+          | (Name | SIGN) (DOT (Name | SIGN))*
+          ;
 
 classOrStructureDef : (ATTRIBUTE? attributeDef+ | constraintDef+ | PARAMETER? parameterDef+)+;
 
@@ -104,7 +106,7 @@ attrTypeDef : MANDATORY? (attrType
             | (NUMERIC (LSBR unitRef RSBR)))
             | (BAG | LIST) cardinality? OF restrictedStructureRef;
 
-attrType : iliType
+attrType : type
          | domainRef
          | referenceAttr
          | restrictedStructureRef;
@@ -116,12 +118,12 @@ restrictedClassOrAssRef : (classOrAssociationRef | ANYCLASS)
 
 classOrAssociationRef : classRef | associationRef;
 
-restrictedStructureRef : (structureRef | iliType | ANYSTRUCTURE)
-                       (RESTRICTION LPAR structureRef (COMMA structureRef)* RPAR)?;
+restrictedStructureRef : (structureRef | type | ANYSTRUCTURE)
+                       (RESTRICTION LPAR structureRef ((COMMA | SEMI) structureRef)* RPAR)?;
 
 restrictedClassOrStructureRef
     : (classOrStructureRef | ANYSTRUCTURE)
-      (RESTRICTION LPAR classOrStructureRef (SEMI classOrStructureRef)* RPAR)?;
+      (RESTRICTION LPAR classOrStructureRef ((COMMA | SEMI) classOrStructureRef)* RPAR)?;
 
 // 3.7 Relations vraies - Eigentliche Beziehungen
 //3.7.1 Description des relations - Beschreibung von Beziehungen
@@ -143,7 +145,7 @@ roleDef : Name
           (LPAR ( (ABSTRACT | EXTENDED | FINAL | HIDING | ORDERED | EXTERNAL) 
                  (COMMA (ABSTRACT | EXTENDED | FINAL | HIDING | ORDERED | EXTERNAL))*
                )? RPAR)?
-          (MINUS MINUS | MINUS LT GT | MINUS LT HASH GT)? cardinality?
+          (MINUS MINUS | MINUS LT GT | MINUS LT HASH GT) cardinality?
           restrictedClassOrAssRef (OR restrictedClassOrAssRef)*
           (ASSIGN STRING)? SEMI
         | Name COLON MANDATORY? (attrTypeDef | enumeration | numeric | constraintDef) SEMI;
@@ -158,13 +160,13 @@ domainDef
       (Name | UUIDOID)
       (LPAR (ABSTRACT | FINAL | GENERIC) RPAR)?
       (EXTENDS domainRef)?
-      EQ (MANDATORY? (iliType | numeric | enumeration | (STRING DOTDOT STRING) | CLASS (RESTRICTION LPAR classOrAssociationRef (SEMI classOrAssociationRef)* RPAR)?))
+      EQ (MANDATORY? (type | numeric | enumeration | (STRING DOTDOT STRING) | CLASS (RESTRICTION LPAR classOrAssociationRef (SEMI classOrAssociationRef)* RPAR)?))
       (CONSTRAINTS (Name COLON constraintDef) (COMMA Name COLON constraintDef)*)?
       SEMI
     )+
   ;
 
-iliType : baseType
+type : baseType
      | lineType
      | STRING DOTDOT STRING;
 

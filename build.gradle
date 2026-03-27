@@ -59,7 +59,7 @@ dependencies {
 sourceSets {
     main {
         antlr {
-            srcDirs = ['grammars-antlr4']
+            srcDirs = [providers.gradleProperty('interlisGrammarDir').orElse('grammars-ng').get()]
         }
     }
 }
