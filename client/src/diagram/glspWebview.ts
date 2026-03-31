@@ -23,6 +23,7 @@ import {
   WebviewGlspClient
 } from "@eclipse-glsp/vscode-integration-webview";
 import { Container, ContainerModule, injectable } from "inversify";
+import { initializeViewportStateApi, interlisViewportPersistenceModule } from "./viewportPersistence";
 
 const DIAGRAM_LOAD_WARNING_DELAY_MS = 2500;
 const MODEL_SWITCH_RETRY_DELAY_MS = 40;
@@ -58,7 +59,11 @@ type DiagramRecoverCommand = {
   reason?: DiagramLoadFailureReason;
 };
 type DiagramWebviewCommand = DiagramStatusCommand | DiagramRecoverCommand;
-type VsCodeApi = { postMessage(message: unknown): void };
+type VsCodeApi = {
+  postMessage(message: unknown): void;
+  getState?(): unknown;
+  setState?(state: unknown): void;
+};
 
 let hostBridge: VsCodeApi | undefined;
 let activeDiagramWidget: InterlisDiagramWidget | undefined;
@@ -66,6 +71,7 @@ let hostCommandHandlersInstalled = false;
 
 function initializeHostBridge(vscode: VsCodeApi | undefined): void {
   hostBridge = vscode;
+  initializeViewportStateApi(vscode);
 }
 
 function postHostMessage(message: DiagramHostMessage): void {
@@ -542,7 +548,7 @@ class InterlisGlspWebviewStarter extends GLSPStarter {
     return initializeDiagramContainer(
       new Container(),
       ...containerConfiguration,
-      { add: [baseViewModule, interlisEdgeViewModule, interlisDiagramWidgetModule] }
+      { add: [baseViewModule, interlisEdgeViewModule, interlisDiagramWidgetModule, interlisViewportPersistenceModule] }
     );
   }
 

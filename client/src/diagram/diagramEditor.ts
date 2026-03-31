@@ -116,7 +116,11 @@ class InterlisGlspEditorProvider extends GlspEditorProvider {
     webviewPanel.onDidChangeViewState(event => {
       if (event.webviewPanel.visible) {
         sendKickLayoutMessageToPanel(event.webviewPanel);
-        refreshDiagramByUri(document.uri, true, "panel-visible");
+        if (shouldRefreshPanelOnVisible(document.uri, clientId)) {
+          refreshDiagramByUri(document.uri, true, "panel-visible");
+        } else {
+          logDiagramDebug(`DIAGRAM_REFRESH source=panel-visible status=skipped reason=viewport-stable clientId=${clientId} uri=${document.uri.toString()}`);
+        }
       }
     });
   }
@@ -468,6 +472,10 @@ function refreshDiagramByUri(uri: vscode.Uri, allowRetry = true, source = "unkno
 
   logDiagramDebug(`DIAGRAM_REFRESH source=${source} status=dispatched clients=${readyClients.length} uri=${uri.toString()}`);
   return true;
+}
+
+function shouldRefreshPanelOnVisible(uri: vscode.Uri, clientId: string): boolean {
+  return pendingRefreshSources.has(uri.toString()) || !readyDiagramClientIds.has(clientId);
 }
 
 function findDiagramClients(uri: vscode.Uri): Array<{ clientId: string; client: ConnectorClientLike }> {
