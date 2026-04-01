@@ -35,6 +35,9 @@ public class CommandHandlers {
 
     /** Validate an .ili file and return textual log; also publishes diagnostics. */
     public CompletableFuture<Object> compile(String fileUriOrPath) {
+        if (handleBlankSource(fileUriOrPath, "compile-command", true)) {
+            return CompletableFuture.completedFuture(blankCompileInfoMessage());
+        }
         Ili2cUtil.CompilationOutcome outcome = compileAndPublish(fileUriOrPath, "compile-command", true);
         return CompletableFuture.completedFuture(outcome.getLogText());
     }
@@ -42,6 +45,9 @@ public class CommandHandlers {
     /** Compile an .ili file and return an HTML page with the generated Mermaid diagram. */
     public CompletableFuture<Object> generateUml(String fileUriOrPath) {
         String filesystemPath = InterlisTextDocumentService.toFilesystemPathIfPossible(fileUriOrPath);
+        if (handleBlankSource(fileUriOrPath, "generateUml", true)) {
+            return CompletableFuture.failedFuture(blankDiagramFailure());
+        }
         Ili2cUtil.CompilationOutcome outcome = compileAndPublish(fileUriOrPath, "generateUml", true);
 
         String displayPath = firstNonBlank(filesystemPath, fileUriOrPath);
@@ -63,6 +69,9 @@ public class CommandHandlers {
     /** Compile an .ili file and return an HTML page with the generated PlantUML diagram. */
     public CompletableFuture<Object> generatePlantUml(String fileUriOrPath) {
         String filesystemPath = InterlisTextDocumentService.toFilesystemPathIfPossible(fileUriOrPath);
+        if (handleBlankSource(fileUriOrPath, "generatePlantUml", true)) {
+            return CompletableFuture.failedFuture(blankDiagramFailure());
+        }
         Ili2cUtil.CompilationOutcome outcome = compileAndPublish(fileUriOrPath, "generatePlantUml", true);
 
         String displayPath = firstNonBlank(filesystemPath, fileUriOrPath);
@@ -83,6 +92,9 @@ public class CommandHandlers {
 
     public CompletableFuture<String> exportGraphml(String fileUriOrPath) {
         String filesystemPath = InterlisTextDocumentService.toFilesystemPathIfPossible(fileUriOrPath);
+        if (handleBlankSource(fileUriOrPath, "exportGraphml", true)) {
+            return CompletableFuture.failedFuture(blankExportFailure());
+        }
         Ili2cUtil.CompilationOutcome outcome = compileAndPublish(fileUriOrPath, "exportGraphml", true);
 
         String displayPath = firstNonBlank(filesystemPath, fileUriOrPath);
@@ -117,6 +129,10 @@ public class CommandHandlers {
             return renderDiagramModel(outcome);
         }
 
+        if (textService.isBlankSource(fileUriOrPath)) {
+            return CompletableFuture.failedFuture(blankDiagramFailure());
+        }
+
         if (tracked) {
             Ili2cUtil.CompilationOutcome outcome = resolveTrackedDiagramOutcome(
                     textService.getLastSavedCompilationAttempt(fileUriOrPath),
@@ -141,6 +157,9 @@ public class CommandHandlers {
 
     public CompletableFuture<String> exportDocx(String fileUriOrPath, String titleOverride) {
         String filesystemPath = InterlisTextDocumentService.toFilesystemPathIfPossible(fileUriOrPath);
+        if (handleBlankSource(fileUriOrPath, "exportDocx", true)) {
+            return CompletableFuture.failedFuture(blankExportFailure());
+        }
         Ili2cUtil.CompilationOutcome outcome = compileAndPublish(fileUriOrPath, "exportDocx", true);
 
         String displayPath = firstNonBlank(filesystemPath, fileUriOrPath);
@@ -164,6 +183,9 @@ public class CommandHandlers {
 
     public CompletableFuture<String> exportHtml(String fileUriOrPath, String titleOverride) {
         String filesystemPath = InterlisTextDocumentService.toFilesystemPathIfPossible(fileUriOrPath);
+        if (handleBlankSource(fileUriOrPath, "exportHtml", true)) {
+            return CompletableFuture.failedFuture(blankExportFailure());
+        }
         Ili2cUtil.CompilationOutcome outcome = compileAndPublish(fileUriOrPath, "exportHtml", true);
 
         String displayPath = firstNonBlank(filesystemPath, fileUriOrPath);
@@ -234,6 +256,21 @@ public class CommandHandlers {
         }
     }
 
+    private boolean handleBlankSource(String fileUriOrPath, String source, boolean emitCompileFinished) {
+        InterlisTextDocumentService textService = server.getInterlisTextDocumentService();
+        if (!textService.isBlankSource(fileUriOrPath)) {
+            return false;
+        }
+
+        String filesystemPath = InterlisTextDocumentService.toFilesystemPathIfPossible(fileUriOrPath);
+        RuntimeDiagnostics.logSkippedCompile(server, source, filesystemPath, InterlisTextDocumentService.BLANK_SOURCE_REASON);
+        server.publishDiagnostics(fileUriOrPath, List.of());
+        if (emitCompileFinished) {
+            server.notifyCompileFinished(fileUriOrPath, false);
+        }
+        return true;
+    }
+
     private CompletableFuture<InterlisDiagramModel.DiagramModel> renderDiagramModel(Ili2cUtil.CompilationOutcome outcome) {
         try {
             InterlisDiagramModel.DiagramModel model = InterlisDiagramModel.render(outcome.getTransferDescription());
@@ -281,6 +318,26 @@ public class CommandHandlers {
         }
         ResponseError error = new ResponseError(ResponseErrorCode.InternalError, message, null);
         return new ResponseErrorException(error);
+    }
+
+    static ResponseErrorException blankDiagramFailure() {
+        ResponseError error = new ResponseError(
+                ResponseErrorCode.InternalError,
+                InterlisTextDocumentService.BLANK_SOURCE_MESSAGE + " Add INTERLIS content and save to render the diagram.",
+                null);
+        return new ResponseErrorException(error);
+    }
+
+    static ResponseErrorException blankExportFailure() {
+        ResponseError error = new ResponseError(
+                ResponseErrorCode.InternalError,
+                InterlisTextDocumentService.BLANK_SOURCE_MESSAGE + " Add INTERLIS content and save before exporting.",
+                null);
+        return new ResponseErrorException(error);
+    }
+
+    static String blankCompileInfoMessage() {
+        return InterlisTextDocumentService.BLANK_SOURCE_MESSAGE + " Add INTERLIS content and save before compiling.";
     }
 
     private static Optional<String> bestErrorMessage(Ili2cUtil.CompilationOutcome outcome) {

@@ -34,6 +34,7 @@ import com.google.inject.Inject;
 import ch.so.agi.lsp.interlis.diagram.InterlisDiagramModel;
 import ch.so.agi.lsp.interlis.server.ClientSettings;
 import ch.so.agi.lsp.interlis.server.InterlisLanguageServer;
+import ch.so.agi.lsp.interlis.text.InterlisTextDocumentService;
 
 public class InterlisGlspModelFactory implements GModelFactory {
     private static final Logger LOG = LoggerFactory.getLogger(InterlisGlspModelFactory.class);
@@ -353,7 +354,9 @@ public class InterlisGlspModelFactory implements GModelFactory {
     }
 
     private GGraph buildErrorGraph(String sourceUri, String error) {
-        String title = "Diagram model unavailable";
+        String title = error != null && error.startsWith(InterlisTextDocumentService.BLANK_SOURCE_MESSAGE)
+                ? "Source file is empty"
+                : "Diagram model unavailable";
         String details = firstNonBlank(error, "Unknown diagram error");
         String source = "Source: " + firstNonBlank(sourceUri, "unknown");
 

@@ -43,6 +43,19 @@ public final class RuntimeDiagnostics {
                 + System.lineSeparator());
     }
 
+    public static void logSkippedCompile(InterlisLanguageServer server,
+                                         String source,
+                                         String pathOrUri,
+                                         String reason) {
+        if (server == null) {
+            return;
+        }
+        server.debugLogToClient("SKIP_COMPILE source=" + safeValue(source)
+                + " reason=" + safeValue(reason)
+                + " path=" + normalizePath(pathOrUri)
+                + System.lineSeparator());
+    }
+
     public static Ili2cUtil.CompilationOutcome compile(InterlisLanguageServer server,
                                                        BiFunction<ClientSettings, String, Ili2cUtil.CompilationOutcome> compiler,
                                                        ClientSettings settings,

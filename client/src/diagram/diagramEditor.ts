@@ -12,6 +12,8 @@ const REFRESH_RETRY_DELAYS_MS = [140, 360, 860] as const;
 const STARTUP_RECOVERY_DELAYS_MS = [120, 360, 960] as const;
 
 const CFG_AUTO_OPEN_BESIDE = "diagram.autoOpenBeside";
+const BLANK_SOURCE_STATUS_TITLE = "Source file is empty";
+const BLANK_SOURCE_STATUS_DETAIL = "Add INTERLIS content and save to render the diagram.";
 
 type GetClient = () => LanguageClient | undefined;
 type DiagramDebugLogger = ((message: string) => void) | undefined;
@@ -69,6 +71,8 @@ const startupRecoveryTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const startupRecoveryAttempts = new Map<string, number>();
 const diagramStatusByUri = new Map<string, DiagramStatusCommand>();
 const panelMessageSubscriptions = new WeakMap<vscode.WebviewPanel, vscode.Disposable>();
+const autoOpenedDiagramUris = new Set<string>();
+const suppressedAutoOpenUris = new Set<string>();
 let diagramDebugLogger: DiagramDebugLogger;
 
 export function setDiagramDebugLogger(logger: DiagramDebugLogger): void {
@@ -205,6 +209,10 @@ export function registerInterlisDiagramCommands(context: vscode.ExtensionContext
         vscode.window.showWarningMessage("Open an .ili file first.");
         return;
       }
+      if (await isBlankInterlisSource(sourceUri)) {
+        vscode.window.showInformationMessage("The INTERLIS file is empty. Add content and save to render the diagram.");
+        return;
+      }
       lastInterlisSourceUri = sourceUri;
       await openInterlisDiagramBeside(sourceUri, true);
     })
@@ -247,7 +255,7 @@ export function registerInterlisDiagramCommands(context: vscode.ExtensionContext
   );
 }
 
-export async function maybeAutoOpenDiagram(editor: vscode.TextEditor | undefined, openedUris: Set<string>): Promise<void> {
+export async function maybeAutoOpenDiagram(editor: vscode.TextEditor | undefined): Promise<void> {
   if (!editor) {
     return;
   }
@@ -261,26 +269,35 @@ export async function maybeAutoOpenDiagram(editor: vscode.TextEditor | undefined
   }
 
   const key = document.uri.toString();
-  if (openedUris.has(key)) {
+  if (isBlankInterlisDocument(document)) {
+    suppressedAutoOpenUris.add(key);
+    return;
+  }
+  if (suppressedAutoOpenUris.has(key)) {
+    return;
+  }
+  if (autoOpenedDiagramUris.has(key)) {
     return;
   }
   if (isDiagramTabAlreadyOpen(document.uri)) {
-    openedUris.add(key);
+    autoOpenedDiagramUris.add(key);
     return;
   }
 
   await openInterlisDiagramBeside(document.uri, true);
-  openedUris.add(key);
+  autoOpenedDiagramUris.add(key);
 }
 
-export function forgetAutoOpenedDiagram(document: vscode.TextDocument, openedUris: Set<string>): void {
+export function forgetAutoOpenedDiagram(document: vscode.TextDocument): void {
   if (!isInterlisFileDocument(document)) {
     return;
   }
   cancelScheduledDiagramRefresh(document);
   clearPendingRefresh(document.uri);
   clearRefreshRetryTimers(document.uri);
-  openedUris.delete(document.uri.toString());
+  const key = document.uri.toString();
+  autoOpenedDiagramUris.delete(key);
+  suppressedAutoOpenUris.delete(key);
 }
 
 export function refreshOpenDiagramByUri(uri: vscode.Uri): boolean {
@@ -753,10 +770,17 @@ function findDiagramPanelByClientId(clientId: string): vscode.WebviewPanel | und
   return client?.webviewEndpoint?.webviewPanel;
 }
 
-function updateDiagramCompileStatus(uri: vscode.Uri, success: boolean): void {
+function updateDiagramCompileStatus(uri: vscode.Uri, success: boolean, blankSource: boolean): void {
   const key = uri.toString();
   if (success) {
     diagramStatusByUri.delete(key);
+  } else if (blankSource) {
+    diagramStatusByUri.set(key, {
+      type: "interlis:diagramStatus",
+      kind: "warning",
+      title: BLANK_SOURCE_STATUS_TITLE,
+      detail: BLANK_SOURCE_STATUS_DETAIL
+    });
   } else {
     diagramStatusByUri.set(key, {
       type: "interlis:diagramStatus",
@@ -768,9 +792,24 @@ function updateDiagramCompileStatus(uri: vscode.Uri, success: boolean): void {
   sendDiagramStatusToUri(uri);
 }
 
-export function reconcileOpenDiagramAfterCompile(uri: vscode.Uri, success: boolean): boolean {
-  updateDiagramCompileStatus(uri, success);
-  return refreshDiagramByUri(uri, true, success ? "compileFinished:success" : "compileFinished:failure");
+export async function reconcileOpenDiagramAfterCompile(uri: vscode.Uri, success: boolean): Promise<boolean> {
+  const blankSource = await isBlankInterlisSource(uri);
+  const wasSuppressed = suppressedAutoOpenUris.has(uri.toString());
+  updateDiagramCompileStatus(uri, success, blankSource);
+
+  if (success) {
+    const opened = await maybeAutoOpenSuppressedDiagram(uri, wasSuppressed);
+    suppressedAutoOpenUris.delete(uri.toString());
+    if (opened) {
+      return true;
+    }
+    return refreshDiagramByUri(uri, true, "compileFinished:success");
+  }
+
+  if (blankSource && !isDiagramTabAlreadyOpen(uri)) {
+    return false;
+  }
+  return refreshDiagramByUri(uri, true, blankSource ? "compileFinished:blank" : "compileFinished:failure");
 }
 
 function sendDiagramStatusToUri(uri: vscode.Uri): void {
@@ -792,6 +831,28 @@ function sendDiagramStatusToPanel(panel: vscode.WebviewPanel, uri: vscode.Uri): 
   void panel.webview.postMessage(status ?? ({ type: "interlis:diagramStatus", clear: true } satisfies DiagramStatusCommand));
 }
 
+async function maybeAutoOpenSuppressedDiagram(uri: vscode.Uri, wasSuppressed: boolean): Promise<boolean> {
+  if (!wasSuppressed || !isDiagramAutoOpenEnabled()) {
+    return false;
+  }
+
+  const activeEditor = vscode.window.activeTextEditor;
+  if (!activeEditor || !isInterlisFileDocument(activeEditor.document) || activeEditor.document.uri.toString() !== uri.toString()) {
+    return false;
+  }
+  if (isBlankInterlisDocument(activeEditor.document)) {
+    return false;
+  }
+  if (isDiagramTabAlreadyOpen(uri)) {
+    autoOpenedDiagramUris.add(uri.toString());
+    return false;
+  }
+
+  await openInterlisDiagramBeside(uri, true);
+  autoOpenedDiagramUris.add(uri.toString());
+  return true;
+}
+
 type ConnectorClientLike = {
   clientId: string;
   document?: { uri?: vscode.Uri };
@@ -802,6 +863,20 @@ type ConnectorClientLike = {
 
 function logDiagramDebug(message: string): void {
   diagramDebugLogger?.(message);
+}
+
+async function isBlankInterlisSource(uri: vscode.Uri): Promise<boolean> {
+  const openDocument = vscode.workspace.textDocuments.find(document => document.uri.toString() === uri.toString());
+  if (openDocument && isInterlisFileDocument(openDocument)) {
+    return isBlankInterlisDocument(openDocument);
+  }
+
+  try {
+    const bytes = await vscode.workspace.fs.readFile(uri);
+    return isBlankInterlisText(Buffer.from(bytes).toString("utf8"));
+  } catch {
+    return false;
+  }
 }
 
 function resolveInterlisSourceUri(resource?: unknown): vscode.Uri | undefined {
@@ -835,6 +910,14 @@ function resolveInterlisSourceUri(resource?: unknown): vscode.Uri | undefined {
 
 function isInterlisFileDocument(document: vscode.TextDocument): boolean {
   return document.languageId === "interlis" && isInterlisFileUri(document.uri);
+}
+
+function isBlankInterlisDocument(document: vscode.TextDocument): boolean {
+  return isBlankInterlisText(document.getText());
+}
+
+function isBlankInterlisText(text: string | undefined): boolean {
+  return !text || text.trim().length === 0;
 }
 
 function isInterlisFileUri(uri: vscode.Uri): boolean {

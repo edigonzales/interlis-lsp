@@ -30,6 +30,8 @@ import java.util.function.BiFunction;
 
 public class InterlisTextDocumentService implements TextDocumentService {
     private static final Logger LOG = LoggerFactory.getLogger(InterlisTextDocumentService.class);
+    public static final String BLANK_SOURCE_REASON = "blank-document";
+    public static final String BLANK_SOURCE_MESSAGE = "Source file is empty.";
 
     private final InterlisLanguageServer server;
     private final DocumentTracker documents = new DocumentTracker();
@@ -71,6 +73,9 @@ public class InterlisTextDocumentService implements TextDocumentService {
     public void didOpen(DidOpenTextDocumentParams params) {
         String uri = params.getTextDocument().getUri();
         documents.open(params.getTextDocument());
+        if (skipBlankAuthoritativeCompile(uri, "didOpen")) {
+            return;
+        }
         liveAnalysis.analyze(currentSnapshot(uri));
         compileAndPublish(uri, "didOpen");
     }
@@ -96,6 +101,9 @@ public class InterlisTextDocumentService implements TextDocumentService {
     public void didSave(DidSaveTextDocumentParams params) {
         String uri = params.getTextDocument().getUri();
         documents.markSaved(uri);
+        if (skipBlankAuthoritativeCompile(uri, "didSave")) {
+            return;
+        }
         liveAnalysis.analyze(currentSnapshot(uri));
         compileAndPublish(uri, "didSave");
     }
@@ -324,6 +332,20 @@ public class InterlisTextDocumentService implements TextDocumentService {
         }
     }
 
+    private boolean skipBlankAuthoritativeCompile(String documentUri, String source) {
+        if (!isBlankSource(documentUri)) {
+            return false;
+        }
+
+        String pathOrUri = toFilesystemPathIfPossible(documentUri);
+        RuntimeDiagnostics.logSkippedCompile(server, source, pathOrUri, BLANK_SOURCE_REASON);
+        compilationCache.invalidate(pathOrUri);
+        liveAnalysis.remove(documentUri);
+        server.publishDiagnostics(documentUri, Collections.emptyList());
+        server.notifyCompileFinished(documentUri, false);
+        return true;
+    }
+
     public boolean isTrackedDocument(String uriOrPath) {
         return documents.isTracked(toDocumentUriIfPossible(uriOrPath));
     }
@@ -342,6 +364,28 @@ public class InterlisTextDocumentService implements TextDocumentService {
 
     public void rememberSavedCompilationOutcome(String uriOrPath, Ili2cUtil.CompilationOutcome outcome) {
         recordAuthoritativeOutcome(toFilesystemPathIfPossible(uriOrPath), outcome);
+    }
+
+    public boolean isBlankSource(String uriOrPath) {
+        String text = resolveSourceText(uriOrPath);
+        return text != null && text.isBlank();
+    }
+
+    public String resolveSourceText(String uriOrPath) {
+        String documentUri = toDocumentUriIfPossible(uriOrPath);
+        if (documentUri != null && documents.isTracked(documentUri)) {
+            String trackedText = documents.getText(documentUri);
+            if (trackedText != null) {
+                return trackedText;
+            }
+        }
+
+        try {
+            return readDocument(uriOrPath);
+        } catch (Exception ex) {
+            LOG.debug("Unable to read source text for {}", uriOrPath, ex);
+            return null;
+        }
     }
 
     public static String toFilesystemPathIfPossible(String uriOrPath) {

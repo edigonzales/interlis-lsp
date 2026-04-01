@@ -7,6 +7,7 @@ import ch.so.agi.lsp.interlis.server.ClientSettings;
 import ch.so.agi.lsp.interlis.server.InterlisLanguageServer;
 import ch.so.agi.lsp.interlis.workspace.CommandHandlers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -286,6 +287,43 @@ class CommandHandlersTest {
     }
 
     @Test
+    void exportDiagramModelReturnsFriendlyFailureForSavedBlankDocuments() throws Exception {
+        Path iliFile = tempDir.resolve("SavedBlankDiagram.ili");
+        String valid = "INTERLIS 2.3;\n" +
+                "MODEL SavedBlankDiagram (en)\n" +
+                "AT \"http://example.com/SavedBlankDiagram.ili\"\n" +
+                "VERSION \"2024-01-01\" =\n" +
+                "  TOPIC SimpleTopic =\n" +
+                "    CLASS Person =\n" +
+                "    END Person;\n" +
+                "  END SimpleTopic;\n" +
+                "END SavedBlankDiagram.\n";
+        Files.writeString(iliFile, valid);
+
+        RecordingServer server = new RecordingServer();
+        server.setClientSettings(new ClientSettings());
+        String uri = iliFile.toUri().toString();
+        server.getInterlisTextDocumentService().didOpen(
+                new DidOpenTextDocumentParams(new TextDocumentItem(uri, "interlis", 1, valid)));
+
+        Files.writeString(iliFile, " \n\t");
+        server.getInterlisTextDocumentService().didChange(fullDocumentChange(uri, 2, " \n\t"));
+
+        org.eclipse.lsp4j.DidSaveTextDocumentParams saveParams = new org.eclipse.lsp4j.DidSaveTextDocumentParams();
+        saveParams.setTextDocument(new org.eclipse.lsp4j.TextDocumentIdentifier(uri));
+        server.getInterlisTextDocumentService().didSave(saveParams);
+
+        CommandHandlers handlers = new CommandHandlers(server);
+        CompletableFuture<InterlisDiagramModel.DiagramModel> future = handlers.exportDiagramModel(uri);
+
+        ExecutionException exec = assertThrows(ExecutionException.class, () -> future.get(30, TimeUnit.SECONDS));
+        ResponseErrorException ree = assertInstanceOf(ResponseErrorException.class, exec.getCause());
+        assertTrue(ree.getMessage().contains("Source file is empty"));
+        assertFalse(server.getDebugLogText().contains("REAL_COMPILE source=exportDiagramModel-fallback"),
+                "Expected saved blank diagram requests to avoid fallback compilation");
+    }
+
+    @Test
     void exportDocxFailsWithResponseErrorWhenCompilationFails() {
         InterlisLanguageServer server = new InterlisLanguageServer();
         CommandHandlers handlers = new CommandHandlers(server);
@@ -328,6 +366,27 @@ class CommandHandlersTest {
         ResponseErrorException ree = assertInstanceOf(ResponseErrorException.class, cause);
         assertEquals(ResponseErrorCode.InternalError.getValue(), ree.getResponseError().getCode());
         assertTrue(ree.getMessage().contains(nonexistent.getFileName().toString()));
+    }
+
+    @Test
+    void compileReturnsInfoMessageForBlankFileAndSkipsCompilation() throws Exception {
+        Path blank = tempDir.resolve("BlankCompile.ili");
+        Files.writeString(blank, " \n\t");
+
+        RecordingServer server = new RecordingServer();
+        server.setClientSettings(new ClientSettings());
+        CommandHandlers handlers = new CommandHandlers(server);
+
+        Object result = handlers.compile(blank.toUri().toString()).get(30, TimeUnit.SECONDS);
+
+        String message = assertInstanceOf(String.class, result);
+        assertTrue(message.contains("Source file is empty"));
+        assertEquals(1, server.getCompileFinishedCount(), "Expected blank compile to publish compile completion");
+        assertTrue(server.getDiagnostics(blank.toUri().toString()).isEmpty(), "Expected blank compile to clear diagnostics");
+        assertTrue(server.getDebugLogText().contains("SKIP_COMPILE source=compile-command"),
+                "Expected blank compile command to emit a skip marker");
+        assertFalse(server.getDebugLogText().contains("REAL_COMPILE source=compile-command"),
+                "Expected blank compile command to avoid real compilation");
     }
 
     @Test
@@ -377,14 +436,37 @@ class CommandHandlersTest {
 
     private static final class RecordingServer extends InterlisLanguageServer {
         private List<Diagnostic> diagnostics = List.of();
+        private final StringBuilder debugLogBuffer = new StringBuilder();
+        private int compileFinishedCount;
 
         @Override
         public void publishDiagnostics(String uri, List<Diagnostic> diagnostics) {
             this.diagnostics = diagnostics != null ? List.copyOf(diagnostics) : List.of();
         }
 
+        @Override
+        public void debugLogToClient(String text) {
+            if (text == null) {
+                return;
+            }
+            debugLogBuffer.append(text);
+        }
+
+        @Override
+        public void notifyCompileFinished(String uri, boolean success) {
+            compileFinishedCount++;
+        }
+
         List<Diagnostic> getDiagnostics(String uri) {
             return diagnostics;
+        }
+
+        String getDebugLogText() {
+            return debugLogBuffer.toString();
+        }
+
+        int getCompileFinishedCount() {
+            return compileFinishedCount;
         }
     }
 }

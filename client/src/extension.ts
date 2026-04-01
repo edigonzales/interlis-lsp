@@ -102,7 +102,7 @@ const CONTAINER_BODY_AUTO_TRIGGER_LABELS = new Set<string>([
 let umlPanel: vscode.WebviewPanel | undefined;
 let htmlPanel: vscode.WebviewPanel | undefined;
 let lastDiagramSource: vscode.Uri | undefined;
-const autoOpenedDiagramUris = new Set<string>();
+const BLANK_INTERLIS_PREFIX = "The INTERLIS file is empty.";
 
 type PendingCaret = { version: number; position: vscode.Position };
 
@@ -115,6 +115,14 @@ class TemplateFetchHttpError extends Error {
     super(`Failed to load INTERLIS template from ${url}: HTTP ${status}${statusText ? ` ${statusText}` : ""}.`);
     this.name = "TemplateFetchHttpError";
   }
+}
+
+function isBlankInterlisDocument(document: vscode.TextDocument | undefined): boolean {
+  return !!document && document.getText().trim().length === 0;
+}
+
+function showBlankInterlisMessage(detail: string): void {
+  vscode.window.showInformationMessage(`${BLANK_INTERLIS_PREFIX} ${detail}`);
 }
 
 const pendingCarets = new Map<string, PendingCaret>();
@@ -352,7 +360,7 @@ export async function activate(context: vscode.ExtensionContext) {
     client!.onNotification("interlis/compileFinished", (p: { uri?: string; success?: boolean }) => {
       if (p?.uri) {
         try {
-          reconcileOpenDiagramAfterCompile(vscode.Uri.parse(p.uri), p.success === true);
+          void reconcileOpenDiagramAfterCompile(vscode.Uri.parse(p.uri), p.success === true);
         } catch {
           // Ignore invalid URIs from optional client notifications.
         }
@@ -434,14 +442,14 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.window.onDidChangeActiveTextEditor(editor => {
       void updateModelSnippetPlaceholderContext(editor, true);
-      void maybeAutoOpenDiagram(editor, autoOpenedDiagramUris);
+      void maybeAutoOpenDiagram(editor);
     })
   );
 
   context.subscriptions.push(
     vscode.workspace.onDidCloseTextDocument(document => {
       cancelScheduledDiagramRefresh(document);
-      forgetAutoOpenedDiagram(document, autoOpenedDiagramUris);
+      forgetAutoOpenedDiagram(document);
       const key = document.uri.toString();
       const timer = pendingTailSuggestTimers.get(key);
       if (timer) {
@@ -481,7 +489,7 @@ export async function activate(context: vscode.ExtensionContext) {
   );
 
   void updateModelSnippetPlaceholderContext(vscode.window.activeTextEditor, true);
-  void maybeAutoOpenDiagram(vscode.window.activeTextEditor, autoOpenedDiagramUris);
+  void maybeAutoOpenDiagram(vscode.window.activeTextEditor);
 
   async function showUmlHtml(html: string, title: string) {
     const column = vscode.ViewColumn.Beside;
@@ -563,6 +571,10 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("interlis.compile.run", async () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor) { vscode.window.showWarningMessage("Open an .ili file first."); return; }
+      if (isBlankInterlisDocument(editor.document)) {
+        showBlankInterlisMessage("Add content and save before compiling.");
+        return;
+      }
 
       revealOutputOnNextLog = true; // show OUTPUT for manual runs
       const fileUri = editor.document.uri.toString();
@@ -585,6 +597,10 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("interlis.uml.show", async () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor) { vscode.window.showWarningMessage("Open an .ili file first."); return; }
+      if (isBlankInterlisDocument(editor.document)) {
+        showBlankInterlisMessage("Add content and save before generating a diagram.");
+        return;
+      }
 
       const fileUri = editor.document.uri.toString();
 
@@ -607,6 +623,10 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("interlis.uml.plant.show", async () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor) { vscode.window.showWarningMessage("Open an .ili file first."); return; }
+      if (isBlankInterlisDocument(editor.document)) {
+        showBlankInterlisMessage("Add content and save before generating a diagram.");
+        return;
+      }
 
       const fileUri = editor.document.uri.toString();
 
@@ -629,6 +649,10 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("interlis.html.show", async () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor) { vscode.window.showWarningMessage("Open an .ili file first."); return; }
+      if (isBlankInterlisDocument(editor.document)) {
+        showBlankInterlisMessage("Add content and save before rendering documentation.");
+        return;
+      }
 
       const fileUri = editor.document.uri.toString();
 
@@ -662,6 +686,10 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("interlis.graphml.export", async () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor) { vscode.window.showWarningMessage("Open an .ili file first."); return; }
+      if (isBlankInterlisDocument(editor.document)) {
+        showBlankInterlisMessage("Add content and save before exporting GraphML.");
+        return;
+      }
 
       const documentUri = editor.document.uri;
       const fileUri = documentUri.toString();
@@ -710,6 +738,10 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("interlis.docx.export", async () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor) { vscode.window.showWarningMessage("Open an .ili file first."); return; }
+      if (isBlankInterlisDocument(editor.document)) {
+        showBlankInterlisMessage("Add content and save before exporting documentation.");
+        return;
+      }
 
       const documentUri = editor.document.uri;
       const fileUri = documentUri.toString();

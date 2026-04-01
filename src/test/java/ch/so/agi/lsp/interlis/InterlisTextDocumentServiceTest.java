@@ -146,6 +146,48 @@ class InterlisTextDocumentServiceTest {
     }
 
     @Test
+    void didOpenBlankFileSkipsCompileAndClearsCachedSnapshots(@TempDir Path tempDir) throws Exception {
+        Path modelPath = Files.createTempFile(tempDir, "BlankOpen", ".ili");
+        Files.writeString(modelPath, " \n\t");
+
+        CompilationCache cache = new CompilationCache();
+        TransferDescription td = new TransferDescription() {
+            @Override
+            public Model[] getModelsFromLastFile() {
+                return new Model[0];
+            }
+        };
+        cache.putSavedAttempt(modelPath.toString(), new Ili2cUtil.CompilationOutcome(td, "OLD", Collections.emptyList()));
+        cache.putSuccessful(modelPath.toString(), new Ili2cUtil.CompilationOutcome(td, "OLD", Collections.emptyList()));
+
+        RecordingServer server = new RecordingServer();
+        server.setClientSettings(new ClientSettings());
+
+        AtomicInteger compileCount = new AtomicInteger();
+        InterlisTextDocumentService service = new InterlisTextDocumentService(
+                server,
+                cache,
+                (cfg, path) -> {
+                    compileCount.incrementAndGet();
+                    return new Ili2cUtil.CompilationOutcome(td, "LOG", Collections.emptyList());
+                });
+
+        TextDocumentItem item = new TextDocumentItem(modelPath.toUri().toString(), "interlis", 1, " \n\t");
+        service.didOpen(new DidOpenTextDocumentParams(item));
+
+        assertEquals(0, compileCount.get(), "Expected blank didOpen to skip compilation");
+        assertEquals(1, server.getCompileFinishedCount(), "Expected blank didOpen to still notify compile completion");
+        assertFalse(server.wasLastCompileSuccessful(), "Expected blank didOpen to be reported as unsuccessful");
+        assertTrue(server.getDiagnostics(item.getUri()).isEmpty(), "Expected blank didOpen to clear diagnostics");
+        assertTrue(server.getDebugLogText().contains("SKIP_COMPILE source=didOpen"),
+                "Expected blank didOpen to emit a skip marker");
+        assertFalse(server.getDebugLogText().contains("REAL_COMPILE source=didOpen"),
+                "Expected blank didOpen to avoid real compilation");
+        assertNull(cache.getSavedAttempt(modelPath.toString()), "Expected blank didOpen to invalidate saved attempts");
+        assertNull(cache.getSuccessful(modelPath.toString()), "Expected blank didOpen to invalidate successful snapshots");
+    }
+
+    @Test
     void didChangeReusesLastSuccessfulSnapshotForDocumentSymbols(@TempDir Path tempDir) throws Exception {
         Path modelPath = Files.createTempFile(tempDir, "ModelDirtySymbols", ".ili");
         String content = """
@@ -864,6 +906,55 @@ class InterlisTextDocumentServiceTest {
         assertEquals("LOG-2", cached.getLogText(), "Expected cache to hold the latest compilation outcome");
         assertEquals("LOG-2", cache.getSavedAttempt(modelPath.toString()).getLogText(),
                 "Expected saved-attempt cache to track the latest authoritative compile");
+    }
+
+    @Test
+    void didSaveBlankFileSkipsCompileAndInvalidatesSnapshots(@TempDir Path tempDir) throws Exception {
+        Path modelPath = Files.createTempFile(tempDir, "ModelBlankSave", ".ili");
+        String content = "MODEL ModelBlankSave; END ModelBlankSave.";
+        Files.writeString(modelPath, content);
+
+        CompilationCache cache = new CompilationCache();
+        RecordingServer server = new RecordingServer();
+        server.setClientSettings(new ClientSettings());
+
+        AtomicInteger compileCount = new AtomicInteger();
+        InterlisTextDocumentService service = new InterlisTextDocumentService(
+                server,
+                cache,
+                (cfg, path) -> {
+                    int count = compileCount.incrementAndGet();
+                    TransferDescription td = new TransferDescription() {
+                        @Override
+                        public Model[] getModelsFromLastFile() {
+                            return new Model[0];
+                        }
+                    };
+                    return new Ili2cUtil.CompilationOutcome(td, "LOG-" + count, Collections.emptyList());
+                });
+
+        TextDocumentItem item = new TextDocumentItem(modelPath.toUri().toString(), "interlis", 1, content);
+        service.didOpen(new DidOpenTextDocumentParams(item));
+        assertEquals(1, compileCount.get(), "Expected initial compile during didOpen");
+
+        Files.writeString(modelPath, " \n\t");
+        service.didChange(fullDocumentChange(item.getUri(), 2, " \n\t"));
+
+        DidSaveTextDocumentParams saveParams = new DidSaveTextDocumentParams();
+        saveParams.setTextDocument(new TextDocumentIdentifier(item.getUri()));
+        service.didSave(saveParams);
+
+        assertEquals(1, compileCount.get(), "Expected blank didSave to skip recompilation");
+        assertEquals(2, server.getCompileFinishedCount(), "Expected blank didSave to notify compile completion");
+        assertFalse(server.wasLastCompileSuccessful(), "Expected blank didSave to be reported as unsuccessful");
+        assertTrue(server.getDiagnostics(item.getUri()).isEmpty(), "Expected blank didSave to clear diagnostics");
+        assertTrue(server.getDebugLogText().contains("SKIP_COMPILE source=didSave"),
+                "Expected blank didSave to emit a skip marker");
+        assertFalse(server.getDebugLogText().contains("REAL_COMPILE source=didSave"),
+                "Expected blank didSave to avoid real compilation");
+        assertFalse(service.isDocumentDirty(item.getUri()), "Expected blank didSave to mark the document as saved");
+        assertNull(cache.getSavedAttempt(modelPath.toString()), "Expected blank didSave to invalidate saved attempts");
+        assertNull(cache.getSuccessful(modelPath.toString()), "Expected blank didSave to invalidate successful snapshots");
     }
 
     @Test
