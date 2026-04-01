@@ -527,6 +527,77 @@ class InterlisTextDocumentServiceTest {
     }
 
     @Test
+    void didChangeKeepsDirectStructureTypesPredefinedUrisAndInlineEnumerationsValid(@TempDir Path tempDir) throws Exception {
+        Path modelFile = tempDir.resolve("DirtyTypes.ili");
+        String content = """
+                INTERLIS 2.4;
+                MODEL DirtyTypes (de) AT "https://example.org" VERSION "2026-03-24" =
+                  TOPIC Json =
+                    STRUCTURE Dokument =
+                      Name : TEXT*255;
+                    END Dokument;
+                    CLASS Example =
+                      Inline_Linear : MANDATORY (
+                        rot,
+                        !!@ ili2db.dispName=grün
+                        gruen,
+                        gelb
+                      );
+                      documents : BAG {1..*} OF DirtyTypes.Json.Dokument;
+                      document : MANDATORY DirtyTypes.Json.Dokument;
+                      url : MANDATORY INTERLIS.URI;
+                      uuid : MANDATORY INTERLIS.UUIDOID;
+                    END Example;
+                  END Json;
+                END DirtyTypes.
+                """;
+        Files.writeString(modelFile, content);
+
+        CompilationCache cache = new CompilationCache();
+        RecordingServer server = new RecordingServer();
+        server.setClientSettings(new ClientSettings());
+
+        AtomicInteger compileCount = new AtomicInteger();
+        InterlisTextDocumentService service = new InterlisTextDocumentService(
+                server,
+                cache,
+                (cfg, path) -> {
+                    compileCount.incrementAndGet();
+                    return Ili2cUtil.compile(cfg, path);
+                });
+
+        String uri = modelFile.toUri().toString();
+        service.didOpen(new DidOpenTextDocumentParams(new TextDocumentItem(uri, "interlis", 1, content)));
+        assertEquals(1, compileCount.get(), "Expected didOpen to compile the authoritative snapshot once");
+
+        String dirty = content + "\n";
+        service.didChange(fullDocumentChange(uri, 2, dirty));
+
+        waitForDiagnostics(server, uri, 2);
+
+        assertEquals(1, compileCount.get(), "Expected didChange live diagnostics to reuse the saved snapshot");
+        assertTrue(server.getDiagnostics(uri).stream()
+                        .noneMatch(diagnostic -> diagnostic.getMessage() != null
+                                && diagnostic.getMessage().contains("Unknown")
+                                && diagnostic.getMessage().contains("DirtyTypes.Json.Dokument")),
+                "Expected direct qualified structure type to stay valid after whitespace-only dirty edits");
+        assertTrue(server.getDiagnostics(uri).stream()
+                        .noneMatch(diagnostic -> diagnostic.getMessage() != null
+                                && diagnostic.getMessage().contains("Unknown")
+                                && diagnostic.getMessage().contains("INTERLIS.URI")),
+                "Expected INTERLIS.URI to stay valid after whitespace-only dirty edits");
+        assertTrue(server.getDiagnostics(uri).stream()
+                        .noneMatch(diagnostic -> diagnostic.getMessage() != null
+                                && diagnostic.getMessage().contains("Unknown")
+                                && diagnostic.getMessage().contains("INTERLIS.UUIDOID")),
+                "Expected INTERLIS.UUIDOID to stay valid after whitespace-only dirty edits");
+        assertTrue(server.getDiagnostics(uri).stream()
+                        .noneMatch(diagnostic -> diagnostic.getMessage() != null
+                                && diagnostic.getMessage().contains("Missing ';' after attribute definition")),
+                "Expected multiline inline enumerations to stay free of missing-semicolon diagnostics");
+    }
+
+    @Test
     void documentSymbolsReflectModelStructure(@TempDir Path tempDir) throws Exception {
         Path modelPath = Files.createTempFile(tempDir, "ModelOutline", ".ili");
         String content = String.join("\n",

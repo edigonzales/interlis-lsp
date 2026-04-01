@@ -438,6 +438,9 @@ public final class SemanticDiagnosticAnalyzer {
         if (kinds.size() == 1) {
             return kinds.iterator().next().name().toLowerCase(Locale.ROOT);
         }
+        if (kinds.equals(Set.of(InterlisSymbolKind.DOMAIN, InterlisSymbolKind.STRUCTURE, InterlisSymbolKind.CLASS))) {
+            return "type";
+        }
         if (kinds.equals(Set.of(InterlisSymbolKind.DOMAIN, InterlisSymbolKind.STRUCTURE))) {
             return "domain or structure";
         }

@@ -194,4 +194,62 @@ class InterlisDefinitionFinderTest {
         assertTrue(result.isLeft(), "Expected location result arm");
         assertTrue(result.getLeft().isEmpty(), "Expected no definition locations");
     }
+
+    @Test
+    void resolvesQualifiedLocalStructureFromAttributeType(@TempDir Path tempDir) throws Exception {
+        Path repositoryDir = Files.createDirectories(tempDir.resolve("models"));
+
+        Path sourceFile = repositoryDir.resolve("DirtyTypes.ili");
+        String sourceContent = """
+                INTERLIS 2.4;
+                MODEL DirtyTypes (de) AT "https://example.org" VERSION "2026-03-24" =
+                  TOPIC Json =
+                    STRUCTURE Dokument =
+                      Name : TEXT*255;
+                    END Dokument;
+                    CLASS Example =
+                      document : MANDATORY DirtyTypes.Json.Dokument;
+                    END Example;
+                  END Json;
+                END DirtyTypes.
+                """.stripIndent();
+        Files.writeString(sourceFile, sourceContent);
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        server.setClientSettings(new ClientSettings());
+
+        DocumentTracker tracker = new DocumentTracker();
+        TextDocumentItem item = new TextDocumentItem(sourceFile.toUri().toString(), "interlis", 1, sourceContent);
+        tracker.open(item);
+
+        CompilationCache cache = new CompilationCache();
+        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(server.getClientSettings(), sourceFile.toString());
+        assertNotNull(outcome.getTransferDescription(), outcome.getLogText());
+        cache.putSavedAttempt(sourceFile.toString(), outcome);
+        cache.putSuccessful(sourceFile.toString(), outcome);
+
+        InterlisDefinitionFinder finder = new InterlisDefinitionFinder(server, tracker, cache);
+
+        TextDocumentPositionParams params = new TextDocumentPositionParams();
+        params.setTextDocument(new TextDocumentIdentifier(item.getUri()));
+        int tokenOffset = sourceContent.indexOf("DirtyTypes.Json.Dokument") + "DirtyTypes.Json.".length() + 1;
+        Position cursor = DocumentTracker.positionAt(sourceContent, tokenOffset);
+        params.setPosition(cursor);
+
+        Either<List<? extends Location>, List<? extends org.eclipse.lsp4j.LocationLink>> result = finder.findDefinition(params);
+
+        assertTrue(result.isLeft(), "Expected location results");
+        List<? extends Location> locations = result.getLeft();
+        assertEquals(1, locations.size(), "Expected exactly one definition target");
+
+        Location location = locations.get(0);
+        assertEquals(sourceFile.toUri().toString(), location.getUri());
+
+        int definitionOffset = sourceContent.indexOf("Dokument =");
+        Position expectedStart = DocumentTracker.positionAt(sourceContent, definitionOffset);
+        Position expectedEnd = DocumentTracker.positionAt(sourceContent, definitionOffset + "Dokument".length());
+
+        assertEquals(expectedStart, location.getRange().getStart());
+        assertEquals(expectedEnd, location.getRange().getEnd());
+    }
 }

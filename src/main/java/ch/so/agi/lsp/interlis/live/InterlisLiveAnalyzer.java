@@ -35,6 +35,8 @@ public final class InterlisLiveAnalyzer {
             InterlisSymbolKind.CLASS, InterlisSymbolKind.STRUCTURE, InterlisSymbolKind.VIEW);
     private static final Set<InterlisSymbolKind> STRUCTURE_REFERENCE_KINDS = EnumSet.of(
             InterlisSymbolKind.STRUCTURE, InterlisSymbolKind.CLASS);
+    private static final Set<InterlisSymbolKind> TYPE_REFERENCE_KINDS = EnumSet.of(
+            InterlisSymbolKind.DOMAIN, InterlisSymbolKind.STRUCTURE, InterlisSymbolKind.CLASS);
     private static final Set<InterlisSymbolKind> ASSOCIATION_REFERENCE_KINDS = EnumSet.of(InterlisSymbolKind.ASSOCIATION);
     private static final Set<InterlisSymbolKind> DOMAIN_REFERENCE_KINDS = EnumSet.of(InterlisSymbolKind.DOMAIN);
     private static final Set<InterlisSymbolKind> UNIT_REFERENCE_KINDS = EnumSet.of(InterlisSymbolKind.UNIT);
@@ -553,12 +555,100 @@ public final class InterlisLiveAnalyzer {
             if (rawText == null || rawText.isBlank()) {
                 return;
             }
+            Set<InterlisSymbolKind> effectiveKinds = referenceKinds(ctx, allowedKinds);
             scopeGraph.addReference(new ReferenceHit(
                     uri,
                     contextRange(ctx),
                     rawText,
-                    allowedKinds,
+                    effectiveKinds,
                     containers.isEmpty() ? null : containers.peek().id()));
+        }
+
+        private Set<InterlisSymbolKind> referenceKinds(ParserRuleContext ctx, Set<InterlisSymbolKind> defaultKinds) {
+            if (ctx == null || defaultKinds == null || defaultKinds.isEmpty()) {
+                return defaultKinds;
+            }
+
+            InterlisParser.AttrTypeDefContext attrTypeDef = findAncestor(ctx, InterlisParser.AttrTypeDefContext.class);
+            if (attrTypeDef == null) {
+                return defaultKinds;
+            }
+            if (isCollectionAttrType(attrTypeDef)) {
+                return STRUCTURE_REFERENCE_KINDS;
+            }
+            if (isDirectAttributeTypeReference(ctx)) {
+                return TYPE_REFERENCE_KINDS;
+            }
+            return defaultKinds;
+        }
+
+        private boolean isDirectAttributeTypeReference(ParserRuleContext ctx) {
+            if (ctx == null || findAncestor(ctx, InterlisParser.AttrTypeContext.class) == null) {
+                return false;
+            }
+            if (ctx instanceof InterlisParser.DomainRefContext) {
+                return true;
+            }
+            if (!(ctx instanceof InterlisParser.StructureRefContext)) {
+                return false;
+            }
+            InterlisParser.RestrictedStructureRefContext restrictedStructureRef =
+                    findAncestor(ctx, InterlisParser.RestrictedStructureRefContext.class);
+            return restrictedStructureRef != null && isPrimaryRestrictedStructureReference(ctx, restrictedStructureRef);
+        }
+
+        private boolean isPrimaryRestrictedStructureReference(
+                ParserRuleContext ctx,
+                InterlisParser.RestrictedStructureRefContext restrictedStructureRef) {
+            if (ctx == null || restrictedStructureRef == null) {
+                return false;
+            }
+            TerminalNode restriction = restrictedStructureRef.RESTRICTION();
+            return restriction == null || ctx.getStart().getTokenIndex() < restriction.getSymbol().getTokenIndex();
+        }
+
+        private boolean isCollectionAttrType(InterlisParser.AttrTypeDefContext ctx) {
+            boolean hasCollectionKeyword = false;
+            boolean hasOf = false;
+            for (Token token : contextTokens(ctx)) {
+                if (token == null) {
+                    continue;
+                }
+                if (token.getType() == InterlisLexer.BAG || token.getType() == InterlisLexer.LIST) {
+                    hasCollectionKeyword = true;
+                } else if (token.getType() == InterlisLexer.OF) {
+                    hasOf = true;
+                }
+            }
+            return hasCollectionKeyword && hasOf;
+        }
+
+        private List<Token> contextTokens(ParserRuleContext ctx) {
+            List<Token> result = new ArrayList<>();
+            if (ctx == null || ctx.getStart() == null) {
+                return result;
+            }
+            int start = ctx.getStart().getTokenIndex();
+            int stop = ctx.getStop() != null ? ctx.getStop().getTokenIndex() : start;
+            for (int i = start; i <= stop; i++) {
+                Token token = tokens.get(i);
+                if (token == null || token.getChannel() != Token.DEFAULT_CHANNEL) {
+                    continue;
+                }
+                result.add(token);
+            }
+            return result;
+        }
+
+        private <T extends ParserRuleContext> T findAncestor(ParserRuleContext ctx, Class<T> type) {
+            ParserRuleContext current = ctx;
+            while (current != null) {
+                if (type.isInstance(current)) {
+                    return type.cast(current);
+                }
+                current = current.getParent();
+            }
+            return null;
         }
 
         private String visibleText(ParserRuleContext ctx) {

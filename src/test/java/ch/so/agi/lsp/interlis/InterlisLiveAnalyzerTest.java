@@ -793,6 +793,109 @@ class InterlisLiveAnalyzerTest {
                 "Expected qualified imported domain to stay valid with multiple IMPORTS but got: " + result.diagnostics());
     }
 
+    @Test
+    void directAttributeTypesAllowInterlisUriUuidOidAndQualifiedStructures(@TempDir Path tempDir) throws Exception {
+        Path modelFile = tempDir.resolve("DirtyTypes.ili");
+        String content = """
+                INTERLIS 2.4;
+                MODEL DirtyTypes (de) AT "https://example.org" VERSION "2026-03-24" =
+                  TOPIC Json =
+                    STRUCTURE Dokument =
+                      Name : TEXT*255;
+                    END Dokument;
+                    CLASS Example =
+                      documents : BAG {1..*} OF DirtyTypes.Json.Dokument;
+                      document : MANDATORY DirtyTypes.Json.Dokument;
+                      url : MANDATORY INTERLIS.URI;
+                      uuid : MANDATORY INTERLIS.UUIDOID;
+                    END Example;
+                  END Json;
+                END DirtyTypes.
+                """;
+        Files.writeString(modelFile, content);
+
+        TransferDescription authoritativeTd = compile(tempDir, modelFile);
+        String dirty = content.replace("document : MANDATORY DirtyTypes.Json.Dokument;",
+                "document  : MANDATORY DirtyTypes.Json.Dokument;");
+
+        LiveParseResult result = analyze(modelFile.toUri().toString(), modelFile.toString(), dirty, authoritativeTd);
+
+        assertTrue(result.diagnostics().stream()
+                        .noneMatch(diagnostic -> diagnostic.getMessage() != null
+                                && diagnostic.getMessage().contains("Unknown")
+                                && diagnostic.getMessage().contains("DirtyTypes.Json.Dokument")),
+                "Expected qualified structure types to stay valid in dirty mode but got: " + result.diagnostics());
+        assertTrue(result.diagnostics().stream()
+                        .noneMatch(diagnostic -> diagnostic.getMessage() != null
+                                && diagnostic.getMessage().contains("Unknown")
+                                && diagnostic.getMessage().contains("INTERLIS.URI")),
+                "Expected INTERLIS.URI to stay valid in dirty mode but got: " + result.diagnostics());
+        assertTrue(result.diagnostics().stream()
+                        .noneMatch(diagnostic -> diagnostic.getMessage() != null
+                                && diagnostic.getMessage().contains("Unknown")
+                                && diagnostic.getMessage().contains("INTERLIS.UUIDOID")),
+                "Expected INTERLIS.UUIDOID to stay valid in dirty mode but got: " + result.diagnostics());
+    }
+
+    @Test
+    void collectionTypesStillRejectDomains() {
+        String text = """
+                INTERLIS 2.4;
+                MODEL InvalidCollectionType (de) AT "https://example.org" VERSION "2026-03-24" =
+                  DOMAIN Label = TEXT*255;
+                  TOPIC T =
+                    CLASS Example =
+                      labels : BAG {1..*} OF Label;
+                    END Example;
+                  END T;
+                END InvalidCollectionType.
+                """;
+
+        LiveParseResult result = analyze("file:///InvalidCollectionType.ili", text);
+
+        assertTrue(result.diagnostics().stream()
+                        .anyMatch(diagnostic -> diagnostic.getMessage() != null
+                                && diagnostic.getMessage().contains("Unknown")
+                                && diagnostic.getMessage().contains("Label")),
+                "Expected BAG OF domain to stay rejected but got: " + result.diagnostics());
+    }
+
+    @Test
+    void multilineInlineEnumerationsWithMetaAttributesDoNotTriggerMissingSemicolon() {
+        String text = """
+                INTERLIS 2.4;
+                MODEL InlineEnumMeta (de) AT "https://example.org" VERSION "2026-03-24" =
+                  TOPIC T =
+                    CLASS Example =
+                      Inline_Linear : MANDATORY (
+                        rot,
+                        !!@ ili2db.dispName=grün
+                        gruen,
+                        gelb
+                      );
+                      Inline_Baumstruktur : MANDATORY (
+                        rot (
+                          hellrot,
+                          dunkelrot
+                        ),
+                        !!@ ili2db.dispName=grün
+                        gruen,
+                        gelb
+                      );
+                    END Example;
+                  END T;
+                END InlineEnumMeta.
+                """;
+
+        LiveParseResult result = analyze("file:///InlineEnumMeta.ili", text);
+
+        assertTrue(result.diagnostics().stream()
+                        .noneMatch(diagnostic -> diagnostic.getMessage() != null
+                                && diagnostic.getMessage().contains("Missing ';' after attribute definition")),
+                "Expected multiline inline enumerations to stay free of missing-semicolon diagnostics but got: "
+                        + result.diagnostics());
+    }
+
     private static LiveParseResult analyze(String uri, String text) {
         InterlisLiveAnalyzer analyzer = new InterlisLiveAnalyzer();
         return analyzer.analyze(new DocumentSnapshot(uri, null, text, 1));

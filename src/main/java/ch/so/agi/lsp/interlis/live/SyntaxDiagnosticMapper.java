@@ -430,7 +430,7 @@ public final class SyntaxDiagnosticMapper {
         if (colonIndex < 1 || lastIndexOf(lineTokens, InterlisLexer.SEMI) > colonIndex) {
             return null;
         }
-        if (!looksLikeTypeDeclaration(lineTokens, colonIndex) || !startsNewClause(allTokens, nextIndex)) {
+        if (!looksLikeTypeDeclaration(lineTokens, colonIndex) || !startsNewClause(lineTokens, allTokens, nextIndex)) {
             return null;
         }
         return typeClauseRange(lineTokens);
@@ -532,7 +532,7 @@ public final class SyntaxDiagnosticMapper {
         }
         return lineTokens.size() == 2
                 && lineTokens.get(1).tokenType() == InterlisLexer.COLON
-                && startsNewClause(allTokens, nextIndex);
+                && startsNewClause(lineTokens, allTokens, nextIndex);
     }
 
     private static boolean supportsAttributeHeadContext(InterlisSymbolKind ownerKind) {
@@ -564,7 +564,7 @@ public final class SyntaxDiagnosticMapper {
         int valueEnd = lineTokens.size();
         if (!lineTokens.isEmpty() && lineTokens.get(valueEnd - 1).tokenType() == InterlisLexer.SEMI) {
             valueEnd--;
-        } else if (!startsNewClause(allTokens, nextIndex)) {
+        } else if (!startsNewClause(lineTokens, allTokens, nextIndex)) {
             return null;
         }
         if (valueEnd != colonIndex + 2) {
@@ -612,12 +612,46 @@ public final class SyntaxDiagnosticMapper {
         };
     }
 
-    private static boolean startsNewClause(List<LiveToken> allTokens, int nextIndex) {
+    private static boolean startsNewClause(List<LiveToken> lineTokens,
+                                           List<LiveToken> allTokens,
+                                           int nextIndex) {
+        if (hasUnclosedDelimiter(lineTokens)) {
+            return false;
+        }
         if (allTokens == null || nextIndex >= allTokens.size()) {
             return true;
         }
         LiveToken next = allTokens.get(nextIndex);
         return next != null && (isHardBoundary(next) || next.tokenType() == InterlisLexer.Name);
+    }
+
+    private static boolean startsNewClause(List<LiveToken> allTokens, int nextIndex) {
+        return startsNewClause(null, allTokens, nextIndex);
+    }
+
+    private static boolean hasUnclosedDelimiter(List<LiveToken> tokens) {
+        if (tokens == null || tokens.isEmpty()) {
+            return false;
+        }
+        int parenDepth = 0;
+        int braceDepth = 0;
+        int bracketDepth = 0;
+        for (LiveToken token : tokens) {
+            if (token == null) {
+                continue;
+            }
+            switch (token.tokenType()) {
+                case InterlisLexer.LPAR -> parenDepth++;
+                case InterlisLexer.RPAR -> parenDepth = Math.max(parenDepth - 1, 0);
+                case InterlisLexer.LCBR -> braceDepth++;
+                case InterlisLexer.RCBR -> braceDepth = Math.max(braceDepth - 1, 0);
+                case InterlisLexer.LSBR -> bracketDepth++;
+                case InterlisLexer.RSBR -> bracketDepth = Math.max(bracketDepth - 1, 0);
+                default -> {
+                }
+            }
+        }
+        return parenDepth > 0 || braceDepth > 0 || bracketDepth > 0;
     }
 
     private static int lastIndexOf(List<LiveToken> tokens, int tokenType) {
