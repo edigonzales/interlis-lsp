@@ -31,6 +31,7 @@
   },
   "activationEvents": [
     "onLanguage:interlis",
+    "onCommand:interlis.template.new",
     "onCommand:interlis.diagram.open",
     "onCommand:interlis.diagram.autoLayout",
     "onCommand:interlis.diagram.refresh"
@@ -70,6 +71,10 @@
       }
     ],
     "commands": [
+      {
+        "command": "interlis.template.new",
+        "title": "INTERLIS: New from Template"
+      },
       {
         "command": "interlis.compile.run",
         "title": "INTERLIS: Compile current file"
@@ -154,6 +159,11 @@
           "type": "string",
           "default": "%ILI_DIR;https://models.interlis.ch;%JAR_DIR",
           "markdownDescription": "Preferred INTERLIS model repositories as a comma-separated string."
+        },
+        "interlisLsp.template.url": {
+          "type": "string",
+          "default": "https://geo.so.ch/models/AGI/SO_AGI_Modellvorlage_20260324.ili",
+          "markdownDescription": "Template URL used by `INTERLIS: New from Template`. Leave empty to use the built-in default URL."
         },
         "interlisLsp.autoShowOutputOnStart": {
           "type": "boolean",

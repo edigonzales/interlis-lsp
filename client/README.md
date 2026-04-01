@@ -25,10 +25,11 @@
 ### VS Code client experience 💡
 - **Activation on INTERLIS files** 📂 – the extension activates for `.ili` files and contributes a TextMate grammar and language configuration for syntax highlighting and editor defaults.
 - **Bundled runtime** 📦 – ships with a self-contained fat JAR and optional platform-specific JRE; paths can be overridden via settings.
-- **Commands palette** 🎛️ – run "Compile current file", "Show UML class diagram", "Show PlantUML class diagram", "Show documentation as HTML", and "Export documentation as DOCX" directly from VS Code.
+- **Commands palette** 🎛️ – run "New from Template", "Compile current file", "Show UML class diagram", "Show PlantUML class diagram", "Show documentation as HTML", and "Export documentation as DOCX" directly from VS Code.
 - **Automatic side-by-side diagram opening** ↔️ – optionally opens the read-only diagram editor beside INTERLIS text files when they become active.
 - **Integrated output channel** 📢 – compiler logs land in a dedicated "INTERLIS LSP" output channel that can clear itself when new runs start.
 - **Configurable repositories** 🗄️ – choose preferred model repositories via settings passed to the server at initialization.
+- **Remote model template** 🧾 – create a new unsaved INTERLIS document from a configurable remote template URL.
 - **Caret-aware templates** 🧠 – caret tracking middleware makes sure auto-inserted templates leave the cursor at the expected position after edits are applied.
 - **Webview downloads** 💾 – UML previews support saving generated SVG diagrams next to the source model.
 
@@ -60,19 +61,25 @@ END MyNewModel.
 2. Run **INTERLIS: Show UML class diagram** to open an interactive Mermaid diagram, or **INTERLIS: Show PlantUML class diagram** for PlantUML output.
 3. Use **INTERLIS: Show documentation as HTML** for a rendered manual, or **INTERLIS: Export documentation as DOCX** to save a styled Word file.
 
+### Example: creating a new model from a template 🧱
+1. Run **INTERLIS: New from Template** from the command palette.
+2. The extension downloads the configured template and opens it as a new unsaved INTERLIS document.
+3. Optionally override `interlisLsp.template.url` in the settings to point to your own template source.
+
 ### Configuration options ⚙️
 - `interlisLsp.server.jarPath` – override the bundled language server JAR.
 - `interlisLsp.javaPath` – point to a custom Java runtime if the bundled runtime is missing.
 - `interlisLsp.server.jvmArgs` – optional extra JVM arguments (for example `-Dinterlis.glsp.debugFile=/tmp/interlis-diagram-debug.json` to dump generated GLSP nodes/edges as JSON).
 - `interlisLsp.modelRepositories` – comma-separated repositories resolved by the model discovery service and completion engine.
+- `interlisLsp.template.url` – template URL used by **INTERLIS: New from Template**; leave empty to fall back to the default template.
 - `interlisLsp.autoShowOutputOnStart` – show the INTERLIS output channel when the extension activates.
 - `interlisLsp.diagram.autoOpenBeside` – auto-open the diagram editor beside `.ili` files.
 
 ### Getting started 🚀
 1. Install the extension from the Marketplace.
-2. Open an INTERLIS workspace or create a new `.ili` file.
+2. Open an INTERLIS workspace, create a new `.ili` file, or run **INTERLIS: New from Template**.
 3. Start typing – validation, completions, and navigation features light up automatically.
-4. Use the command palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) to access the compilation, diagram, and export commands.
+4. Use the command palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) to access the template, compilation, diagram, and export commands.
 
 ### Feedback & contributions 💬
 Contributions and feedback are welcome! File issues or pull requests in the [interlis-lsp](https://github.com/edigonzales/interlis-lsp) repository.

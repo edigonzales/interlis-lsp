@@ -29,6 +29,9 @@ const DOMAIN_NUMERIC_TAIL_PATTERN =
 const DOMAIN_NUMERIC_UPPER_BOUND_TAIL_PATTERN =
   /^\s*DOMAIN\s+(?:[A-Za-z_][A-Za-z0-9_]*|UUIDOID)(?:\s*\(\s*(?:ABSTRACT|FINAL|GENERIC)\s*\))?(?:\s+EXTENDS\s+[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)?\s*=\s*(?:MANDATORY\s+)?[-+]?[0-9]+(?:\.[0-9]+)?\s*\.\.\s*$/;
 const DOTTED_NAME_REGEX = "[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*";
+const TEMPLATE_URL_SETTING = "interlisLsp.template.url";
+const DEFAULT_TEMPLATE_URL = "https://geo.so.ch/models/AGI/SO_AGI_Modellvorlage_20260324.ili";
+const TEMPLATE_FETCH_TIMEOUT_MS = 3000;
 const UNIT_DECLARATION_PREFIX_REGEX =
   `^\\s*UNIT\\s+[A-Za-z_][A-Za-z0-9_]*(?:\\s*\\[\\s*[A-Za-z_][A-Za-z0-9_]*\\s*\\])?(?:\\s*\\(\\s*ABSTRACT\\s*\\))?(?:\\s+EXTENDS\\s+${DOTTED_NAME_REGEX})?\\s*=\\s*`;
 const CONTAINER_BODY_PREFIX_PATTERN = /^\s*[A-Za-z_][A-Za-z0-9_]*\s*$/;
@@ -102,6 +105,17 @@ let lastDiagramSource: vscode.Uri | undefined;
 const autoOpenedDiagramUris = new Set<string>();
 
 type PendingCaret = { version: number; position: vscode.Position };
+
+class TemplateFetchHttpError extends Error {
+  constructor(
+    readonly url: string,
+    readonly status: number,
+    readonly statusText: string
+  ) {
+    super(`Failed to load INTERLIS template from ${url}: HTTP ${status}${statusText ? ` ${statusText}` : ""}.`);
+    this.name = "TemplateFetchHttpError";
+  }
+}
 
 const pendingCarets = new Map<string, PendingCaret>();
 const pendingTailSuggestTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -528,6 +542,22 @@ export async function activate(context: vscode.ExtensionContext) {
     umlPanel.webview.html = html;
   }
 
+  context.subscriptions.push(
+    vscode.commands.registerCommand("interlis.template.new", async () => {
+      try {
+        const templateUrl = resolveTemplateUrl();
+        const content = await fetchTemplateContent(templateUrl);
+        const document = await vscode.workspace.openTextDocument({
+          language: "interlis",
+          content
+        });
+        await vscode.window.showTextDocument(document);
+      } catch (err: any) {
+        vscode.window.showErrorMessage(toTemplateErrorMessage(err));
+      }
+    })
+  );
+
   // Manual compile command — rely ONLY on notifications for output
   context.subscriptions.push(
     vscode.commands.registerCommand("interlis.compile.run", async () => {
@@ -724,6 +754,61 @@ export async function activate(context: vscode.ExtensionContext) {
     })
   );
 
+}
+
+function resolveTemplateUrl(): string {
+  const cfg = vscode.workspace.getConfiguration("interlisLsp");
+  const configured = cfg.get<string>("template.url");
+  const candidate = configured?.trim() ? configured.trim() : DEFAULT_TEMPLATE_URL;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate);
+  } catch {
+    throw new Error(`Invalid setting \`${TEMPLATE_URL_SETTING}\`: expected an absolute http or https URL.`);
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`Invalid setting \`${TEMPLATE_URL_SETTING}\`: expected an absolute http or https URL.`);
+  }
+
+  return parsed.toString();
+}
+
+async function fetchTemplateContent(templateUrl: string): Promise<string> {
+  const abortController = new AbortController();
+  const timeout = setTimeout(() => abortController.abort(), TEMPLATE_FETCH_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(templateUrl, {
+      signal: abortController.signal
+    });
+
+    if (!response.ok) {
+      throw new TemplateFetchHttpError(templateUrl, response.status, response.statusText);
+    }
+
+    const content = await response.text();
+    if (content.trim().length === 0) {
+      throw new Error(`Failed to load INTERLIS template from ${templateUrl}: received an empty response body.`);
+    }
+
+    return content;
+  } catch (err: any) {
+    if (err?.name === "AbortError") {
+      throw new Error(`Failed to load INTERLIS template from ${templateUrl}: request timed out after ${TEMPLATE_FETCH_TIMEOUT_MS} ms.`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function toTemplateErrorMessage(err: unknown): string {
+  if (err instanceof Error && err.message) {
+    return err.message;
+  }
+  return `Failed to load INTERLIS template: ${String(err)}`;
 }
 
 function scheduleTailSuggest(event: vscode.TextDocumentChangeEvent): void {
