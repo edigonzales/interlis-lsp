@@ -12,22 +12,36 @@ import ch.so.agi.lsp.interlis.diagram.InterlisUmlDiagram.Namespace;
 import ch.so.agi.lsp.interlis.diagram.InterlisUmlDiagram.Node;
 
 public final class Ili2PlantUml {
+    private static final String ABSTRACT_STEREOTYPE = "Abstract";
+
     private Ili2PlantUml() {
     }
 
     /** Returns the PlantUML source for the given TransferDescription. */
     public static String renderSource(TransferDescription td) {
-        return renderSource(td, UmlAttributeMode.OWN);
+        return renderSource(td, StaticUmlRenderOptions.defaults());
     }
 
     /** Returns the PlantUML source for the given TransferDescription and attribute mode. */
     public static String renderSource(TransferDescription td, UmlAttributeMode attributeMode) {
+        return renderSource(td, StaticUmlRenderOptions.withAttributeMode(attributeMode));
+    }
+
+    /** Returns the PlantUML source for the given TransferDescription and render options. */
+    public static String renderSource(TransferDescription td, StaticUmlRenderOptions renderOptions) {
         Objects.requireNonNull(td, "TransferDescription is null");
-        Diagram diagram = InterlisUmlDiagram.build(td, attributeMode);
-        return new PlantRenderer().render(diagram);
+        StaticUmlRenderOptions options = renderOptions != null ? renderOptions : StaticUmlRenderOptions.defaults();
+        Diagram diagram = InterlisUmlDiagram.build(td, options.getAttributeMode());
+        return new PlantRenderer(options).render(diagram);
     }
 
     static final class PlantRenderer {
+        private final StaticUmlRenderOptions renderOptions;
+
+        PlantRenderer(StaticUmlRenderOptions renderOptions) {
+            this.renderOptions = renderOptions != null ? renderOptions : StaticUmlRenderOptions.defaults();
+        }
+
         String render(Diagram d) {
             StringBuilder sb = new StringBuilder(4_096);
             sb.append("@startuml\n");
@@ -36,6 +50,7 @@ public final class Ili2PlantUml {
             sb.append("skinparam classAttributeIconSize 0\n");
             sb.append("skinparam monochrome false\n");
             sb.append("skinparam shadowing false\n\n");
+            appendAbstractStyling(sb, d);
 
             d.namespaces.values().forEach(ns -> {
                 if (ns.label.equals("<root>")) {
@@ -80,12 +95,9 @@ public final class Ili2PlantUml {
 
         private void printNode(StringBuilder sb, Node n, String indent) {
             String keyword = keywordFor(n);
-            String name = n.displayName;
-            if (n.stereotypes.contains("Abstract")) {
-                name = name + " <<abstract>>";
-            }
-            sb.append(indent).append(keyword).append(" \"").append(escape(name)).append("\" as ")
-                    .append(id(n.fqn)).append(" {").append("\n");
+            sb.append(indent).append(keyword).append(" ").append(id(n.fqn)).append(" as \"")
+                    .append(escape(n.displayName)).append("\"").append(declarationStereotype(n)).append(" {")
+                    .append("\n");
 
             for (String stereo : stereotypesFor(n)) {
                 sb.append(indent).append("  <<").append(escape(stereo)).append(">>\n");
@@ -119,6 +131,27 @@ public final class Ili2PlantUml {
                 return "struct";
             }
             return "class";
+        }
+
+        private void appendAbstractStyling(StringBuilder sb, Diagram d) {
+            boolean hasMutedAbstractType = d.nodes.values().stream()
+                    .anyMatch(node -> StaticUmlRenderOptions.isMutedAbstractType(node, renderOptions));
+            if (!hasMutedAbstractType) {
+                return;
+            }
+            sb.append("skinparam class<<").append(ABSTRACT_STEREOTYPE).append(">> {\n");
+            sb.append("BackgroundColor ").append(StaticUmlRenderOptions.MUTED_ABSTRACT_FILL_COLOR).append("\n");
+            sb.append("BorderColor ").append(StaticUmlRenderOptions.MUTED_ABSTRACT_BORDER_COLOR).append("\n");
+            sb.append("FontColor ").append(StaticUmlRenderOptions.MUTED_ABSTRACT_TEXT_COLOR).append("\n");
+            sb.append("StereotypeFontColor ").append(StaticUmlRenderOptions.MUTED_ABSTRACT_TEXT_COLOR).append("\n");
+            sb.append("}\n\n");
+        }
+
+        private String declarationStereotype(Node node) {
+            if (!node.stereotypes.contains(ABSTRACT_STEREOTYPE)) {
+                return "";
+            }
+            return " <<" + ABSTRACT_STEREOTYPE + ">>";
         }
 
         private String id(String fqn) {

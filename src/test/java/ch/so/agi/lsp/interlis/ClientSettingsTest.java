@@ -20,7 +20,9 @@ class ClientSettingsTest {
                         "diagram", Map.of(
                                 "layout", Map.of("edgeRouting", "POLYLINE"),
                                 "showCardinalities", false),
-                        "uml", Map.of("attributeMode", "OWN_AND_INHERITED")));
+                        "uml", Map.of(
+                                "attributeMode", "OWN_AND_INHERITED",
+                                "deemphasizeAbstractTypes", false)));
 
         ClientSettings settings = ClientSettings.from(payload);
 
@@ -28,6 +30,7 @@ class ClientSettingsTest {
         assertEquals("POLYLINE", settings.getEdgeRouting());
         assertFalse(settings.isShowCardinalities());
         assertEquals(UmlAttributeMode.OWN_AND_INHERITED, settings.getUmlAttributeMode());
+        assertFalse(settings.isUmlDeemphasizeAbstractTypes());
     }
 
     @Test
@@ -36,13 +39,15 @@ class ClientSettingsTest {
                 "interlisLsp", Map.of(
                         "diagram.layout.edgeRouting", "SPLINES",
                         "diagram.showCardinalities", "false",
-                        "uml.attributeMode", "NONE"));
+                        "uml.attributeMode", "NONE",
+                        "uml.deemphasizeAbstractTypes", "false"));
 
         ClientSettings settings = ClientSettings.from(payload);
 
         assertEquals("SPLINES", settings.getEdgeRouting());
         assertFalse(settings.isShowCardinalities());
         assertEquals(UmlAttributeMode.NONE, settings.getUmlAttributeMode());
+        assertFalse(settings.isUmlDeemphasizeAbstractTypes());
     }
 
     @Test
@@ -52,6 +57,7 @@ class ClientSettingsTest {
         assertEquals("", settings.getEdgeRouting());
         assertTrue(settings.isShowCardinalities());
         assertEquals(UmlAttributeMode.OWN, settings.getUmlAttributeMode());
+        assertTrue(settings.isUmlDeemphasizeAbstractTypes());
     }
 
     @Test
@@ -60,5 +66,6 @@ class ClientSettingsTest {
                 "interlisLsp", Map.of("uml", Map.of("attributeMode", "custom"))));
 
         assertEquals(UmlAttributeMode.OWN, settings.getUmlAttributeMode());
+        assertTrue(settings.isUmlDeemphasizeAbstractTypes());
     }
 }

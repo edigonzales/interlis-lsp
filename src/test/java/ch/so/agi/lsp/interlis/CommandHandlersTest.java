@@ -182,6 +182,55 @@ class CommandHandlersTest {
     }
 
     @Test
+    void generateUmlUsesConfiguredAbstractDeemphasisSetting() throws Exception {
+        Path iliFile = writeAbstractStylingModel(tempDir.resolve("AbstractStylingMermaid.ili"));
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        ClientSettings settings = new ClientSettings();
+        settings.setUmlDeemphasizeAbstractTypes(false);
+        server.setClientSettings(settings);
+        CommandHandlers handlers = new CommandHandlers(server);
+
+        String html = assertInstanceOf(String.class, handlers.generateUml(iliFile.toString()).get(30, TimeUnit.SECONDS));
+
+        assertFalse(html.contains("classDef mutedAbstract"));
+        assertFalse(html.contains(":::mutedAbstract"));
+    }
+
+    @Test
+    void generatePlantUmlUsesConfiguredAbstractDeemphasisSetting() throws Exception {
+        Path iliFile = writeAbstractStylingModel(tempDir.resolve("AbstractStylingPlant.ili"));
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        ClientSettings settings = new ClientSettings();
+        settings.setUmlDeemphasizeAbstractTypes(false);
+        server.setClientSettings(settings);
+        CommandHandlers handlers = new CommandHandlers(server);
+
+        String html = assertInstanceOf(String.class,
+                handlers.generatePlantUml(iliFile.toString()).get(30, TimeUnit.SECONDS));
+
+        assertFalse(html.contains("#back:#F3F3F3;line:#D6D6D6;text:#A6A6A6"));
+        assertFalse(html.contains("skinparam class<<Abstract>> {"));
+    }
+
+    @Test
+    void exportGraphmlUsesConfiguredAbstractDeemphasisSetting() throws Exception {
+        Path iliFile = writeAbstractStylingModel(tempDir.resolve("AbstractStylingGraphml.ili"));
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        ClientSettings settings = new ClientSettings();
+        settings.setUmlDeemphasizeAbstractTypes(false);
+        server.setClientSettings(settings);
+        CommandHandlers handlers = new CommandHandlers(server);
+
+        String graphml = handlers.exportGraphml(iliFile.toString()).get(30, TimeUnit.SECONDS);
+
+        assertTrue(graphml.contains("color=\"#99ccff\""));
+        assertFalse(graphml.contains("color=\"#F3F3F3\""));
+    }
+
+    @Test
     void exportDiagramModelReturnsContainerizedNodes() throws Exception {
         Path iliFile = tempDir.resolve("SimpleDiagramModel.ili");
         Files.writeString(iliFile, "INTERLIS 2.3;\n" +
@@ -551,6 +600,27 @@ class CommandHandlersTest {
                     END Child;
                   END Demo;
                 END StaticAttributeMode.
+                """);
+        return iliFile;
+    }
+
+    private static Path writeAbstractStylingModel(Path iliFile) throws Exception {
+        Files.writeString(iliFile, """
+                INTERLIS 2.3;
+                MODEL AbstractStylingCommand (en)
+                AT "http://example.com/AbstractStylingCommand.ili"
+                VERSION "2024-01-01" =
+                  TOPIC Demo (ABSTRACT) =
+                    STRUCTURE AbstractAddress (ABSTRACT) =
+                      Street : TEXT*40;
+                    END AbstractAddress;
+                    CLASS AbstractBase (ABSTRACT) =
+                      Name : TEXT*40;
+                    END AbstractBase;
+                    CLASS ConcreteThing EXTENDS AbstractBase =
+                    END ConcreteThing;
+                  END Demo;
+                END AbstractStylingCommand.
                 """);
         return iliFile;
     }

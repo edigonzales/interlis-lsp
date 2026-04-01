@@ -318,7 +318,8 @@ export async function activate(context: vscode.ExtensionContext) {
         showCardinalities: cfg.get<boolean>("diagram.showCardinalities") ?? true
       },
       uml: {
-        attributeMode: cfg.get<string>("uml.attributeMode") ?? "OWN"
+        attributeMode: cfg.get<string>("uml.attributeMode") ?? "OWN",
+        deemphasizeAbstractTypes: cfg.get<boolean>("uml.deemphasizeAbstractTypes") ?? true
       }
     },
     synchronize: { configurationSection: "interlisLsp" },

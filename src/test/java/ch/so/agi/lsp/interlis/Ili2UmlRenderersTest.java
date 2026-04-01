@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -15,8 +17,12 @@ import ch.interlis.ili2c.metamodel.TransferDescription;
 import ch.so.agi.lsp.interlis.compiler.Ili2cUtil;
 import ch.so.agi.lsp.interlis.diagram.Ili2Mermaid;
 import ch.so.agi.lsp.interlis.diagram.Ili2PlantUml;
+import ch.so.agi.lsp.interlis.diagram.StaticUmlRenderOptions;
 import ch.so.agi.lsp.interlis.diagram.UmlAttributeMode;
 import ch.so.agi.lsp.interlis.server.ClientSettings;
+import net.sourceforge.plantuml.FileFormat;
+import net.sourceforge.plantuml.FileFormatOption;
+import net.sourceforge.plantuml.SourceStringReader;
 
 class Ili2UmlRenderersTest {
 
@@ -129,6 +135,65 @@ class Ili2UmlRenderersTest {
                 "AddressBase.Street[0..1] : String");
     }
 
+    @Test
+    void renderersDeemphasizeAbstractClassesAndStructuresByDefault() throws Exception {
+        TransferDescription td = compileAbstractStylingDiagramModel(tempDir.resolve("AbstractStyling.ili"));
+
+        String mermaid = Ili2Mermaid.render(td);
+        String mermaidDisabled = Ili2Mermaid.render(td, new StaticUmlRenderOptions(UmlAttributeMode.OWN, false));
+        String plantUml = Ili2PlantUml.renderSource(td);
+        String plantUmlDisabled = Ili2PlantUml.renderSource(td,
+                new StaticUmlRenderOptions(UmlAttributeMode.OWN, false));
+
+        assertTrue(mermaid.contains(
+                "classDef mutedAbstract fill:#F3F3F3,stroke:#D6D6D6,color:#A6A6A6"));
+        assertTrue(mermaid.contains(
+                "class AbstractStyling.Demo.AbstractBase[\"AbstractBase\"]:::mutedAbstract {"));
+        assertTrue(mermaid.contains(
+                "class AbstractStyling.Demo.AbstractAddress[\"AbstractAddress\"]:::mutedAbstract {"));
+        assertFalse(mermaid.contains(
+                "class AbstractStyling.Demo.ConcreteThing[\"ConcreteThing\"]:::mutedAbstract {"));
+        assertFalse(mermaid.contains("cssClass \""));
+        assertFalse(mermaidDisabled.contains("classDef mutedAbstract"));
+        assertFalse(mermaidDisabled.contains(":::mutedAbstract"));
+
+        assertTrue(plantUml.contains(
+                "skinparam class<<Abstract>> {"));
+        assertTrue(plantUml.contains(
+                "BackgroundColor #F3F3F3"));
+        assertTrue(plantUml.contains(
+                "BorderColor #D6D6D6"));
+        assertTrue(plantUml.contains(
+                "FontColor #A6A6A6"));
+        assertTrue(plantUml.contains(
+                "StereotypeFontColor #A6A6A6"));
+        assertTrue(plantUml.contains(
+                "class AbstractStyling_Demo_AbstractBase as \"AbstractBase\" <<Abstract>> {"));
+        assertTrue(plantUml.contains(
+                "struct AbstractStyling_Demo_AbstractAddress as \"AbstractAddress\" <<Abstract>> {"));
+        assertFalse(plantUml.contains(
+                "#back:#F3F3F3;line:#D6D6D6;text:#A6A6A6"));
+        assertFalse(plantUml.contains("<<abstract>>"));
+        assertFalse(plantUmlDisabled.contains("skinparam class<<Abstract>> {"));
+    }
+
+    @Test
+    void plantUmlAbstractStylingRendersWithoutSyntaxErrors() throws Exception {
+        TransferDescription td = compileAbstractStylingDiagramModel(tempDir.resolve("AbstractStylingPlantSyntax.ili"));
+
+        String plantUml = Ili2PlantUml.renderSource(td);
+
+        SourceStringReader reader = new SourceStringReader(plantUml);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        var description = reader.outputImage(output, new FileFormatOption(FileFormat.SVG));
+        String svg = output.toString(StandardCharsets.UTF_8);
+
+        assertNotNull(description);
+        assertTrue(svg.contains("<svg"), svg);
+        assertFalse(svg.contains("Syntax Error"), svg);
+        assertFalse(description.getDescription().contains("Error"), description.getDescription());
+    }
+
     private static TransferDescription compileEnumDiagramModel(Path iliFile) throws Exception {
         Files.writeString(iliFile, """
                 INTERLIS 2.3;
@@ -177,6 +242,31 @@ class Ili2UmlRenderersTest {
                     END Child;
                   END Demo;
                 END InheritedRenderers.
+                """);
+
+        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(new ClientSettings(), iliFile.toString());
+        TransferDescription td = outcome.getTransferDescription();
+        assertNotNull(td, outcome.getLogText());
+        return td;
+    }
+
+    private static TransferDescription compileAbstractStylingDiagramModel(Path iliFile) throws Exception {
+        Files.writeString(iliFile, """
+                INTERLIS 2.3;
+                MODEL AbstractStyling (en)
+                AT "http://example.com/AbstractStyling.ili"
+                VERSION "2024-01-01" =
+                  TOPIC Demo (ABSTRACT) =
+                    STRUCTURE AbstractAddress (ABSTRACT) =
+                      Street : TEXT*40;
+                    END AbstractAddress;
+                    CLASS AbstractBase (ABSTRACT) =
+                      Name : TEXT*40;
+                    END AbstractBase;
+                    CLASS ConcreteThing EXTENDS AbstractBase =
+                    END ConcreteThing;
+                  END Demo;
+                END AbstractStyling.
                 """);
 
         Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(new ClientSettings(), iliFile.toString());

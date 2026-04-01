@@ -199,6 +199,11 @@
           ],
           "default": "OWN",
           "markdownDescription": "Controls how Mermaid, PlantUML, and GraphML UML exports render attributes, enumeration values, and constraints. `OWN` shows only locally declared attributes plus local constraints, `NONE` hides all member details, and `OWN_AND_INHERITED` appends inherited attributes from the full inheritance chain while keeping constraints visible."
+        },
+        "interlisLsp.uml.deemphasizeAbstractTypes": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Tone down abstract classes and abstract structures in static Mermaid, PlantUML, and GraphML UML outputs with a light gray palette. Disable this to keep the previous abstract color behavior."
         }
       }
     },

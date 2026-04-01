@@ -121,10 +121,12 @@ Server-to-client notifications ✉️:
 ## Static UML output settings
 
 - `interlisLsp.uml.attributeMode=OWN|NONE|OWN_AND_INHERITED` (default: `OWN`)
+- `interlisLsp.uml.deemphasizeAbstractTypes=true|false` (default: `true`)
 - Applies to the static Mermaid preview, PlantUML preview, and GraphML export.
 - `OWN` shows locally declared attributes and enumeration values and keeps constraints visible.
 - `NONE` hides attributes, enumeration values, and constraints entirely.
 - `OWN_AND_INHERITED` appends inherited attributes from the full superclass or super-structure chain, marks them as `Base.attr[...] : Type`, and keeps constraints visible.
+- `deemphasizeAbstractTypes=true` tones down abstract classes and abstract structures with a light-gray fill, border, and text palette so they are easier to ignore.
 
 ## GLSP ELK layout
 

@@ -21,6 +21,9 @@ public class ClientSettings {
     /** How static UML exports should render attributes and enumeration values. */
     private UmlAttributeMode umlAttributeMode = UmlAttributeMode.OWN;
 
+    /** Whether abstract classes/structures in static UML outputs should be visually toned down. */
+    private boolean umlDeemphasizeAbstractTypes = true;
+
     /** Parsed, trimmed list (derived from modelRepositories). */
     public List<String> getModelRepositoriesList() {
         if (modelRepositories == null || modelRepositories.isBlank()) return List.of();
@@ -70,12 +73,21 @@ public class ClientSettings {
         this.umlAttributeMode = UmlAttributeMode.from(umlAttributeMode);
     }
 
+    public boolean isUmlDeemphasizeAbstractTypes() {
+        return umlDeemphasizeAbstractTypes;
+    }
+
+    public void setUmlDeemphasizeAbstractTypes(boolean umlDeemphasizeAbstractTypes) {
+        this.umlDeemphasizeAbstractTypes = umlDeemphasizeAbstractTypes;
+    }
+
     @Override public String toString() {
         return "ClientSettings{modelRepositories='" + modelRepositories
                 + "', suppressRepositoryLogs=" + suppressRepositoryLogs
                 + ", edgeRouting='" + edgeRouting + '\''
                 + ", showCardinalities=" + showCardinalities
                 + ", umlAttributeMode=" + umlAttributeMode
+                + ", umlDeemphasizeAbstractTypes=" + umlDeemphasizeAbstractTypes
                 + '}';
     }
 
@@ -141,6 +153,14 @@ public class ClientSettings {
         if (umlAttributeMode != null) {
             target.setUmlAttributeMode(umlAttributeMode);
         }
+
+        Boolean umlDeemphasizeAbstractTypes = asBoolean(firstNonNull(
+                readMapPath(section, "uml", "deemphasizeAbstractTypes"),
+                readMapPath(section, "uml.deemphasizeAbstractTypes"),
+                top.get("interlisLsp.uml.deemphasizeAbstractTypes")));
+        if (umlDeemphasizeAbstractTypes != null) {
+            target.setUmlDeemphasizeAbstractTypes(umlDeemphasizeAbstractTypes);
+        }
     }
 
     private static void applyJsonPayload(ClientSettings target, JsonObject top) {
@@ -182,6 +202,14 @@ public class ClientSettings {
                 top.get("interlisLsp.uml.attributeMode")));
         if (umlAttributeMode != null) {
             target.setUmlAttributeMode(umlAttributeMode);
+        }
+
+        Boolean umlDeemphasizeAbstractTypes = asBoolean(firstNonNull(
+                readJsonPath(section, "uml", "deemphasizeAbstractTypes"),
+                readJsonPath(section, "uml.deemphasizeAbstractTypes"),
+                top.get("interlisLsp.uml.deemphasizeAbstractTypes")));
+        if (umlDeemphasizeAbstractTypes != null) {
+            target.setUmlDeemphasizeAbstractTypes(umlDeemphasizeAbstractTypes);
         }
     }
 

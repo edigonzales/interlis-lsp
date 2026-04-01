@@ -75,6 +75,7 @@ END MyNewModel.
 - `interlisLsp.autoShowOutputOnStart` – show the INTERLIS output channel when the extension activates.
 - `interlisLsp.diagram.autoOpenBeside` – auto-open the diagram editor beside `.ili` files.
 - `interlisLsp.uml.attributeMode` – control static Mermaid, PlantUML, and GraphML UML exports with `OWN`, `NONE`, or `OWN_AND_INHERITED`; `NONE` hides attributes, enum values, and constraints.
+- `interlisLsp.uml.deemphasizeAbstractTypes` – tone down abstract classes and abstract structures in static Mermaid, PlantUML, and GraphML UML outputs with a light gray palette; enabled by default.
 
 ### Getting started 🚀
 1. Install the extension from the Marketplace.

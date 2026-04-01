@@ -15,20 +15,33 @@ public final class Ili2Mermaid {
 
     /** Entry point. */
     public static String render(TransferDescription td) {
-        return render(td, UmlAttributeMode.OWN);
+        return render(td, StaticUmlRenderOptions.defaults());
     }
 
     /** Entry point with explicit attribute rendering mode. */
     public static String render(TransferDescription td, UmlAttributeMode attributeMode) {
+        return render(td, StaticUmlRenderOptions.withAttributeMode(attributeMode));
+    }
+
+    /** Entry point with explicit render options. */
+    public static String render(TransferDescription td, StaticUmlRenderOptions renderOptions) {
         Objects.requireNonNull(td, "TransferDescription is null");
-        Diagram diagram = InterlisUmlDiagram.build(td, attributeMode);
-        return new MermaidRenderer().render(diagram);
+        StaticUmlRenderOptions options = renderOptions != null ? renderOptions : StaticUmlRenderOptions.defaults();
+        Diagram diagram = InterlisUmlDiagram.build(td, options.getAttributeMode());
+        return new MermaidRenderer(options).render(diagram);
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
     // Mermaid renderer
     // ─────────────────────────────────────────────────────────────────────────────
     static final class MermaidRenderer {
+        private static final String MUTED_ABSTRACT_STYLE = "mutedAbstract";
+        private final StaticUmlRenderOptions renderOptions;
+
+        MermaidRenderer(StaticUmlRenderOptions renderOptions) {
+            this.renderOptions = renderOptions != null ? renderOptions : StaticUmlRenderOptions.defaults();
+        }
+
         String render(Diagram d) {
             StringBuilder sb = new StringBuilder(4_096);
             sb.append("classDiagram\n");
@@ -53,6 +66,8 @@ public final class Ili2Mermaid {
                     printClassBlock(sb, n, "  ");
                 }
             }
+
+            appendAbstractStylingDefinition(sb, d);
 
             // 3) Inheritance edges
             for (Inheritance i : d.inheritances) {
@@ -79,9 +94,21 @@ public final class Ili2Mermaid {
             return s.replaceAll("[^A-Za-z0-9_]", "_");
         }
 
+        private void appendAbstractStylingDefinition(StringBuilder sb, Diagram d) {
+            if (d.nodes.values().stream().noneMatch(node ->
+                    StaticUmlRenderOptions.isMutedAbstractType(node, renderOptions))) {
+                return;
+            }
+            sb.append("  classDef ").append(MUTED_ABSTRACT_STYLE)
+                    .append(" fill:").append(StaticUmlRenderOptions.MUTED_ABSTRACT_FILL_COLOR)
+                    .append(",stroke:").append(StaticUmlRenderOptions.MUTED_ABSTRACT_BORDER_COLOR)
+                    .append(",color:").append(StaticUmlRenderOptions.MUTED_ABSTRACT_TEXT_COLOR)
+                    .append("\n");
+        }
+
         private void printClassBlock(StringBuilder sb, Node n, String indent) {
             sb.append(indent).append("class ").append(id(n.fqn)).append("[\"").append(escape(n.displayName))
-                    .append("\"] {\n");
+                    .append("\"]").append(styleSuffix(n)).append(" {\n");
             for (String stereo : n.stereotypes) {
                 sb.append(indent).append("  ").append("<<").append(stereo).append(">>\n");
             }
@@ -92,6 +119,13 @@ public final class Ili2Mermaid {
                 sb.append(indent).append("  ").append(escape(m)).append("\n");
             }
             sb.append(indent).append("}\n");
+        }
+
+        private String styleSuffix(Node node) {
+            if (!StaticUmlRenderOptions.isMutedAbstractType(node, renderOptions)) {
+                return "";
+            }
+            return ":::" + MUTED_ABSTRACT_STYLE;
         }
 
         private static String escape(String s) {

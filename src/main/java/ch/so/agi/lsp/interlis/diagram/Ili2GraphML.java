@@ -18,19 +18,29 @@ public final class Ili2GraphML {
     }
 
     public static String render(TransferDescription td) {
-        return render(td, UmlAttributeMode.OWN);
+        return render(td, StaticUmlRenderOptions.defaults());
     }
 
     public static String render(TransferDescription td, UmlAttributeMode attributeMode) {
+        return render(td, StaticUmlRenderOptions.withAttributeMode(attributeMode));
+    }
+
+    public static String render(TransferDescription td, StaticUmlRenderOptions renderOptions) {
         Objects.requireNonNull(td, "TransferDescription is null");
-        Diagram diagram = InterlisUmlDiagram.build(td, attributeMode);
-        return new GraphMLRenderer().render(diagram);
+        StaticUmlRenderOptions options = renderOptions != null ? renderOptions : StaticUmlRenderOptions.defaults();
+        Diagram diagram = InterlisUmlDiagram.build(td, options.getAttributeMode());
+        return new GraphMLRenderer(options).render(diagram);
     }
 
     static final class GraphMLRenderer {
+        private final StaticUmlRenderOptions renderOptions;
         private final Map<String, String> nodeIds = new LinkedHashMap<>();
         private int nodeCounter = 0;
         private int edgeCounter = 0;
+
+        GraphMLRenderer(StaticUmlRenderOptions renderOptions) {
+            this.renderOptions = renderOptions != null ? renderOptions : StaticUmlRenderOptions.defaults();
+        }
 
         String render(Diagram d) {
             StringBuilder sb = new StringBuilder(8_192);
@@ -126,26 +136,30 @@ public final class Ili2GraphML {
 
         private void appendNode(StringBuilder sb, Node node, String indent) {
             String id = nodeIds.computeIfAbsent(node.fqn, k -> "n" + (nodeCounter++));
+            String fillColor = determineFillColor(node);
+            String borderColor = determineBorderColor(node);
+            String textColor = determineTextColor(node);
 
             sb.append(indent).append("<node id=\"").append(id).append("\">\n");
             sb.append(indent).append("  <data key=\"d0\">\n");
             sb.append(indent).append("    <y:UMLClassNode>\n");
             sb.append(indent).append("      <y:Geometry height=\"120.0\" width=\"180.0\" x=\"0.0\" y=\"0.0\"/>\n");
-            sb.append(indent).append("      <y:Fill color=\"").append(determineFillColor(node)).append("\" transparent=\"false\"/>\n");
-            sb.append(indent).append("      <y:BorderStyle color=\"#000000\" type=\"line\" width=\"1.0\"/>\n");
-            sb.append(indent).append("      <y:NodeLabel alignment=\"center\" autoSizePolicy=\"content\" fontFamily=\"Dialog\" fontSize=\"12\" fontStyle=\"plain\" hasBackgroundColor=\"false\" hasLineColor=\"false\" modelName=\"sandwich\" modelPosition=\"n\" visible=\"true\">")
+            sb.append(indent).append("      <y:Fill color=\"").append(fillColor).append("\" transparent=\"false\"/>\n");
+            sb.append(indent).append("      <y:BorderStyle color=\"").append(borderColor).append("\" type=\"line\" width=\"1.0\"/>\n");
+            sb.append(indent).append("      <y:NodeLabel alignment=\"center\" autoSizePolicy=\"content\" fontFamily=\"Dialog\" fontSize=\"12\" fontStyle=\"plain\" hasBackgroundColor=\"false\" hasLineColor=\"false\" modelName=\"sandwich\" modelPosition=\"n\" textColor=\"").append(textColor).append("\" visible=\"true\">")
                     .append(escapeXml(node.displayName)).append("</y:NodeLabel>\n");
 
             String stereotypeText = formatStereotypes(node.stereotypes);
-            String constraintText = node.stereotypes.contains("Abstract") ? "abstract" : "";
             String attributesText = joinWithNewlines(node.attributes);
             String methodsText = joinWithNewlines(node.methods);
 
             sb.append(indent).append("      <y:UML clipContent=\"true\" constraint=\"")
-                    .append(/*escapeXml(constraintText)*/"").append("\" omitDetails=\"false\" stereotype=\"")
+                    .append("").append("\" omitDetails=\"false\" stereotype=\"")
                     .append(escapeXml(stereotypeText)).append("\" use3DEffect=\"false\">\n");
-            sb.append(indent).append("        <y:AttributeLabel>").append(escapeXml(attributesText)).append("</y:AttributeLabel>\n");
-            sb.append(indent).append("        <y:MethodLabel>").append(escapeXml(methodsText)).append("</y:MethodLabel>\n");
+            sb.append(indent).append("        <y:AttributeLabel textColor=\"").append(textColor).append("\">")
+                    .append(escapeXml(attributesText)).append("</y:AttributeLabel>\n");
+            sb.append(indent).append("        <y:MethodLabel textColor=\"").append(textColor).append("\">")
+                    .append(escapeXml(methodsText)).append("</y:MethodLabel>\n");
             sb.append(indent).append("      </y:UML>\n");
             sb.append(indent).append("    </y:UMLClassNode>\n");
             sb.append(indent).append("  </data>\n");
@@ -195,7 +209,10 @@ public final class Ili2GraphML {
             sb.append("    </edge>\n");
         }
 
-        private static String determineFillColor(Node node) {
+        private String determineFillColor(Node node) {
+            if (StaticUmlRenderOptions.isMutedAbstractType(node, renderOptions)) {
+                return StaticUmlRenderOptions.MUTED_ABSTRACT_FILL_COLOR;
+            }
             if (node.stereotypes.contains("Enumeration")) {
                 return "#ff9933";
             }
@@ -206,6 +223,20 @@ public final class Ili2GraphML {
                 return "#99ccff";
             }
             return "#04b889";
+        }
+
+        private String determineBorderColor(Node node) {
+            if (StaticUmlRenderOptions.isMutedAbstractType(node, renderOptions)) {
+                return StaticUmlRenderOptions.MUTED_ABSTRACT_BORDER_COLOR;
+            }
+            return "#000000";
+        }
+
+        private String determineTextColor(Node node) {
+            if (StaticUmlRenderOptions.isMutedAbstractType(node, renderOptions)) {
+                return StaticUmlRenderOptions.MUTED_ABSTRACT_TEXT_COLOR;
+            }
+            return "#000000";
         }
 
         private static String formatStereotypes(Set<String> stereotypes) {

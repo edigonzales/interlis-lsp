@@ -54,6 +54,7 @@ dependencies {
     //compileOnly 'org.graalvm.nativeimage:svm:21.3.15'
     
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testImplementation 'net.sourceforge.plantuml:plantuml:1.2025.10'
 }
 
 sourceSets {

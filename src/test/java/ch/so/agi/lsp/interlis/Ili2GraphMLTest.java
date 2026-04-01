@@ -2,6 +2,7 @@ package ch.so.agi.lsp.interlis;
 
 import ch.so.agi.lsp.interlis.compiler.Ili2cUtil;
 import ch.so.agi.lsp.interlis.diagram.Ili2GraphML;
+import ch.so.agi.lsp.interlis.diagram.StaticUmlRenderOptions;
 import ch.so.agi.lsp.interlis.diagram.UmlAttributeMode;
 import ch.so.agi.lsp.interlis.server.ClientSettings;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -70,7 +71,8 @@ class Ili2GraphMLTest {
         assertTrue(graphml.contains("worker–employer"));
         assertTrue(graphml.contains("color=\"#ffcc00\""));
         assertTrue(graphml.contains("color=\"#04b889\""));
-        assertTrue(graphml.contains("color=\"#99ccff\""));
+        assertTrue(graphml.contains("color=\"#F3F3F3\""));
+        assertTrue(graphml.contains("textColor=\"#A6A6A6\""));
         //assertTrue(graphml.contains("constraint=\"abstract\""));
         assertTrue(graphml.contains("constraint=\"\""));
         assertTrue(graphml.contains("yfiles.foldertype=\"group\""));
@@ -142,6 +144,21 @@ class Ili2GraphMLTest {
                 "AddressBase.Street[0..1] : String");
     }
 
+    @Test
+    void graphmlDeemphasizesAbstractClassesAndStructuresByDefault() throws Exception {
+        TransferDescription td = compileAbstractStylingDiagramModel(tempDir.resolve("GraphAbstractStyling.ili"));
+
+        String graphml = Ili2GraphML.render(td);
+        String graphmlDisabled = Ili2GraphML.render(td, new StaticUmlRenderOptions(UmlAttributeMode.OWN, false));
+
+        assertTrue(graphml.contains("color=\"#F3F3F3\""));
+        assertTrue(graphml.contains("textColor=\"#A6A6A6\""));
+        assertTrue(graphml.contains("AbstractBase"));
+        assertTrue(graphml.contains("AbstractAddress"));
+        assertTrue(graphmlDisabled.contains("color=\"#99ccff\""));
+        assertFalse(graphmlDisabled.contains("color=\"#F3F3F3\""));
+    }
+
     private static TransferDescription compileEnumDiagramModel(Path iliFile) throws Exception {
         Files.writeString(iliFile, """
                 INTERLIS 2.3;
@@ -190,6 +207,31 @@ class Ili2GraphMLTest {
                     END Child;
                   END Demo;
                 END GraphInheritedModel.
+                """);
+
+        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(new ClientSettings(), iliFile.toString());
+        TransferDescription td = outcome.getTransferDescription();
+        assertNotNull(td, outcome.getLogText());
+        return td;
+    }
+
+    private static TransferDescription compileAbstractStylingDiagramModel(Path iliFile) throws Exception {
+        Files.writeString(iliFile, """
+                INTERLIS 2.3;
+                MODEL GraphAbstractStyling (en)
+                AT "http://example.com/GraphAbstractStyling.ili"
+                VERSION "2024-01-01" =
+                  TOPIC Demo (ABSTRACT) =
+                    STRUCTURE AbstractAddress (ABSTRACT) =
+                      Street : TEXT*40;
+                    END AbstractAddress;
+                    CLASS AbstractBase (ABSTRACT) =
+                      Name : TEXT*40;
+                    END AbstractBase;
+                    CLASS ConcreteThing EXTENDS AbstractBase =
+                    END ConcreteThing;
+                  END Demo;
+                END GraphAbstractStyling.
                 """);
 
         Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(new ClientSettings(), iliFile.toString());
