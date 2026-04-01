@@ -25,7 +25,7 @@
 ### VS Code client experience 💡
 - **Activation on INTERLIS files** 📂 – the extension activates for `.ili` files and contributes a TextMate grammar and language configuration for syntax highlighting and editor defaults.
 - **Bundled runtime** 📦 – ships with a self-contained fat JAR and optional platform-specific JRE; paths can be overridden via settings.
-- **Commands palette** 🎛️ – run "New from Template", "Compile current file", "Show UML class diagram", "Show PlantUML class diagram", "Show documentation as HTML", and "Export documentation as DOCX" directly from VS Code.
+- **Commands palette** 🎛️ – run "New from Template", "Compile current file", "Show Mermaid UML class diagram", "Show PlantUML class diagram", "Show documentation as HTML", and "Export documentation as DOCX" directly from VS Code.
 - **Automatic side-by-side diagram opening** ↔️ – optionally opens the read-only diagram editor beside INTERLIS text files when they become active.
 - **Integrated output channel** 📢 – compiler logs land in a dedicated "INTERLIS LSP" output channel that can clear itself when new runs start.
 - **Configurable repositories** 🗄️ – choose preferred model repositories via settings passed to the server at initialization.
@@ -58,7 +58,7 @@ END MyNewModel.
 
 ### Example: generating UML and documentation 🗺️
 1. Open an `.ili` file and run **INTERLIS: Compile current file** to validate it.
-2. Run **INTERLIS: Show UML class diagram** to open an interactive Mermaid diagram, or **INTERLIS: Show PlantUML class diagram** for PlantUML output.
+2. Run **INTERLIS: Show Mermaid UML class diagram** to open an interactive Mermaid diagram, or **INTERLIS: Show PlantUML class diagram** for PlantUML output.
 3. Use **INTERLIS: Show documentation as HTML** for a rendered manual, or **INTERLIS: Export documentation as DOCX** to save a styled Word file.
 
 ### Example: creating a new model from a template 🧱

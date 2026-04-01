@@ -93,7 +93,7 @@
       },
       {
         "command": "interlis.uml.show",
-        "title": "INTERLIS: Show UML class diagram"
+        "title": "INTERLIS: Show Mermaid UML class diagram"
       },
       {
         "command": "interlis.uml.plant.show",
