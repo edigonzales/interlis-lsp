@@ -5,6 +5,7 @@ import ch.so.agi.lsp.interlis.diagram.Ili2GraphML;
 import ch.so.agi.lsp.interlis.diagram.Ili2Mermaid;
 import ch.so.agi.lsp.interlis.diagram.Ili2PlantUml;
 import ch.so.agi.lsp.interlis.diagram.InterlisDiagramModel;
+import ch.so.agi.lsp.interlis.diagram.UmlAttributeMode;
 import ch.so.agi.lsp.interlis.export.docx.InterlisDocxExporter;
 import ch.so.agi.lsp.interlis.export.html.InterlisHtmlExporter;
 import ch.so.agi.lsp.interlis.export.html.MermaidHtmlRenderer;
@@ -58,7 +59,7 @@ public class CommandHandlers {
         }
 
         try {
-            String mermaid = Ili2Mermaid.render(td);
+            String mermaid = Ili2Mermaid.render(td, staticUmlAttributeMode());
             String html = MermaidHtmlRenderer.render(mermaid);
             return CompletableFuture.completedFuture(html);
         } catch (Exception e) {
@@ -82,7 +83,7 @@ public class CommandHandlers {
         }
 
         try {
-            String plant = Ili2PlantUml.renderSource(td);
+            String plant = Ili2PlantUml.renderSource(td, staticUmlAttributeMode());
             String html = PlantUmlHtmlRenderer.render(plant);
             return CompletableFuture.completedFuture(html);
         } catch (Exception e) {
@@ -105,7 +106,7 @@ public class CommandHandlers {
         }
 
         try {
-            String graphml = Ili2GraphML.render(td);
+            String graphml = Ili2GraphML.render(td, staticUmlAttributeMode());
             return CompletableFuture.completedFuture(graphml);
         } catch (Exception e) {
             return CompletableFuture.failedFuture(e);
@@ -254,6 +255,11 @@ public class CommandHandlers {
             }
             throw ex;
         }
+    }
+
+    private UmlAttributeMode staticUmlAttributeMode() {
+        ClientSettings settings = server.getClientSettings();
+        return settings != null ? settings.getUmlAttributeMode() : UmlAttributeMode.OWN;
     }
 
     private boolean handleBlankSource(String fileUriOrPath, String source, boolean emitCompileFinished) {

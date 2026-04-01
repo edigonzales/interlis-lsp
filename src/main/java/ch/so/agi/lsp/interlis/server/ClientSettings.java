@@ -1,6 +1,7 @@
 package ch.so.agi.lsp.interlis.server;
 
 import com.google.gson.*;
+import ch.so.agi.lsp.interlis.diagram.UmlAttributeMode;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -16,6 +17,9 @@ public class ClientSettings {
 
     /** Whether association cardinality labels should be rendered. */
     private boolean showCardinalities = true;
+
+    /** How static UML exports should render attributes and enumeration values. */
+    private UmlAttributeMode umlAttributeMode = UmlAttributeMode.OWN;
 
     /** Parsed, trimmed list (derived from modelRepositories). */
     public List<String> getModelRepositoriesList() {
@@ -58,11 +62,20 @@ public class ClientSettings {
         this.showCardinalities = showCardinalities;
     }
 
+    public UmlAttributeMode getUmlAttributeMode() {
+        return umlAttributeMode;
+    }
+
+    public void setUmlAttributeMode(String umlAttributeMode) {
+        this.umlAttributeMode = UmlAttributeMode.from(umlAttributeMode);
+    }
+
     @Override public String toString() {
         return "ClientSettings{modelRepositories='" + modelRepositories
                 + "', suppressRepositoryLogs=" + suppressRepositoryLogs
                 + ", edgeRouting='" + edgeRouting + '\''
                 + ", showCardinalities=" + showCardinalities
+                + ", umlAttributeMode=" + umlAttributeMode
                 + '}';
     }
 
@@ -120,6 +133,14 @@ public class ClientSettings {
         if (showCardinalities != null) {
             target.setShowCardinalities(showCardinalities);
         }
+
+        String umlAttributeMode = asString(firstNonNull(
+                readMapPath(section, "uml", "attributeMode"),
+                readMapPath(section, "uml.attributeMode"),
+                top.get("interlisLsp.uml.attributeMode")));
+        if (umlAttributeMode != null) {
+            target.setUmlAttributeMode(umlAttributeMode);
+        }
     }
 
     private static void applyJsonPayload(ClientSettings target, JsonObject top) {
@@ -153,6 +174,14 @@ public class ClientSettings {
                 top.get("interlisLsp.diagram.showCardinalities")));
         if (showCardinalities != null) {
             target.setShowCardinalities(showCardinalities);
+        }
+
+        String umlAttributeMode = asString(firstNonNull(
+                readJsonPath(section, "uml", "attributeMode"),
+                readJsonPath(section, "uml.attributeMode"),
+                top.get("interlisLsp.uml.attributeMode")));
+        if (umlAttributeMode != null) {
+            target.setUmlAttributeMode(umlAttributeMode);
         }
     }
 

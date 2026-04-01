@@ -189,6 +189,16 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "Show association cardinality labels in INTERLIS diagrams."
+        },
+        "interlisLsp.uml.attributeMode": {
+          "type": "string",
+          "enum": [
+            "OWN",
+            "NONE",
+            "OWN_AND_INHERITED"
+          ],
+          "default": "OWN",
+          "markdownDescription": "Controls how Mermaid, PlantUML, and GraphML UML exports render attributes, enumeration values, and constraints. `OWN` shows only locally declared attributes plus local constraints, `NONE` hides all member details, and `OWN_AND_INHERITED` appends inherited attributes from the full inheritance chain while keeping constraints visible."
         }
       }
     },

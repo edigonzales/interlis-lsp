@@ -118,6 +118,14 @@ Server-to-client notifications ✉️:
 | `interlis/clearLog` | none | Clear the shared output channel before new compiler runs. |
 | `interlis/log` | `{ text: string }` | Stream ili2c logs into the VS Code output view. |
 
+## Static UML output settings
+
+- `interlisLsp.uml.attributeMode=OWN|NONE|OWN_AND_INHERITED` (default: `OWN`)
+- Applies to the static Mermaid preview, PlantUML preview, and GraphML export.
+- `OWN` shows locally declared attributes and enumeration values and keeps constraints visible.
+- `NONE` hides attributes, enumeration values, and constraints entirely.
+- `OWN_AND_INHERITED` appends inherited attributes from the full superclass or super-structure chain, marks them as `Base.attr[...] : Type`, and keeps constraints visible.
+
 ## GLSP ELK layout
 
 The embedded GLSP UML diagram now uses server-side ELK (Layered) layout for package/class diagrams.

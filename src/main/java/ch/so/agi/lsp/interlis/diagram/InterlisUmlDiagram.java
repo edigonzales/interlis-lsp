@@ -18,8 +18,12 @@ final class InterlisUmlDiagram {
     }
 
     static Diagram build(TransferDescription td) {
+        return build(td, UmlAttributeMode.OWN);
+    }
+
+    static Diagram build(TransferDescription td, UmlAttributeMode attributeMode) {
         java.util.Objects.requireNonNull(td, "TransferDescription is null");
-        return new Ili2cAdapter().buildDiagram(td);
+        return new Ili2cAdapter(attributeMode).buildDiagram(td);
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
@@ -93,6 +97,12 @@ final class InterlisUmlDiagram {
     // ─────────────────────────────────────────────────────────────────────────────
 
     private static final class Ili2cAdapter {
+        private final UmlAttributeMode attributeMode;
+
+        private Ili2cAdapter(UmlAttributeMode attributeMode) {
+            this.attributeMode = attributeMode != null ? attributeMode : UmlAttributeMode.OWN;
+        }
+
         Diagram buildDiagram(TransferDescription td) {
             Diagram d = new Diagram();
 
@@ -206,20 +216,18 @@ final class InterlisUmlDiagram {
                     Node node = d.nodes.computeIfAbsent(fqn, k -> new Node(k, vw.getName(), stereos));
                     node.stereotypes.addAll(stereos);
 
-                    // attributes
-                    for (AttributeDef a : getElements(vw, AttributeDef.class)) {
-                        String card = formatCardinality(a.getCardinality());
-                        String typeName = TypeNamer.nameOf(a);
-                        if (!typeName.equalsIgnoreCase("ObjectType")) {
-                            node.attributes.add(a.getName() + "[" + card + "] : " + typeName);
-                        }
+                    node.attributes.addAll(attributesOf(vw));
+                    if (attributeMode == UmlAttributeMode.OWN_AND_INHERITED && vw instanceof Table table) {
+                        node.attributes.addAll(inheritedAttributesOf(table));
                     }
 
-                    int ci = 1;
-                    for (Constraint c : getElements(vw, Constraint.class)) {
-                        String cname = (c.getName() != null && !c.getName().isEmpty()) ? c.getName()
-                                : ("constraint" + ci++);
-                        node.methods.add(cname + "()");
+                    if (attributeMode != UmlAttributeMode.NONE) {
+                        int ci = 1;
+                        for (Constraint c : getElements(vw, Constraint.class)) {
+                            String cname = (c.getName() != null && !c.getName().isEmpty()) ? c.getName()
+                                    : ("constraint" + ci++);
+                            node.methods.add(cname + "()");
+                        }
                     }
                     ns.nodeOrder.add(fqn);
                 }
@@ -237,7 +245,9 @@ final class InterlisUmlDiagram {
                     Node node = d.nodes.computeIfAbsent(fqn, k -> new Node(k, dom.getName(), setOf("Enumeration")));
                     node.stereotypes.add("Enumeration");
                     node.attributes.clear();
-                    node.attributes.addAll(EnumFormatter.valuesOf((AbstractEnumerationType) t));
+                    if (attributeMode != UmlAttributeMode.NONE) {
+                        node.attributes.addAll(EnumFormatter.valuesOf((AbstractEnumerationType) t));
+                    }
                     ns.nodeOrder.add(fqn);
                 }
             }
@@ -292,6 +302,62 @@ final class InterlisUmlDiagram {
         private static String roleLabel(RoleDef r) {
             String n = r.getName();
             return n != null && !n.isEmpty() ? n : "role";
+        }
+
+        private List<String> attributesOf(Viewable viewable) {
+            if (attributeMode == UmlAttributeMode.NONE) {
+                return List.of();
+            }
+            return attributesOf(viewable, null);
+        }
+
+        private List<String> inheritedAttributesOf(Table table) {
+            List<String> inherited = new ArrayList<>();
+            Set<Table> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+            Table current = directBaseOf(table);
+            while (current != null && visited.add(current)) {
+                inherited.addAll(attributesOf(current, declaringTypeName(current)));
+                current = directBaseOf(current);
+            }
+            return inherited;
+        }
+
+        private List<String> attributesOf(Viewable viewable, String declaringTypeName) {
+            List<String> attributes = new ArrayList<>();
+            for (AttributeDef attribute : getElements(viewable, AttributeDef.class)) {
+                String typeName = TypeNamer.nameOf(attribute);
+                if (!typeName.equalsIgnoreCase("ObjectType")) {
+                    attributes.add(formatAttribute(attribute, declaringTypeName, typeName));
+                }
+            }
+            return attributes;
+        }
+
+        private static Table directBaseOf(Table table) {
+            if (table == null) {
+                return null;
+            }
+            Element extending = table.getExtending();
+            return extending instanceof Table base ? base : null;
+        }
+
+        private static String declaringTypeName(Table table) {
+            if (table == null) {
+                return "";
+            }
+            String name = table.getName();
+            if (name != null && !name.isBlank()) {
+                return name;
+            }
+            return localName(fqnOf(table));
+        }
+
+        private static String formatAttribute(AttributeDef attribute, String declaringTypeName, String typeName) {
+            String ownerPrefix = declaringTypeName != null && !declaringTypeName.isBlank()
+                    ? declaringTypeName + "."
+                    : "";
+            String card = formatCardinality(attribute.getCardinality());
+            return ownerPrefix + attribute.getName() + "[" + card + "] : " + typeName;
         }
 
         private static boolean belongsToLastFile(Element e, Set<Model> lastModels) {

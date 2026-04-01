@@ -18,8 +18,12 @@ public final class Ili2GraphML {
     }
 
     public static String render(TransferDescription td) {
+        return render(td, UmlAttributeMode.OWN);
+    }
+
+    public static String render(TransferDescription td, UmlAttributeMode attributeMode) {
         Objects.requireNonNull(td, "TransferDescription is null");
-        Diagram diagram = InterlisUmlDiagram.build(td);
+        Diagram diagram = InterlisUmlDiagram.build(td, attributeMode);
         return new GraphMLRenderer().render(diagram);
     }
 

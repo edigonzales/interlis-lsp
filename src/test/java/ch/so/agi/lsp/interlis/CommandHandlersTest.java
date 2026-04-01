@@ -2,6 +2,7 @@ package ch.so.agi.lsp.interlis;
 
 import ch.so.agi.lsp.interlis.compiler.Ili2cUtil;
 import ch.so.agi.lsp.interlis.diagram.InterlisDiagramModel;
+import ch.so.agi.lsp.interlis.diagram.UmlAttributeMode;
 import ch.so.agi.lsp.interlis.export.html.InterlisHtmlExporter;
 import ch.so.agi.lsp.interlis.server.ClientSettings;
 import ch.so.agi.lsp.interlis.server.InterlisLanguageServer;
@@ -125,6 +126,59 @@ class CommandHandlersTest {
         assertTrue(graphml.contains("<graphml"));
         assertTrue(graphml.contains("NodeA"));
         assertTrue(graphml.contains("NodeB"));
+    }
+
+    @Test
+    void generateUmlUsesConfiguredAttributeMode() throws Exception {
+        Path iliFile = writeStaticAttributeModeModel(tempDir.resolve("StaticUmlModeMermaid.ili"));
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        ClientSettings settings = new ClientSettings();
+        settings.setUmlAttributeMode(UmlAttributeMode.OWN_AND_INHERITED.name());
+        server.setClientSettings(settings);
+        CommandHandlers handlers = new CommandHandlers(server);
+
+        String html = assertInstanceOf(String.class, handlers.generateUml(iliFile.toString()).get(30, TimeUnit.SECONDS));
+
+        assertTrue(html.contains("ChildName[0..1] : String"));
+        assertTrue(html.contains("Base.BaseName[0..1] : String"));
+        assertTrue(html.contains("GrandBase.LegacyId[0..1] : String"));
+        assertTrue(html.contains("Constraint1()"));
+    }
+
+    @Test
+    void generatePlantUmlUsesConfiguredAttributeMode() throws Exception {
+        Path iliFile = writeStaticAttributeModeModel(tempDir.resolve("StaticUmlModePlant.ili"));
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        ClientSettings settings = new ClientSettings();
+        settings.setUmlAttributeMode(UmlAttributeMode.NONE.name());
+        server.setClientSettings(settings);
+        CommandHandlers handlers = new CommandHandlers(server);
+
+        String html = assertInstanceOf(String.class,
+                handlers.generatePlantUml(iliFile.toString()).get(30, TimeUnit.SECONDS));
+
+        assertFalse(html.contains("ChildName[0..1] : String"));
+        assertFalse(html.contains("Base.BaseName[0..1] : String"));
+        assertFalse(html.contains("Constraint1()"));
+    }
+
+    @Test
+    void exportGraphmlUsesConfiguredAttributeMode() throws Exception {
+        Path iliFile = writeStaticAttributeModeModel(tempDir.resolve("StaticUmlModeGraphml.ili"));
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        ClientSettings settings = new ClientSettings();
+        settings.setUmlAttributeMode(UmlAttributeMode.NONE.name());
+        server.setClientSettings(settings);
+        CommandHandlers handlers = new CommandHandlers(server);
+
+        String graphml = handlers.exportGraphml(iliFile.toString()).get(30, TimeUnit.SECONDS);
+
+        assertFalse(graphml.contains("ChildName[0..1] : String"));
+        assertFalse(graphml.contains("Base.BaseName[0..1] : String"));
+        assertFalse(graphml.contains("Constraint1()"));
     }
 
     @Test
@@ -476,6 +530,29 @@ class CommandHandlersTest {
         assertEquals("lint", diagnostic.getSource());
         assertNotNull(diagnostic.getTags());
         assertTrue(diagnostic.getTags().contains(DiagnosticTag.Unnecessary));
+    }
+
+    private static Path writeStaticAttributeModeModel(Path iliFile) throws Exception {
+        Files.writeString(iliFile, """
+                INTERLIS 2.3;
+                MODEL StaticAttributeMode (en)
+                AT "http://example.com/StaticAttributeMode.ili"
+                VERSION "2024-01-01" =
+                  TOPIC Demo (ABSTRACT) =
+                    CLASS GrandBase =
+                      LegacyId : TEXT*12;
+                    END GrandBase;
+                    CLASS Base EXTENDS GrandBase =
+                      BaseName : TEXT*40;
+                    END Base;
+                    CLASS Child EXTENDS Base =
+                      ChildName : TEXT*60;
+                      MANDATORY CONSTRAINT ChildName <> "";
+                    END Child;
+                  END Demo;
+                END StaticAttributeMode.
+                """);
+        return iliFile;
     }
 
     private static DidChangeTextDocumentParams fullDocumentChange(String uri, int version, String text) {

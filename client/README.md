@@ -18,7 +18,7 @@
 - **Formatting & pretty print** 🧹 – format whole documents with ili2c’s pretty printer and on-type helpers.
 - **On-type templates** ⚙️ – typing `=` after model, topic, class, or structure headers injects boilerplate blocks, meta-attributes, and matching `END` statements while restoring the caret.
 - **Cached compilation** 💾 – results are cached between document events for responsive completions and navigation.
-- **Diagram generation** 🖼️ – generate Mermaid or PlantUML class diagrams from the compiled model and display them in the editor.
+- **Diagram generation** 🖼️ – generate Mermaid or PlantUML class diagrams from the compiled model and display them in the editor, with configurable attribute visibility for static UML exports.
 - **GLSP diagram editor (topic containers)** 🧭 – open a dedicated `.ili` diagram editor beside the source view; it renders classes inside topic containers from the compiled transfer description via an embedded Eclipse GLSP server.
 - **HTML & DOCX exports** 📄 – render human-readable documentation (including custom titles) as HTML or export styled Word documents.
 
@@ -74,6 +74,7 @@ END MyNewModel.
 - `interlisLsp.template.url` – template URL used by **INTERLIS: New from Template**; leave empty to fall back to the default template.
 - `interlisLsp.autoShowOutputOnStart` – show the INTERLIS output channel when the extension activates.
 - `interlisLsp.diagram.autoOpenBeside` – auto-open the diagram editor beside `.ili` files.
+- `interlisLsp.uml.attributeMode` – control static Mermaid, PlantUML, and GraphML UML exports with `OWN`, `NONE`, or `OWN_AND_INHERITED`; `NONE` hides attributes, enum values, and constraints.
 
 ### Getting started 🚀
 1. Install the extension from the Marketplace.

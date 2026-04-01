@@ -316,6 +316,9 @@ export async function activate(context: vscode.ExtensionContext) {
           edgeRouting: cfg.get<string>("diagram.layout.edgeRouting") ?? "ORTHOGONAL"
         },
         showCardinalities: cfg.get<boolean>("diagram.showCardinalities") ?? true
+      },
+      uml: {
+        attributeMode: cfg.get<string>("uml.attributeMode") ?? "OWN"
       }
     },
     synchronize: { configurationSection: "interlisLsp" },

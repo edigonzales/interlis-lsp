@@ -15,8 +15,13 @@ public final class Ili2Mermaid {
 
     /** Entry point. */
     public static String render(TransferDescription td) {
+        return render(td, UmlAttributeMode.OWN);
+    }
+
+    /** Entry point with explicit attribute rendering mode. */
+    public static String render(TransferDescription td, UmlAttributeMode attributeMode) {
         Objects.requireNonNull(td, "TransferDescription is null");
-        Diagram diagram = InterlisUmlDiagram.build(td);
+        Diagram diagram = InterlisUmlDiagram.build(td, attributeMode);
         return new MermaidRenderer().render(diagram);
     }
 

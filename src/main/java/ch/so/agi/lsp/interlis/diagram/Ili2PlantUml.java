@@ -17,8 +17,13 @@ public final class Ili2PlantUml {
 
     /** Returns the PlantUML source for the given TransferDescription. */
     public static String renderSource(TransferDescription td) {
+        return renderSource(td, UmlAttributeMode.OWN);
+    }
+
+    /** Returns the PlantUML source for the given TransferDescription and attribute mode. */
+    public static String renderSource(TransferDescription td, UmlAttributeMode attributeMode) {
         Objects.requireNonNull(td, "TransferDescription is null");
-        Diagram diagram = InterlisUmlDiagram.build(td);
+        Diagram diagram = InterlisUmlDiagram.build(td, attributeMode);
         return new PlantRenderer().render(diagram);
     }
 

@@ -8,6 +8,7 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
+import ch.so.agi.lsp.interlis.diagram.UmlAttributeMode;
 import ch.so.agi.lsp.interlis.server.ClientSettings;
 
 class ClientSettingsTest {
@@ -18,13 +19,15 @@ class ClientSettingsTest {
                         "modelRepositories", "%ILI_DIR,https://models.interlis.ch",
                         "diagram", Map.of(
                                 "layout", Map.of("edgeRouting", "POLYLINE"),
-                                "showCardinalities", false)));
+                                "showCardinalities", false),
+                        "uml", Map.of("attributeMode", "OWN_AND_INHERITED")));
 
         ClientSettings settings = ClientSettings.from(payload);
 
         assertEquals("%ILI_DIR,https://models.interlis.ch", settings.getModelRepositories());
         assertEquals("POLYLINE", settings.getEdgeRouting());
         assertFalse(settings.isShowCardinalities());
+        assertEquals(UmlAttributeMode.OWN_AND_INHERITED, settings.getUmlAttributeMode());
     }
 
     @Test
@@ -32,12 +35,14 @@ class ClientSettingsTest {
         Map<String, Object> payload = Map.of(
                 "interlisLsp", Map.of(
                         "diagram.layout.edgeRouting", "SPLINES",
-                        "diagram.showCardinalities", "false"));
+                        "diagram.showCardinalities", "false",
+                        "uml.attributeMode", "NONE"));
 
         ClientSettings settings = ClientSettings.from(payload);
 
         assertEquals("SPLINES", settings.getEdgeRouting());
         assertFalse(settings.isShowCardinalities());
+        assertEquals(UmlAttributeMode.NONE, settings.getUmlAttributeMode());
     }
 
     @Test
@@ -46,5 +51,14 @@ class ClientSettingsTest {
 
         assertEquals("", settings.getEdgeRouting());
         assertTrue(settings.isShowCardinalities());
+        assertEquals(UmlAttributeMode.OWN, settings.getUmlAttributeMode());
+    }
+
+    @Test
+    void fromFallsBackToOwnForUnknownAttributeMode() {
+        ClientSettings settings = ClientSettings.from(Map.of(
+                "interlisLsp", Map.of("uml", Map.of("attributeMode", "custom"))));
+
+        assertEquals(UmlAttributeMode.OWN, settings.getUmlAttributeMode());
     }
 }
