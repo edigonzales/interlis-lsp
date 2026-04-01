@@ -232,11 +232,12 @@ final class InterlisUmlDiagram {
 
             for (Domain dom : getElements(container, Domain.class)) {
                 Type t = dom.getType();
-                //LOG.info("type: " + dom.getName() + " " + t);
                 if (t instanceof EnumerationType || t instanceof EnumTreeValueType) {
                     String fqn = fqnOf(m, container, dom);
                     Node node = d.nodes.computeIfAbsent(fqn, k -> new Node(k, dom.getName(), setOf("Enumeration")));
                     node.stereotypes.add("Enumeration");
+                    node.attributes.clear();
+                    node.attributes.addAll(EnumFormatter.valuesOf((AbstractEnumerationType) t));
                     ns.nodeOrder.add(fqn);
                 }
             }
@@ -339,8 +340,8 @@ final class InterlisUmlDiagram {
                 return "Numeric";
             } else if (t instanceof TextType) {
                 return "String";
-            } else if (t instanceof EnumerationType) {
-                return a.isDomainBoolean() ? "Boolean" : a.getContainer().getName();
+            } else if (t instanceof EnumerationType enumType) {
+                return EnumFormatter.inlineTypeOf(a, enumType);
             } else if (t instanceof FormattedType ft) {
                 if (isDateOrTime(ft)) {
                     return ft.getDefinedBaseDomain().getName();    
@@ -362,6 +363,38 @@ final class InterlisUmlDiagram {
             } 
             String n = t.getName();
             return (n != null && !n.isEmpty()) ? n : t.getClass().getSimpleName();
+        }
+    }
+
+    static final class EnumFormatter {
+        private EnumFormatter() {
+        }
+
+        static String inlineTypeOf(AttributeDef attribute, EnumerationType enumType) {
+            if (attribute != null && attribute.isDomainBoolean()) {
+                return "Boolean";
+            }
+            List<String> values = valuesOf(enumType);
+            return values.isEmpty() ? "Enumeration" : "(" + String.join(", ", values) + ")";
+        }
+
+        static List<String> valuesOf(AbstractEnumerationType enumType) {
+            if (enumType == null) {
+                return List.of();
+            }
+            List<String> values = switch (enumType) {
+            case EnumerationType enumerationType -> enumerationType.getValues();
+            case EnumTreeValueType enumTreeValueType -> enumTreeValueType.getValues();
+            default -> List.of();
+            };
+            if (values == null || values.isEmpty()) {
+                return List.of();
+            }
+            return values.stream()
+                    .filter(value -> value != null)
+                    .map(String::trim)
+                    .filter(value -> !value.isEmpty())
+                    .collect(Collectors.toList());
         }
     }
 

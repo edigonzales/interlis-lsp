@@ -74,4 +74,39 @@ class Ili2GraphMLTest {
         assertTrue(graphml.contains("yfiles.foldertype=\"group\""));
         assertTrue(graphml.contains(">Demo</y:NodeLabel>"));
     }
+
+    @Test
+    void rendersInlineAndDomainEnumerationValues() throws Exception {
+        Path iliFile = tempDir.resolve("GraphEnumModel.ili");
+        Files.writeString(iliFile, """
+                INTERLIS 2.3;
+                MODEL GraphEnumModel (en)
+                AT "http://example.com/GraphEnumModel.ili"
+                VERSION "2024-01-01" =
+                  TOPIC Demo (ABSTRACT) =
+                    DOMAIN Farben = (gruen, blau, rot(hell, dunkel));
+                    DOMAIN AlleFarben = ALL OF Farben;
+                    CLASS MyBase (ABSTRACT) =
+                      Aaaaaamyenum : (foo, bar);
+                      FarbenAttr : Farben;
+                    END MyBase;
+                  END Demo;
+                END GraphEnumModel.
+                """);
+
+        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(new ClientSettings(), iliFile.toString());
+        TransferDescription td = outcome.getTransferDescription();
+        assertNotNull(td, outcome.getLogText());
+
+        String graphml = Ili2GraphML.render(td);
+        assertNotNull(graphml);
+        assertTrue(graphml.contains("Aaaaaamyenum[0..1] : (foo, bar)"));
+        assertFalse(graphml.contains("Aaaaaamyenum[0..1] : MyBase"));
+        assertTrue(graphml.contains("FarbenAttr[0..1] : Farben"));
+        assertTrue(graphml.contains("gruen"));
+        assertTrue(graphml.contains("blau"));
+        assertTrue(graphml.contains("rot.hell"));
+        assertTrue(graphml.contains("rot.dunkel"));
+        assertTrue(graphml.contains("rot"));
+    }
 }

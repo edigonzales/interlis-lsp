@@ -163,6 +163,57 @@ class CommandHandlersTest {
     }
 
     @Test
+    void exportDiagramModelIncludesInlineAndDomainEnumerationValues() throws Exception {
+        Path iliFile = tempDir.resolve("EnumDiagramModel.ili");
+        Files.writeString(iliFile, """
+                INTERLIS 2.3;
+                MODEL EnumDiagramModel (en)
+                AT "http://example.com/EnumDiagramModel.ili"
+                VERSION "2024-01-01" =
+                  TOPIC Demo (ABSTRACT) =
+                    DOMAIN Farben = (gruen, blau, rot(hell, dunkel));
+                    DOMAIN AlleFarben = ALL OF Farben;
+                    CLASS MyBase (ABSTRACT) =
+                      Aaaaaamyenum : (foo, bar);
+                      FarbenAttr : Farben;
+                    END MyBase;
+                  END Demo;
+                END EnumDiagramModel.
+                """);
+
+        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(new ClientSettings(), iliFile.toString());
+        assertNotNull(outcome.getTransferDescription(), outcome.getLogText());
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        CommandHandlers handlers = new CommandHandlers(server);
+
+        InterlisDiagramModel.DiagramModel model = handlers.exportDiagramModel(iliFile.toString())
+                .get(30, TimeUnit.SECONDS);
+
+        assertNotNull(model);
+
+        InterlisDiagramModel.NodeModel myBase = model.getNodes().stream()
+                .filter(node -> "MyBase".equals(node.getLabel()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Expected MyBase diagram node"));
+        assertTrue(myBase.getAttributes().contains("Aaaaaamyenum[0..1] : (foo, bar)"));
+        assertFalse(myBase.getAttributes().contains("Aaaaaamyenum[0..1] : MyBase"));
+        assertTrue(myBase.getAttributes().contains("FarbenAttr[0..1] : Farben"));
+
+        InterlisDiagramModel.NodeModel farben = model.getNodes().stream()
+                .filter(node -> "Farben".equals(node.getLabel()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Expected Farben diagram node"));
+        assertEquals(List.of("gruen", "blau", "rot.hell", "rot.dunkel"), farben.getAttributes());
+
+        InterlisDiagramModel.NodeModel alleFarben = model.getNodes().stream()
+                .filter(node -> "AlleFarben".equals(node.getLabel()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Expected AlleFarben diagram node"));
+        assertEquals(List.of("gruen", "blau", "rot", "rot.hell", "rot.dunkel"), alleFarben.getAttributes());
+    }
+
+    @Test
     void exportDiagramModelWritesDebugDumpWhenEnabled() throws Exception {
         Path iliFile = tempDir.resolve("SimpleDiagramDebug.ili");
         Path debugDump = tempDir.resolve("diagram-debug.json");
