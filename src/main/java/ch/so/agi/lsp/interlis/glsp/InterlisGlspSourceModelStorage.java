@@ -47,11 +47,9 @@ public class InterlisGlspSourceModelStorage implements SourceModelStorage {
             modelState.setProperty(InterlisGlspModelStateKeys.MODEL, model);
         } catch (CompletionException ex) {
             Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
-            LOG.warn("Failed to load INTERLIS source model for {}: {}", sourceUri, cause.getMessage());
-            modelState.setProperty(InterlisGlspModelStateKeys.ERROR, bestErrorMessage(cause));
+            handleLoadFailure(sourceUri, cause);
         } catch (Exception ex) {
-            LOG.warn("Failed to load INTERLIS source model for {}", sourceUri, ex);
-            modelState.setProperty(InterlisGlspModelStateKeys.ERROR, bestErrorMessage(ex));
+            handleLoadFailure(sourceUri, ex);
         }
     }
 
@@ -99,5 +97,20 @@ public class InterlisGlspSourceModelStorage implements SourceModelStorage {
             return "Unknown diagram model error.";
         }
         return type;
+    }
+
+    private void handleLoadFailure(String sourceUri, Throwable error) {
+        if (CommandHandlers.isDiagramSourceMissingFailure(error)) {
+            LOG.debug("INTERLIS source model missing for {}: {}", sourceUri, error != null ? error.getMessage() : null);
+            modelState.setProperty(InterlisGlspModelStateKeys.ERROR, CommandHandlers.diagramSourceMissingMessage());
+            return;
+        }
+
+        if (error != null && error.getMessage() != null && !error.getMessage().isBlank()) {
+            LOG.warn("Failed to load INTERLIS source model for {}: {}", sourceUri, error.getMessage());
+        } else {
+            LOG.warn("Failed to load INTERLIS source model for {}", sourceUri, error);
+        }
+        modelState.setProperty(InterlisGlspModelStateKeys.ERROR, bestErrorMessage(error));
     }
 }

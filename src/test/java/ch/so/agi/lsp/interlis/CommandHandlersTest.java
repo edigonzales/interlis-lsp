@@ -478,6 +478,22 @@ class CommandHandlersTest {
     }
 
     @Test
+    void exportDiagramModelFailsFastWhenLocalSourceFileNoLongerExists() {
+        RecordingServer server = new RecordingServer();
+        server.setClientSettings(new ClientSettings());
+        CommandHandlers handlers = new CommandHandlers(server);
+
+        Path missing = tempDir.resolve("MissingDiagram.ili");
+        CompletableFuture<InterlisDiagramModel.DiagramModel> future = handlers.exportDiagramModel(missing.toUri().toString());
+
+        ExecutionException exec = assertThrows(ExecutionException.class, () -> future.get(30, TimeUnit.SECONDS));
+        ResponseErrorException ree = assertInstanceOf(ResponseErrorException.class, exec.getCause());
+        assertTrue(ree.getMessage().contains("Source file no longer exists"));
+        assertFalse(server.getDebugLogText().contains("REAL_COMPILE source=exportDiagramModel-fallback"),
+                "Expected missing local diagram sources to avoid fallback compilation");
+    }
+
+    @Test
     void exportDocxFailsWithResponseErrorWhenCompilationFails() {
         InterlisLanguageServer server = new InterlisLanguageServer();
         CommandHandlers handlers = new CommandHandlers(server);

@@ -15,6 +15,8 @@ import ch.so.agi.lsp.interlis.server.InterlisLanguageServer;
 import ch.so.agi.lsp.interlis.server.RuntimeDiagnostics;
 import ch.so.agi.lsp.interlis.text.InterlisTextDocumentService;
 import ch.interlis.ili2c.metamodel.TransferDescription;
+import java.net.URI;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Base64;
@@ -28,6 +30,10 @@ import org.eclipse.lsp4j.jsonrpc.messages.ResponseErrorCode;
 
 /** Central place for workspace/executeCommand handlers. */
 public class CommandHandlers {
+    private static final String DIAGRAM_SOURCE_MISSING_DATA = "diagram-source-missing";
+    private static final String DIAGRAM_SOURCE_MISSING_MESSAGE =
+            "Source file no longer exists. Close or reopen the diagram.";
+
     private final InterlisLanguageServer server;
 
     public CommandHandlers(InterlisLanguageServer server) {
@@ -144,6 +150,10 @@ public class CommandHandlers {
                 }
                 return renderDiagramModel(outcome);
             }
+        }
+
+        if (hasMissingLocalDiagramSource(fileUriOrPath)) {
+            return CompletableFuture.failedFuture(diagramSourceMissingFailure(displayPath));
         }
 
         Ili2cUtil.CompilationOutcome outcome = compileAndPublish(fileUriOrPath, "exportDiagramModel-fallback", false);
@@ -329,6 +339,15 @@ public class CommandHandlers {
         return new ResponseErrorException(error);
     }
 
+    static ResponseErrorException diagramSourceMissingFailure(String fileUriOrPath) {
+        String message = DIAGRAM_SOURCE_MISSING_MESSAGE;
+        if (fileUriOrPath != null && !fileUriOrPath.isBlank()) {
+            message = message + " (" + fileUriOrPath + ")";
+        }
+        ResponseError error = new ResponseError(ResponseErrorCode.InternalError, message, DIAGRAM_SOURCE_MISSING_DATA);
+        return new ResponseErrorException(error);
+    }
+
     static ResponseErrorException blankDiagramFailure() {
         ResponseError error = new ResponseError(
                 ResponseErrorCode.InternalError,
@@ -347,6 +366,45 @@ public class CommandHandlers {
 
     static String blankCompileInfoMessage() {
         return InterlisTextDocumentService.BLANK_SOURCE_MESSAGE + " Add INTERLIS content and save before compiling.";
+    }
+
+    public static boolean isDiagramSourceMissingFailure(Throwable error) {
+        while (error != null) {
+            if (error instanceof ResponseErrorException responseErrorException) {
+                ResponseError responseError = responseErrorException.getResponseError();
+                if (responseError != null && DIAGRAM_SOURCE_MISSING_DATA.equals(responseError.getData())) {
+                    return true;
+                }
+            }
+            error = error.getCause();
+        }
+        return false;
+    }
+
+    public static String diagramSourceMissingMessage() {
+        return DIAGRAM_SOURCE_MISSING_MESSAGE;
+    }
+
+    private static boolean hasMissingLocalDiagramSource(String fileUriOrPath) {
+        Path localPath = localDiagramSourcePath(fileUriOrPath);
+        return localPath != null && !Files.exists(localPath);
+    }
+
+    private static Path localDiagramSourcePath(String fileUriOrPath) {
+        if (fileUriOrPath == null || fileUriOrPath.isBlank()) {
+            return null;
+        }
+
+        try {
+            if (fileUriOrPath.startsWith("file:")) {
+                return Paths.get(URI.create(fileUriOrPath));
+            }
+
+            Path path = Paths.get(fileUriOrPath);
+            return path.isAbsolute() ? path : null;
+        } catch (Exception ignore) {
+            return null;
+        }
     }
 
     private static Optional<String> bestErrorMessage(Ili2cUtil.CompilationOutcome outcome) {

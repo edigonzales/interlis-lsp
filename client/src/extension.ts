@@ -1,6 +1,8 @@
 import * as vscode from "vscode";
-import { LanguageClient, LanguageClientOptions, Executable, ServerOptions, State } from "vscode-languageclient/node";
+import { spawn } from "child_process";
 import * as path from "path";
+import { PassThrough } from "stream";
+import { LanguageClient, LanguageClientOptions, ServerOptions, State } from "vscode-languageclient/node";
 import { resolveJavaPath, resolveServerJarPath } from "./configuration";
 import {
   cancelScheduledDiagramRefresh,
@@ -217,6 +219,70 @@ class TimestampedOutputChannel implements vscode.OutputChannel {
   }
 }
 
+function forwardServerStderr(stream: NodeJS.ReadableStream, debugOutput: TimestampedOutputChannel): void {
+  let pending = "";
+
+  const flushPending = () => {
+    if (pending.length > 0) {
+      debugOutput.appendLine(pending);
+      pending = "";
+    }
+  };
+
+  stream.on("data", chunk => {
+    pending += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
+    const lines = pending.split(/\r?\n/);
+    pending = lines.pop() ?? "";
+    for (const line of lines) {
+      debugOutput.appendLine(line);
+    }
+  });
+
+  stream.on("end", flushPending);
+  stream.on("close", flushPending);
+}
+
+function createServerOptions(
+  javaPath: string,
+  jarPath: string,
+  jvmArgs: string[],
+  debugOutput: TimestampedOutputChannel
+): ServerOptions {
+  return async () => {
+    const child = spawn(
+      javaPath,
+      [
+        ...jvmArgs,
+        "-jar",
+        jarPath
+      ],
+      {
+        env: process.env,
+        stdio: ["pipe", "pipe", "pipe"],
+        windowsHide: true
+      }
+    );
+
+    if (!child.stdin || !child.stdout || !child.stderr) {
+      throw new Error("INTERLIS language server process was created without stdio streams.");
+    }
+
+    const actualStderr = child.stderr;
+    const mutedStderr = new PassThrough();
+
+    forwardServerStderr(actualStderr, debugOutput);
+    child.on("error", error => {
+      debugOutput.appendLine(`Server process error: ${error.message}`);
+    });
+    child.on("exit", () => {
+      mutedStderr.end();
+    });
+
+    (child as typeof child & { stderr: NodeJS.ReadableStream }).stderr = mutedStderr;
+    return child;
+  };
+}
+
 export async function activate(context: vscode.ExtensionContext) {
   const cfg = vscode.workspace.getConfiguration("interlisLsp");
   const jarPath = resolveServerJarPath(context, cfg.get<string>("server.jarPath"));
@@ -235,27 +301,7 @@ export async function activate(context: vscode.ExtensionContext) {
     debugOutput.appendLine(`Using JVM args: ${jvmArgs.join(" ")}`);
   }
 
-  const exec: Executable = {
-    command: javaPath,
-    args: [
-      ...jvmArgs,
-      // "-Dorg.slf4j.simpleLogger.logFile=/Users/stefan/tmp/interlis-lsp.log",
-      // "-Dorg.slf4j.simpleLogger.showDateTime=true",
-      // '-Dorg.slf4j.simpleLogger.dateTimeFormat=yyyy-MM-dd HH:mm:ss.SSS', // no quotes inside
-      //"-agentlib:native-image-agent=config-output-dir=/Users/stefan/sources/interlis-lsp/src/main/resources/META-INF/native-image,config-write-period-secs=5",
-      //"-agentlib:native-image-agent=config-merge-dir=/Users/stefan/sources/interlis-lsp/src/main/resources/META-INF/native-image,config-write-initial-delay-secs=5,config-write-period-secs=5",
-      "-jar",
-      jarPath
-    ],
-    // command: "/Users/stefan/sources/interlis-lsp/build/native/nativeCompile/interlis-lsp",
-    // args: [
-    //   "-Dorg.slf4j.simpleLogger.logFile=/Users/stefan/tmp/interlis-lsp.log",
-    //   "-Dorg.slf4j.simpleLogger.showDateTime=true",
-    //   '-Dorg.slf4j.simpleLogger.dateTimeFormat=yyyy-MM-dd HH:mm:ss.SSS', // no quotes inside
-    // ],
-    options: { env: process.env }
-  };
-  const serverOptions: ServerOptions = exec;
+  const serverOptions = createServerOptions(javaPath, jarPath, jvmArgs, debugOutput);
 
   const caretMiddleware: LanguageClientOptions["middleware"] = {
     provideOnTypeFormattingEdits: async (document, position, ch, options, token, next) => {

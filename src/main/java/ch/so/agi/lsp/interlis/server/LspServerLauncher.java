@@ -7,9 +7,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.PrintStream;
+import java.util.logging.Filter;
+import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
 import java.util.concurrent.ExecutionException;
 
 public class LspServerLauncher {
+    private static final String REMOTE_ENDPOINT_LOGGER = "org.eclipse.lsp4j.jsonrpc.RemoteEndpoint";
+    private static final String UNMATCHED_CANCEL_PREFIX = "Unmatched cancel notification for request id ";
+
     public static void main(String[] args) throws ExecutionException, InterruptedException {
         quietLsp4jCancellationWarnings();
         // Keep the original stdout exclusively for LSP JSON-RPC messages.
@@ -48,8 +55,38 @@ public class LspServerLauncher {
     }
 
     private static void quietLsp4jCancellationWarnings() {
-        java.util.logging.Logger remoteEndpointLogger =
-                java.util.logging.Logger.getLogger("org.eclipse.lsp4j.jsonrpc.RemoteEndpoint");
-        remoteEndpointLogger.setLevel(java.util.logging.Level.SEVERE);
+        java.util.logging.Logger remoteEndpointLogger = java.util.logging.Logger.getLogger(REMOTE_ENDPOINT_LOGGER);
+        remoteEndpointLogger.setLevel(Level.SEVERE);
+
+        Filter suppressUnmatchedCancel = record -> !isUnmatchedCancelWarning(record);
+        remoteEndpointLogger.setFilter(mergeFilter(remoteEndpointLogger.getFilter(), suppressUnmatchedCancel));
+
+        for (Handler handler : java.util.logging.Logger.getLogger("").getHandlers()) {
+            handler.setFilter(mergeFilter(handler.getFilter(), suppressUnmatchedCancel));
+        }
+    }
+
+    private static boolean isUnmatchedCancelWarning(LogRecord record) {
+        if (record == null) {
+            return false;
+        }
+
+        String message = record.getMessage();
+        if (message == null || !message.startsWith(UNMATCHED_CANCEL_PREFIX)) {
+            return false;
+        }
+
+        String loggerName = record.getLoggerName();
+        return REMOTE_ENDPOINT_LOGGER.equals(loggerName);
+    }
+
+    private static Filter mergeFilter(Filter existing, Filter additional) {
+        if (existing == null) {
+            return additional;
+        }
+        if (additional == null) {
+            return existing;
+        }
+        return record -> existing.isLoggable(record) && additional.isLoggable(record);
     }
 }
