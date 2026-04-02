@@ -187,10 +187,51 @@ jobs:
           path: runtime-${{ matrix.os }}
           if-no-files-found: error
 
+  smoke-test-windows-system-java:
+    name: Smoke test Windows system Java
+    needs: build-jvm
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '24'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Download fat JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: app-fatjar
+          path: ./dist
+
+      - name: Smoke test LSP stdio bootstrap with system Java
+        shell: pwsh
+        run: |
+          $java = Join-Path $env:JAVA_HOME 'bin\java.exe'
+          if (-not (Test-Path $java)) { throw "Java executable not found at $java" }
+
+          $jar = Get-ChildItem -Path dist -Filter *.jar | Select-Object -First 1
+          if (-not $jar) { throw "No JAR found in dist" }
+
+          Write-Host "Using Java: $java"
+          Write-Host "Using JAR: $($jar.FullName)"
+
+          python .github/scripts/lsp_smoke.py --java "$java" --jar "$($jar.FullName)"
+
   package-extension:
     name: Bundle VS Code extension
     needs:
       - runtimes
+      - smoke-test-windows-system-java
     runs-on: ubuntu-24.04
     env:
       VS_MARKETPLACE_TOKEN: ${{secrets.VS_MARKETPLACE_TOKEN}}
