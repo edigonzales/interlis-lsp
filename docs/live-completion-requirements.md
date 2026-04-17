@@ -54,7 +54,10 @@ Wie diese `CompletionItemKind`s konkret gerendert werden, entscheidet der Editor
 
 - Nach `LIST` oder `BAG` werden `{` und `OF` angeboten.
 - Nach `LIST {..}` oder `BAG {..}` wird nur `OF` angeboten.
-- Nach `LIST OF ` und `BAG OF ` werden nur zulaessige Strukturziele vorgeschlagen.
+- Nach `LIST OF ` und `BAG OF ` werden sprachversionsabhaengig nur zulaessige Ziele vorgeschlagen:
+- in INTERLIS 2.3 nur `STRUCTURE`
+- in INTERLIS 2.4 `DOMAIN` und `STRUCTURE`
+- `CLASS` nie
 - `LIST` und `BAG` muessen auf Root- und Folge-Ebene gleich behandelt werden.
 - Zielgerichtete Slots wie `LIST OF`, `BAG OF`, `REFERENCE TO` und `FORMAT` duerfen weiterhin echte Zieltypen als Symbol-Items liefern.
 

@@ -37,6 +37,10 @@ public final class InterlisLiveAnalyzer {
             InterlisSymbolKind.STRUCTURE, InterlisSymbolKind.CLASS);
     private static final Set<InterlisSymbolKind> TYPE_REFERENCE_KINDS = EnumSet.of(
             InterlisSymbolKind.DOMAIN, InterlisSymbolKind.STRUCTURE, InterlisSymbolKind.CLASS);
+    private static final Set<InterlisSymbolKind> COLLECTION_REFERENCE_KINDS_23 = EnumSet.of(
+            InterlisSymbolKind.STRUCTURE);
+    private static final Set<InterlisSymbolKind> COLLECTION_REFERENCE_KINDS_24 = EnumSet.of(
+            InterlisSymbolKind.DOMAIN, InterlisSymbolKind.STRUCTURE);
     private static final Set<InterlisSymbolKind> ASSOCIATION_REFERENCE_KINDS = EnumSet.of(InterlisSymbolKind.ASSOCIATION);
     private static final Set<InterlisSymbolKind> DOMAIN_REFERENCE_KINDS = EnumSet.of(InterlisSymbolKind.DOMAIN);
     private static final Set<InterlisSymbolKind> UNIT_REFERENCE_KINDS = EnumSet.of(InterlisSymbolKind.UNIT);
@@ -69,9 +73,9 @@ public final class InterlisLiveAnalyzer {
         List<ImportEntry> importEntries = collectImportEntries(liveTokens);
         Set<String> importedModelNames = collectImportedModelNames(importEntries);
         ScopeGraph scopeGraph = new ScopeGraph();
-        GraphBuilder graphBuilder = new GraphBuilder(snapshot.uri(), snapshot.text(), tokens, scopeGraph);
+        GraphBuilder graphBuilder = new GraphBuilder(snapshot.uri(), snapshot.text(), tokens, scopeGraph, languageLevel);
         ParseTreeWalker.DEFAULT.walk(graphBuilder, root);
-        List<CompletionContext> completionContexts = completionSlotDetector.detect(snapshot, scopeGraph, liveTokens);
+        List<CompletionContext> completionContexts = completionSlotDetector.detect(snapshot, scopeGraph, liveTokens, languageLevel);
         List<Diagnostic> syntaxDiagnostics = new ArrayList<>(diagnosticMapper.map(snapshot, scopeGraph, liveTokens, rawSyntaxErrors));
         for (InvalidAttributeValueHit hit : graphBuilder.invalidAttributeValueHits()) {
             if (hit == null || hit.range() == null || overlapsAny(hit.range(), syntaxDiagnostics)) {
@@ -313,15 +317,21 @@ public final class InterlisLiveAnalyzer {
         private final String text;
         private final TokenStream tokens;
         private final ScopeGraph scopeGraph;
+        private final InterlisLanguageLevel languageLevel;
         private final Deque<LiveSymbol> containers = new ArrayDeque<>();
         private final Set<SymbolId> formattedDomainIds = new LinkedHashSet<>();
         private final List<InvalidAttributeValueHit> invalidAttributeValueHits = new ArrayList<>();
 
-        private GraphBuilder(String uri, String text, TokenStream tokens, ScopeGraph scopeGraph) {
+        private GraphBuilder(String uri,
+                             String text,
+                             TokenStream tokens,
+                             ScopeGraph scopeGraph,
+                             InterlisLanguageLevel languageLevel) {
             this.uri = uri;
             this.text = text;
             this.tokens = tokens;
             this.scopeGraph = scopeGraph;
+            this.languageLevel = languageLevel != null ? languageLevel : InterlisLanguageLevel.UNKNOWN;
         }
 
         @Override
@@ -574,7 +584,9 @@ public final class InterlisLiveAnalyzer {
                 return defaultKinds;
             }
             if (isCollectionAttrType(attrTypeDef)) {
-                return STRUCTURE_REFERENCE_KINDS;
+                return languageLevel.supportsCollectionDomains()
+                        ? COLLECTION_REFERENCE_KINDS_24
+                        : COLLECTION_REFERENCE_KINDS_23;
             }
             if (isDirectAttributeTypeReference(ctx)) {
                 return TYPE_REFERENCE_KINDS;

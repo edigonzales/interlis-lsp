@@ -211,8 +211,10 @@ final class InterlisCompletionProvider {
             Set.of(InterlisSymbolKind.DOMAIN);
     private static final Set<InterlisSymbolKind> UNIT_REFERENCE_SYMBOL_KINDS =
             Set.of(InterlisSymbolKind.UNIT);
-    private static final Set<InterlisSymbolKind> COLLECTION_TARGET_SYMBOL_KINDS =
+    private static final Set<InterlisSymbolKind> COLLECTION_TARGET_SYMBOL_KINDS_23 =
             Set.of(InterlisSymbolKind.STRUCTURE);
+    private static final Set<InterlisSymbolKind> COLLECTION_TARGET_SYMBOL_KINDS_24 =
+            Set.of(InterlisSymbolKind.DOMAIN, InterlisSymbolKind.STRUCTURE);
     private static final Set<InterlisSymbolKind> REFERENCE_TARGET_SYMBOL_KINDS =
             Set.of(InterlisSymbolKind.CLASS, InterlisSymbolKind.ASSOCIATION, InterlisSymbolKind.VIEW);
 
@@ -1044,7 +1046,15 @@ final class InterlisCompletionProvider {
             return false;
         }
         return context.kind() == CompletionContext.Kind.ATTRIBUTE_TYPE_ROOT
-                || context.kind() == CompletionContext.Kind.DOMAIN_TYPE_ROOT;
+                || context.kind() == CompletionContext.Kind.DOMAIN_TYPE_ROOT
+                || context.kind() == CompletionContext.Kind.COLLECTION_OF_TARGET;
+    }
+
+    private Set<InterlisSymbolKind> collectionTargetSymbolKinds(InterlisLanguageLevel languageLevel) {
+        InterlisLanguageLevel effectiveLevel = languageLevel != null ? languageLevel : InterlisLanguageLevel.UNKNOWN;
+        return effectiveLevel.supportsCollectionDomains()
+                ? COLLECTION_TARGET_SYMBOL_KINDS_24
+                : COLLECTION_TARGET_SYMBOL_KINDS_23;
     }
 
     private boolean isFormattedLocalDomain(LiveParseResult live, LiveSymbol symbol) {
@@ -1714,7 +1724,7 @@ final class InterlisCompletionProvider {
                     groupValue(collectionOfMatcher, 1),
                     groupRange(text, collectionOfMatcher, 1, lineStart, caretOffset),
                     scopeOwner,
-                    COLLECTION_TARGET_SYMBOL_KINDS);
+                    collectionTargetSymbolKinds(live != null ? live.languageLevel() : InterlisLanguageLevel.detect(text)));
         }
 
         if (lineText.matches("(?i).*:\\s*(LIST|BAG)(?:\\s*\\{[^}]*\\})?\\s*[A-Za-z_]*\\s*$")) {

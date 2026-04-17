@@ -36,6 +36,10 @@ public record InterlisLanguageLevel(int major, int minor) {
         return isAtLeast(2, 4);
     }
 
+    public boolean supportsCollectionDomains() {
+        return isAtLeast(2, 4);
+    }
+
     private static int parsePart(String rawValue) {
         if (rawValue == null || rawValue.isBlank()) {
             return 0;

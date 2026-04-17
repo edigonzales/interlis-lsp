@@ -797,7 +797,7 @@ class InterlisLiveAnalyzerTest {
     void directAttributeTypesAllowInterlisUriUuidOidAndQualifiedStructures(@TempDir Path tempDir) throws Exception {
         Path modelFile = tempDir.resolve("DirtyTypes.ili");
         String content = """
-                INTERLIS 2.4;
+                INTERLIS 2.3;
                 MODEL DirtyTypes (de) AT "https://example.org" VERSION "2026-03-24" =
                   TOPIC Json =
                     STRUCTURE Dokument =
@@ -838,9 +838,9 @@ class InterlisLiveAnalyzerTest {
     }
 
     @Test
-    void collectionTypesStillRejectDomains() {
+    void collectionTypesInInterlis23StillRejectDomains() {
         String text = """
-                INTERLIS 2.4;
+                INTERLIS 2.3;
                 MODEL InvalidCollectionType (de) AT "https://example.org" VERSION "2026-03-24" =
                   DOMAIN Label = TEXT*255;
                   TOPIC T =
@@ -853,11 +853,70 @@ class InterlisLiveAnalyzerTest {
 
         LiveParseResult result = analyze("file:///InvalidCollectionType.ili", text);
 
-        assertTrue(result.diagnostics().stream()
-                        .anyMatch(diagnostic -> diagnostic.getMessage() != null
-                                && diagnostic.getMessage().contains("Unknown")
-                                && diagnostic.getMessage().contains("Label")),
+        assertTrue(hasUnknownDiagnostic(result, "Label"),
                 "Expected BAG OF domain to stay rejected but got: " + result.diagnostics());
+    }
+
+    @Test
+    void collectionTypesInInterlis23AllowStructures() {
+        String text = """
+                INTERLIS 2.3;
+                MODEL ValidCollectionStructure23 (de) AT "https://example.org" VERSION "2026-03-24" =
+                  STRUCTURE Label =
+                  END Label;
+                  TOPIC T =
+                    CLASS Example =
+                      labels : BAG {1..*} OF Label;
+                    END Example;
+                  END T;
+                END ValidCollectionStructure23.
+                """;
+
+        LiveParseResult result = analyze("file:///ValidCollectionStructure23.ili", text);
+
+        assertFalse(hasUnknownDiagnostic(result, "Label"),
+                "Expected BAG OF structure to stay valid in INTERLIS 2.3 but got: " + result.diagnostics());
+    }
+
+    @Test
+    void collectionTypesInInterlis24AllowDomains() {
+        String text = """
+                INTERLIS 2.4;
+                MODEL ValidCollectionDomain24 (de) AT "https://example.org" VERSION "2026-03-24" =
+                  DOMAIN Label = (a, b, c);
+                  TOPIC T =
+                    CLASS Example =
+                      labels : LIST {1..*} OF Label;
+                    END Example;
+                  END T;
+                END ValidCollectionDomain24.
+                """;
+
+        LiveParseResult result = analyze("file:///ValidCollectionDomain24.ili", text);
+
+        assertFalse(hasUnknownDiagnostic(result, "Label"),
+                "Expected LIST OF domain to stay valid in INTERLIS 2.4 but got: " + result.diagnostics());
+    }
+
+    @Test
+    void collectionTypesInInterlis24StillRejectClasses() {
+        String text = """
+                INTERLIS 2.4;
+                MODEL InvalidCollectionClass24 (de) AT "https://example.org" VERSION "2026-03-24" =
+                  TOPIC T =
+                    CLASS Label =
+                    END Label;
+                    CLASS Example =
+                      labels : LIST {1..*} OF Label;
+                    END Example;
+                  END T;
+                END InvalidCollectionClass24.
+                """;
+
+        LiveParseResult result = analyze("file:///InvalidCollectionClass24.ili", text);
+
+        assertTrue(hasUnknownDiagnostic(result, "Label"),
+                "Expected LIST OF class to stay rejected in INTERLIS 2.4 but got: " + result.diagnostics());
     }
 
     @Test
@@ -934,5 +993,12 @@ class InterlisLiveAnalyzerTest {
                 && right != null
                 && left.getLine() == right.getLine()
                 && left.getCharacter() == right.getCharacter();
+    }
+
+    private static boolean hasUnknownDiagnostic(LiveParseResult result, String symbolName) {
+        return result.diagnostics().stream()
+                .anyMatch(diagnostic -> diagnostic.getMessage() != null
+                        && diagnostic.getMessage().contains("Unknown")
+                        && diagnostic.getMessage().contains(symbolName));
     }
 }

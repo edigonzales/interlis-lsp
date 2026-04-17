@@ -15,7 +15,9 @@ import java.util.regex.Pattern;
 public final class CompletionSlotDetector {
     private static final Set<InterlisSymbolKind> ATTRIBUTE_TYPE_ROOT_KINDS = EnumSet.of(
             InterlisSymbolKind.DOMAIN, InterlisSymbolKind.STRUCTURE);
-    private static final Set<InterlisSymbolKind> COLLECTION_TARGET_KINDS = EnumSet.of(InterlisSymbolKind.STRUCTURE);
+    private static final Set<InterlisSymbolKind> COLLECTION_TARGET_KINDS_23 = EnumSet.of(InterlisSymbolKind.STRUCTURE);
+    private static final Set<InterlisSymbolKind> COLLECTION_TARGET_KINDS_24 = EnumSet.of(
+            InterlisSymbolKind.DOMAIN, InterlisSymbolKind.STRUCTURE);
     private static final Set<InterlisSymbolKind> DOMAIN_REFERENCE_KINDS = EnumSet.of(InterlisSymbolKind.DOMAIN);
     private static final Set<InterlisSymbolKind> REFERENCE_TARGET_KINDS = EnumSet.of(
             InterlisSymbolKind.CLASS, InterlisSymbolKind.ASSOCIATION, InterlisSymbolKind.VIEW);
@@ -48,7 +50,8 @@ public final class CompletionSlotDetector {
 
     public List<CompletionContext> detect(DocumentSnapshot snapshot,
                                           ScopeGraph scopeGraph,
-                                          List<LiveToken> tokens) {
+                                          List<LiveToken> tokens,
+                                          InterlisLanguageLevel languageLevel) {
         if (snapshot == null || snapshot.text() == null || snapshot.text().isEmpty()) {
             return List.of();
         }
@@ -86,7 +89,7 @@ public final class CompletionSlotDetector {
                 lineNumber++;
                 continue;
             }
-            collectAttributeContext(text, lineStart, lineEnd, scopeGraph, lineTokens, contexts);
+            collectAttributeContext(text, lineStart, lineEnd, scopeGraph, lineTokens, contexts, languageLevel);
             collectTopLevelRootContext(text, lineStart, lineEnd, scopeGraph, contexts);
             collectContainerBodyContext(text, lineStart, lineEnd, scopeGraph, contexts);
 
@@ -377,7 +380,8 @@ public final class CompletionSlotDetector {
                                          int lineEndOffset,
                                          ScopeGraph scopeGraph,
                                          List<LiveToken> lineTokens,
-                                         List<CompletionContext> contexts) {
+                                         List<CompletionContext> contexts,
+                                         InterlisLanguageLevel languageLevel) {
         LiveToken colon = lastTokenOfType(lineTokens, InterlisLexer.COLON);
         if (colon == null) {
             return;
@@ -448,7 +452,7 @@ public final class CompletionSlotDetector {
             }
         }
         if (first.tokenType() == InterlisLexer.LIST || first.tokenType() == InterlisLexer.BAG) {
-            CompletionContext context = detectCollectionContext(text, lineEndOffset, owner, effectiveTokens);
+            CompletionContext context = detectCollectionContext(text, lineEndOffset, owner, effectiveTokens, languageLevel);
             if (context != null) {
                 contexts.add(context);
                 return;
@@ -686,7 +690,8 @@ public final class CompletionSlotDetector {
     private CompletionContext detectCollectionContext(String text,
                                                      int lineEndOffset,
                                                      LiveSymbol owner,
-                                                     List<LiveToken> suffixTokens) {
+                                                     List<LiveToken> suffixTokens,
+                                                     InterlisLanguageLevel languageLevel) {
         LiveToken keyword = suffixTokens.get(0);
         int ofIndex = indexOfTokenType(suffixTokens, InterlisLexer.OF);
         if (ofIndex >= 0) {
@@ -699,7 +704,7 @@ public final class CompletionSlotDetector {
                     subject,
                     replaceRange,
                     owner,
-                    COLLECTION_TARGET_KINDS);
+                    collectionTargetKinds(languageLevel));
         }
 
         int replaceStart = lineEndOffset;
@@ -721,6 +726,13 @@ public final class CompletionSlotDetector {
                 owner.id(),
                 null,
                 owner.kind());
+    }
+
+    private Set<InterlisSymbolKind> collectionTargetKinds(InterlisLanguageLevel languageLevel) {
+        InterlisLanguageLevel effectiveLevel = languageLevel != null ? languageLevel : InterlisLanguageLevel.UNKNOWN;
+        return effectiveLevel.supportsCollectionDomains()
+                ? COLLECTION_TARGET_KINDS_24
+                : COLLECTION_TARGET_KINDS_23;
     }
 
     private CompletionContext detectReferenceContext(String text,

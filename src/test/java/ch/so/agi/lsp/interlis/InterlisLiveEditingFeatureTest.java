@@ -345,7 +345,7 @@ class InterlisLiveEditingFeatureTest {
     }
 
     @Test
-    void completionAfterListOfRestrictsTargets(@TempDir Path tempDir) throws Exception {
+    void completionAfterListOfRestrictsTargetsInInterlis23(@TempDir Path tempDir) throws Exception {
         Path file = tempDir.resolve("CollectionTargets.ili");
         String valid = """
                 INTERLIS 2.3;
@@ -384,6 +384,98 @@ class InterlisLiveEditingFeatureTest {
         assertFalse(labels.contains("LocalDomain"));
         assertFalse(labels.contains("LocalClass"));
         assertFalse(labels.contains("TEXT"));
+    }
+
+    @Test
+    void completionAfterListOfIncludesDomainsInInterlis24(@TempDir Path tempDir) throws Exception {
+        Path file = tempDir.resolve("CollectionTargets24.ili");
+        String valid = """
+                INTERLIS 2.4;
+                MODEL CollectionTargets24 (en) AT "http://example.org" VERSION "2024-01-01" =
+                  STRUCTURE LocalStruct =
+                  END LocalStruct;
+
+                  DOMAIN LocalDomain = TEXT;
+
+                  TOPIC T =
+                    CLASS LocalClass =
+                    END LocalClass;
+
+                    CLASS C =
+                      attr : TEXT;
+                    END C;
+                  END T;
+                END CollectionTargets24.
+                """;
+        Files.writeString(file, valid);
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        server.setClientSettings(new ClientSettings());
+        InterlisTextDocumentService service = server.getInterlisTextDocumentService();
+
+        String uri = file.toUri().toString();
+        service.didOpen(new DidOpenTextDocumentParams(new TextDocumentItem(uri, "interlis", 1, valid)));
+
+        String dirty = valid.replace("attr : TEXT;", "attr : LIST OF ");
+        service.didChange(fullDocumentChange(uri, 2, dirty));
+
+        List<String> labels = completionLabels(service, uri, dirty,
+                dirty.indexOf("attr : LIST OF ") + "attr : LIST OF ".length());
+        assertTrue(labels.contains("LocalStruct"));
+        assertTrue(labels.contains("LocalDomain"));
+        assertTrue(labels.contains("ANYSTRUCTURE"));
+        assertFalse(labels.contains("LocalClass"));
+        assertFalse(labels.contains("TEXT"));
+    }
+
+    @Test
+    void completionAfterQualifiedCollectionTargetOffersModelTopicAndTypeChildrenInInterlis24(@TempDir Path tempDir)
+            throws Exception {
+        Path file = tempDir.resolve("OwnQualifiedCollection24.ili");
+        String valid = """
+                INTERLIS 2.4;
+                MODEL OwnQualifiedCollection24 (en) AT "http://example.org" VERSION "2024-01-01" =
+                  DOMAIN Status = (offen, geschlossen);
+                  STRUCTURE DirectStruct =
+                  END DirectStruct;
+                  TOPIC Json =
+                    DOMAIN TopicStatus = (neu, alt);
+                    STRUCTURE Dokument =
+                    END Dokument;
+                  END Json;
+                  TOPIC Use =
+                    CLASS C =
+                      attr : TEXT;
+                    END C;
+                  END Use;
+                END OwnQualifiedCollection24.
+                """;
+        Files.writeString(file, valid);
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        server.setClientSettings(new ClientSettings());
+        InterlisTextDocumentService service = server.getInterlisTextDocumentService();
+
+        String uri = file.toUri().toString();
+        service.didOpen(new DidOpenTextDocumentParams(new TextDocumentItem(uri, "interlis", 1, valid)));
+
+        String dirtyModel = valid.replace("attr : TEXT;", "attr : LIST OF OwnQualifiedCollection24.");
+        service.didChange(fullDocumentChange(uri, 2, dirtyModel));
+        int modelOffset = dirtyModel.indexOf("attr : LIST OF OwnQualifiedCollection24.")
+                + "attr : LIST OF OwnQualifiedCollection24.".length();
+        List<String> modelLabels = completionLabels(service, uri, dirtyModel, modelOffset);
+        assertTrue(modelLabels.contains("Status"));
+        assertTrue(modelLabels.contains("DirectStruct"));
+        assertTrue(modelLabels.contains("Json"));
+
+        String dirtyTopic = valid.replace("attr : TEXT;", "attr : LIST OF OwnQualifiedCollection24.Json.");
+        service.didChange(fullDocumentChange(uri, 3, dirtyTopic));
+        int topicOffset = dirtyTopic.indexOf("attr : LIST OF OwnQualifiedCollection24.Json.")
+                + "attr : LIST OF OwnQualifiedCollection24.Json.".length();
+        List<String> topicLabels = completionLabels(service, uri, dirtyTopic, topicOffset);
+        assertTrue(topicLabels.contains("Dokument"));
+        assertTrue(topicLabels.contains("TopicStatus"));
+        assertFalse(topicLabels.contains("Status"));
     }
 
     @Test
