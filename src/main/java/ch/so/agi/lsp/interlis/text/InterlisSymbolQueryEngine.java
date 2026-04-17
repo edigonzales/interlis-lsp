@@ -46,6 +46,7 @@ import java.util.function.BiFunction;
 
 final class InterlisSymbolQueryEngine {
     private static final Logger LOG = LoggerFactory.getLogger(InterlisSymbolQueryEngine.class);
+    private static final Set<InterlisSymbolKind> MODEL_REFERENCE_KINDS = Set.of(InterlisSymbolKind.MODEL);
 
     private final InterlisLanguageServer server;
     private final DocumentTracker documents;
@@ -166,6 +167,15 @@ final class InterlisSymbolQueryEngine {
                 if (LiveSymbolResolver.isReferenceTo(result, reference, target.symbol())) {
                     addOccurrence(occurrences, candidateUri, reference.range(),
                             reference.rawText(), SymbolOccurrenceKind.REFERENCE);
+                    continue;
+                }
+                if (!isModelTarget(target)) {
+                    continue;
+                }
+                ModelPrefixMatch prefixMatch = findModelPrefixMatch(result, reference, target);
+                if (prefixMatch != null) {
+                    addOccurrence(occurrences, candidateUri, prefixMatch.range(),
+                            prefixMatch.modelPrefix(), SymbolOccurrenceKind.REFERENCE);
                 }
             }
         }
@@ -203,6 +213,141 @@ final class InterlisSymbolQueryEngine {
         String key = uri + ":" + range.getStart().getLine() + ":" + range.getStart().getCharacter()
                 + ":" + range.getEnd().getLine() + ":" + range.getEnd().getCharacter();
         occurrences.putIfAbsent(key, new SymbolOccurrence(uri, range, existingText, kind));
+    }
+
+    private boolean isModelTarget(ResolvedTarget target) {
+        return target != null
+                && target.symbol() != null
+                && target.symbol().symbol() != null
+                && target.symbol().symbol().kind() == InterlisSymbolKind.MODEL;
+    }
+
+    private ModelPrefixMatch findModelPrefixMatch(LiveParseResult result,
+                                                  ReferenceHit reference,
+                                                  ResolvedTarget target) {
+        String modelPrefix = firstQualifiedSegment(reference != null ? reference.rawText() : null);
+        if (modelPrefix == null) {
+            return null;
+        }
+        int referenceOffset = referenceOffset(result, reference);
+        LiveSymbol resolvedModel = result.scopeGraph().resolveSimpleAt(
+                modelPrefix,
+                reference.scopeOwnerId(),
+                MODEL_REFERENCE_KINDS,
+                referenceOffset);
+        if (resolvedModel != null) {
+            boolean matchesTarget = LiveSymbolResolver.sameSymbol(resolvedModel, target.symbol().symbol())
+                    || LiveSymbolResolver.sameQualifiedName(resolvedModel.qualifiedName(), target.symbol().qualifiedName());
+            if (!matchesTarget) {
+                return null;
+            }
+        } else {
+            if (!isModelPrefixInScope(result, reference, modelPrefix)) {
+                return null;
+            }
+            if (!resolvesToTargetModel(target, modelPrefix)) {
+                return null;
+            }
+        }
+
+        Range prefixRange = modelPrefixRange(result, reference, modelPrefix);
+        if (prefixRange == null) {
+            return null;
+        }
+        return new ModelPrefixMatch(prefixRange, modelPrefix);
+    }
+
+    private boolean isModelPrefixInScope(LiveParseResult result,
+                                         ReferenceHit reference,
+                                         String modelPrefix) {
+        if (result == null || result.scopeGraph() == null || modelPrefix == null || modelPrefix.isBlank()) {
+            return false;
+        }
+        if ("INTERLIS".equalsIgnoreCase(modelPrefix)) {
+            return true;
+        }
+        for (String importedModel : result.importedModelNames()) {
+            if (importedModel != null && importedModel.equalsIgnoreCase(modelPrefix)) {
+                return true;
+            }
+        }
+        LiveSymbol owner = result.scopeGraph().symbol(reference != null ? reference.scopeOwnerId() : null);
+        while (owner != null) {
+            if (owner.kind() == InterlisSymbolKind.MODEL
+                    && owner.name() != null
+                    && owner.name().equalsIgnoreCase(modelPrefix)) {
+                return true;
+            }
+            owner = result.scopeGraph().symbol(owner.parentId());
+        }
+        return false;
+    }
+
+    private boolean resolvesToTargetModel(ResolvedTarget target, String modelPrefix) {
+        if (target == null || target.transferDescription() == null || modelPrefix == null || modelPrefix.isBlank()) {
+            return false;
+        }
+        Element resolved = InterlisNameResolver.resolveElement(target.transferDescription(), modelPrefix);
+        if (!(resolved instanceof Model)) {
+            return false;
+        }
+        String resolvedQualified = safeScopedName(resolved);
+        String targetQualified = target.symbol().qualifiedName();
+        if (LiveSymbolResolver.sameQualifiedName(resolvedQualified, targetQualified)) {
+            return true;
+        }
+        return resolved.getName() != null
+                && target.symbol().name() != null
+                && resolved.getName().equalsIgnoreCase(target.symbol().name());
+    }
+
+    private static String firstQualifiedSegment(String rawText) {
+        if (rawText == null || rawText.isBlank()) {
+            return null;
+        }
+        String trimmed = rawText.trim();
+        int delimiter = trimmed.indexOf('.');
+        if (delimiter <= 0) {
+            return null;
+        }
+        String prefix = trimmed.substring(0, delimiter);
+        return prefix.isBlank() ? null : prefix;
+    }
+
+    private static int referenceOffset(LiveParseResult result, ReferenceHit reference) {
+        if (result == null
+                || result.snapshot() == null
+                || result.snapshot().text() == null
+                || reference == null
+                || reference.range() == null
+                || reference.range().getStart() == null) {
+            return Integer.MAX_VALUE;
+        }
+        return DocumentTracker.toOffset(result.snapshot().text(), reference.range().getStart());
+    }
+
+    private static Range modelPrefixRange(LiveParseResult result,
+                                          ReferenceHit reference,
+                                          String modelPrefix) {
+        if (result == null
+                || result.snapshot() == null
+                || result.snapshot().text() == null
+                || reference == null
+                || reference.range() == null
+                || reference.range().getStart() == null
+                || reference.range().getEnd() == null
+                || modelPrefix == null
+                || modelPrefix.isBlank()) {
+            return null;
+        }
+        String text = result.snapshot().text();
+        int startOffset = DocumentTracker.toOffset(text, reference.range().getStart());
+        int maxEndOffset = DocumentTracker.toOffset(text, reference.range().getEnd());
+        int endOffset = Math.min(startOffset + modelPrefix.length(), maxEndOffset);
+        if (endOffset <= startOffset) {
+            return null;
+        }
+        return new Range(reference.range().getStart(), DocumentTracker.positionAt(text, endOffset));
     }
 
     private String resolveAuthoritativeQualifiedName(TransferDescription td,
@@ -439,6 +584,9 @@ final class InterlisSymbolQueryEngine {
     }
 
     record SymbolOccurrence(String uri, Range range, String existingText, SymbolOccurrenceKind kind) {
+    }
+
+    private record ModelPrefixMatch(Range range, String modelPrefix) {
     }
 
     enum SymbolOccurrenceKind {

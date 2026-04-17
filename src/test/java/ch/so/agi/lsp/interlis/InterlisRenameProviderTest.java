@@ -207,4 +207,77 @@ class InterlisRenameProviderTest {
         assertEquals(0, compileCount.get(), "Expected dirty rename to use the saved snapshot without recompiling");
         assertTrue(edit.getChanges().containsKey(uri));
     }
+
+    @Test
+    void renameModelUpdatesQualifiedModelPrefixOnlyForMatchingModel() throws Exception {
+        Path tempDir = Files.createTempDirectory("rename-model-prefix");
+        Path otherModelFile = tempDir.resolve("OtherModel.ili");
+        Files.writeString(otherModelFile, """
+                INTERLIS 2.3;
+                MODEL OtherModel (en) AT "http://example.org" VERSION "2024-01-01" =
+                  TOPIC T =
+                    CLASS OtherType =
+                    END OtherType;
+                  END T;
+                END OtherModel.
+                """, StandardCharsets.UTF_8);
+
+        String source = """
+                INTERLIS 2.3;
+
+                MODEL TargetModel (en) AT "http://example.org" VERSION "2024-01-01" =
+                  IMPORTS OtherModel;
+                  TOPIC T =
+                    CLASS BaseType =
+                    END BaseType;
+
+                    CLASS C =
+                      target : TargetModel.T.BaseType;
+                      other : OtherModel.T.OtherType;
+                    END C;
+                  END T;
+                END TargetModel.
+                """;
+        Path iliFile = tempDir.resolve("TargetModel.ili");
+        Files.writeString(iliFile, source, StandardCharsets.UTF_8);
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        ch.so.agi.lsp.interlis.server.ClientSettings settings = new ch.so.agi.lsp.interlis.server.ClientSettings();
+        settings.setModelRepositories(tempDir.toAbsolutePath().toString());
+        server.setClientSettings(settings);
+        InterlisRenameProvider provider = new InterlisRenameProvider(server, null, new CompilationCache(), Ili2cUtil::compile);
+
+        int modelOffset = source.indexOf("MODEL TargetModel") + "MODEL ".length();
+        Position position = DocumentTracker.positionAt(source, modelOffset);
+
+        RenameParams params = new RenameParams();
+        params.setTextDocument(new TextDocumentIdentifier(iliFile.toUri().toString()));
+        params.setPosition(position);
+        params.setNewName("TargetModelRenamed");
+
+        WorkspaceEdit edit = provider.rename(params);
+        assertNotNull(edit);
+        Map<String, List<TextEdit>> changes = edit.getChanges();
+        assertNotNull(changes);
+        assertTrue(changes.containsKey(iliFile.toUri().toString()));
+
+        List<TextEdit> edits = changes.get(iliFile.toUri().toString());
+        assertNotNull(edits);
+
+        int targetRefOffset = source.indexOf("TargetModel.T.BaseType");
+        Range targetRefRange = new Range(
+                DocumentTracker.positionAt(source, targetRefOffset),
+                DocumentTracker.positionAt(source, targetRefOffset + "TargetModel".length()));
+
+        int otherRefOffset = source.indexOf("OtherModel.T.OtherType");
+        Range otherRefRange = new Range(
+                DocumentTracker.positionAt(source, otherRefOffset),
+                DocumentTracker.positionAt(source, otherRefOffset + "OtherModel".length()));
+
+        assertTrue(edits.stream().anyMatch(e -> "TargetModelRenamed".equals(e.getNewText())
+                        && targetRefRange.equals(e.getRange())),
+                "Expected qualified reference prefix for TargetModel to be renamed");
+        assertTrue(edits.stream().noneMatch(e -> otherRefRange.equals(e.getRange())),
+                "Expected qualified reference prefix for OtherModel to stay unchanged");
+    }
 }

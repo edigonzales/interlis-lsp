@@ -13,6 +13,7 @@ import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.PrepareRenameParams;
 import org.eclipse.lsp4j.ReferenceContext;
 import org.eclipse.lsp4j.ReferenceParams;
+import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.RenameParams;
 import org.eclipse.lsp4j.InsertTextMode;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
@@ -2241,6 +2242,97 @@ class InterlisLiveEditingFeatureTest {
         assertTrue(changes.containsKey(baseFile.toUri().toString()));
         assertTrue(changes.get(usingUri).stream().anyMatch(change -> "BaseModel.BaseTypeRenamed".equals(change.getNewText())));
         assertTrue(changes.get(baseFile.toUri().toString()).stream().anyMatch(change -> "BaseTypeRenamed".equals(change.getNewText())));
+    }
+
+    @Test
+    void renameModelUpdatesQualifiedModelPrefixButNotOtherModelPrefixes(@TempDir Path tempDir) throws Exception {
+        Path otherModelFile = tempDir.resolve("OtherModel.ili");
+        Files.writeString(otherModelFile, """
+                INTERLIS 2.3;
+                MODEL OtherModel (en) AT "http://example.org" VERSION "2024-01-01" =
+                  TOPIC T =
+                    CLASS OtherType =
+                    END OtherType;
+                  END T;
+                END OtherModel.
+                """);
+
+        Path file = tempDir.resolve("TargetModel.ili");
+        String content = """
+                INTERLIS 2.3;
+
+                MODEL TargetModel (en) AT "http://example.org" VERSION "2024-01-01" =
+                  IMPORTS OtherModel;
+                  TOPIC T =
+                    CLASS BaseType =
+                    END BaseType;
+
+                    CLASS C =
+                      target : TargetModel.T.BaseType;
+                      other : OtherModel.T.OtherType;
+                    END C;
+                  END T;
+                END TargetModel.
+                """;
+        Files.writeString(file, content);
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        ClientSettings settings = new ClientSettings();
+        settings.setModelRepositories(tempDir.toAbsolutePath().toString());
+        server.setClientSettings(settings);
+        InterlisTextDocumentService service = server.getInterlisTextDocumentService();
+
+        String uri = file.toUri().toString();
+        service.didOpen(new DidOpenTextDocumentParams(new TextDocumentItem(uri, "interlis", 1, content)));
+
+        int modelNameOffset = content.indexOf("MODEL TargetModel") + "MODEL ".length();
+        Position modelNamePosition = DocumentTracker.positionAt(content, modelNameOffset);
+
+        RenameParams renameParams = new RenameParams();
+        renameParams.setTextDocument(new TextDocumentIdentifier(uri));
+        renameParams.setPosition(modelNamePosition);
+        renameParams.setNewName("TargetModelRenamed");
+
+        WorkspaceEdit edit = service.rename(renameParams).get();
+        assertNotNull(edit);
+        Map<String, List<TextEdit>> changes = edit.getChanges();
+        assertNotNull(changes);
+        assertTrue(changes.containsKey(uri));
+
+        List<TextEdit> edits = changes.get(uri);
+        assertNotNull(edits);
+
+        int declarationOffset = content.indexOf("MODEL TargetModel") + "MODEL ".length();
+        Range declarationRange = new Range(
+                DocumentTracker.positionAt(content, declarationOffset),
+                DocumentTracker.positionAt(content, declarationOffset + "TargetModel".length()));
+
+        int endOffset = content.indexOf("END TargetModel.") + "END ".length();
+        Range endRange = new Range(
+                DocumentTracker.positionAt(content, endOffset),
+                DocumentTracker.positionAt(content, endOffset + "TargetModel".length()));
+
+        int targetRefOffset = content.indexOf("TargetModel.T.BaseType");
+        Range targetRefRange = new Range(
+                DocumentTracker.positionAt(content, targetRefOffset),
+                DocumentTracker.positionAt(content, targetRefOffset + "TargetModel".length()));
+
+        int otherRefOffset = content.indexOf("OtherModel.T.OtherType");
+        Range otherRefRange = new Range(
+                DocumentTracker.positionAt(content, otherRefOffset),
+                DocumentTracker.positionAt(content, otherRefOffset + "OtherModel".length()));
+
+        assertTrue(edits.stream().anyMatch(e -> "TargetModelRenamed".equals(e.getNewText())
+                        && declarationRange.equals(e.getRange())),
+                "Expected model declaration to be renamed");
+        assertTrue(edits.stream().anyMatch(e -> "TargetModelRenamed".equals(e.getNewText())
+                        && endRange.equals(e.getRange())),
+                "Expected model END name to be renamed");
+        assertTrue(edits.stream().anyMatch(e -> "TargetModelRenamed".equals(e.getNewText())
+                        && targetRefRange.equals(e.getRange())),
+                "Expected qualified TargetModel prefix to be renamed");
+        assertTrue(edits.stream().noneMatch(e -> otherRefRange.equals(e.getRange())),
+                "Expected OtherModel qualified prefix to stay unchanged");
     }
 
     @Test
