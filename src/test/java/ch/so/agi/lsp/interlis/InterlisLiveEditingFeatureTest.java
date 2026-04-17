@@ -117,7 +117,7 @@ class InterlisLiveEditingFeatureTest {
     }
 
     @Test
-    void completionDoesNotOfferQualifiedSymbolChildrenInAttributeRootContext(@TempDir Path tempDir) throws Exception {
+    void completionHonorsForwardVisibilityForQualifiedAttributeTypeChildren(@TempDir Path tempDir) throws Exception {
         Path file = tempDir.resolve("StrictQualifiedVisibility.ili");
         String valid = """
                 INTERLIS 2.3;
@@ -155,7 +155,7 @@ class InterlisLiveEditingFeatureTest {
         service.didChange(fullDocumentChange(uri, 3, lateDirty));
         int lateOffset = lateDirty.lastIndexOf("StrictQualifiedVisibility.T.") + "StrictQualifiedVisibility.T.".length();
         List<String> lateLabels = completionLabels(service, uri, lateDirty, lateOffset);
-        assertFalse(lateLabels.contains("Gruppe"));
+        assertTrue(lateLabels.contains("Gruppe"));
     }
 
     @Test
@@ -1728,7 +1728,7 @@ class InterlisLiveEditingFeatureTest {
     }
 
     @Test
-    void completionAfterQualifiedImportedModelDoesNotFallBackToRootItems(@TempDir Path tempDir) throws Exception {
+    void completionAfterQualifiedImportedModelOffersImportedTypeChildren(@TempDir Path tempDir) throws Exception {
         Path baseFile = tempDir.resolve("ImportedModel.ili");
         String baseContent = """
                 INTERLIS 2.3;
@@ -1766,11 +1766,101 @@ class InterlisLiveEditingFeatureTest {
         service.didChange(fullDocumentChange(uri, 2, dirty));
         List<String> labels = completionLabels(service, uri, dirty,
                 dirty.indexOf("attr : ImportedModel.") + "attr : ImportedModel.".length());
-        assertFalse(labels.contains("ImportedFormatted"));
-        assertFalse(labels.contains("ImportedText"));
+        assertTrue(labels.contains("ImportedFormatted"));
+        assertTrue(labels.contains("ImportedText"));
         assertFalse(labels.contains("LIST OF ..."));
         assertFalse(labels.contains("INTERLIS.XMLDate"));
-        assertTrue(labels.isEmpty());
+    }
+
+    @Test
+    void completionAfterQualifiedOwnModelOffersModelTopicAndTypeChildren(@TempDir Path tempDir) throws Exception {
+        Path file = tempDir.resolve("OwnQualifiedModelCompletion.ili");
+        String valid = """
+                INTERLIS 2.3;
+                MODEL OwnQualifiedModelCompletion (en) AT "http://example.org" VERSION "2024-01-01" =
+                  DOMAIN Status = (offen, geschlossen);
+                  STRUCTURE DirectStruct =
+                  END DirectStruct;
+                  TOPIC Json =
+                    DOMAIN TopicStatus = (neu, alt);
+                    STRUCTURE Dokument =
+                    END Dokument;
+                  END Json;
+                  TOPIC Use =
+                    CLASS C =
+                      attr : TEXT;
+                    END C;
+                  END Use;
+                END OwnQualifiedModelCompletion.
+                """;
+        Files.writeString(file, valid);
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        server.setClientSettings(new ClientSettings());
+        InterlisTextDocumentService service = server.getInterlisTextDocumentService();
+
+        String uri = file.toUri().toString();
+        service.didOpen(new DidOpenTextDocumentParams(new TextDocumentItem(uri, "interlis", 1, valid)));
+
+        String dirtyModel = valid.replace("attr : TEXT;", "attr : OwnQualifiedModelCompletion.");
+        service.didChange(fullDocumentChange(uri, 2, dirtyModel));
+        int modelOffset = dirtyModel.indexOf("attr : OwnQualifiedModelCompletion.")
+                + "attr : OwnQualifiedModelCompletion.".length();
+        List<String> modelLabels = completionLabels(service, uri, dirtyModel, modelOffset);
+        assertTrue(modelLabels.contains("Status"));
+        assertTrue(modelLabels.contains("DirectStruct"));
+        assertTrue(modelLabels.contains("Json"));
+
+        String dirtyTopic = valid.replace("attr : TEXT;", "attr : OwnQualifiedModelCompletion.Json.");
+        service.didChange(fullDocumentChange(uri, 3, dirtyTopic));
+        int topicOffset = dirtyTopic.indexOf("attr : OwnQualifiedModelCompletion.Json.")
+                + "attr : OwnQualifiedModelCompletion.Json.".length();
+        List<String> topicLabels = completionLabels(service, uri, dirtyTopic, topicOffset);
+        assertTrue(topicLabels.contains("Dokument"));
+        assertTrue(topicLabels.contains("TopicStatus"));
+        assertFalse(topicLabels.contains("Status"));
+    }
+
+    @Test
+    void completionAfterQualifiedImportedModelOffersChildrenInDomainDeclaration(@TempDir Path tempDir) throws Exception {
+        Path baseFile = tempDir.resolve("ImportedDomainModel.ili");
+        String baseContent = """
+                INTERLIS 2.3;
+                MODEL ImportedDomainModel (en) AT "http://example.org" VERSION "2024-01-01" =
+                  DOMAIN ImportedEnum = (a, b);
+                  STRUCTURE ImportedStruct =
+                  END ImportedStruct;
+                END ImportedDomainModel.
+                """;
+        Files.writeString(baseFile, baseContent);
+
+        Path usingFile = tempDir.resolve("UsingDomainCompletion.ili");
+        String usingContent = """
+                INTERLIS 2.3;
+                MODEL UsingDomainCompletion (en) AT "http://example.org" VERSION "2024-01-01" =
+                  IMPORTS ImportedDomainModel;
+                  DOMAIN Alias = TEXT;
+                END UsingDomainCompletion.
+                """;
+        Files.writeString(usingFile, usingContent);
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        ClientSettings settings = new ClientSettings();
+        settings.setModelRepositories(tempDir.toAbsolutePath().toString());
+        server.setClientSettings(settings);
+        InterlisTextDocumentService service = server.getInterlisTextDocumentService();
+
+        String uri = usingFile.toUri().toString();
+        service.didOpen(new DidOpenTextDocumentParams(new TextDocumentItem(uri, "interlis", 1, usingContent)));
+
+        String dirty = usingContent.replace("DOMAIN Alias = TEXT;", "DOMAIN Alias = ImportedDomainModel.");
+        service.didChange(fullDocumentChange(uri, 2, dirty));
+        int offset = dirty.indexOf("DOMAIN Alias = ImportedDomainModel.")
+                + "DOMAIN Alias = ImportedDomainModel.".length();
+        List<String> labels = completionLabels(service, uri, dirty, offset);
+        assertTrue(labels.contains("ImportedEnum"));
+        assertFalse(labels.contains("ImportedStruct"));
+        assertFalse(labels.contains("INTERLIS.XMLDate"));
     }
 
     @Test

@@ -346,7 +346,7 @@ final class InterlisCompletionProvider {
                 case DECLARATION_HEADER_AFTER_EXTENDS -> completeDeclarationHeaderAfterExtends(context);
                 case DECLARATION_HEADER_BLOCK_SUFFIX_EXTENDS_TARGET -> completeDeclarationHeaderBlockSuffixExtendsTarget(context, live, td, offset);
                 case ATTRIBUTE_TYPE_ROOT -> completeAttributeTypeRoot(context, live, td, offset);
-                case DOMAIN_TYPE_ROOT -> completeDomainTypeRoot(context, live);
+                case DOMAIN_TYPE_ROOT -> completeDomainTypeRoot(context, live, td, offset);
                 case UNIT_TYPE_ROOT -> completeUnitTypeRoot(context);
                 case TEXT_LENGTH_TAIL -> completeTextLengthTail(context);
                 case TEXT_LENGTH_VALUE_TAIL -> completeTextLengthValueTail(context);
@@ -510,7 +510,7 @@ final class InterlisCompletionProvider {
                                                            TransferDescription td,
                                                            int resolutionOffset) {
         if (context.ownerKind() == InterlisSymbolKind.DOMAIN) {
-            return completeDomainTypeRoot(context, live);
+            return completeDomainTypeRoot(context, live, td, resolutionOffset);
         }
         if (context.qualifierPath() != null && !context.qualifierPath().isBlank()) {
             return completeAttributeTypeRootQualifiedMembers(context, live, td, resolutionOffset);
@@ -526,9 +526,11 @@ final class InterlisCompletionProvider {
     }
 
     private List<CompletionItem> completeDomainTypeRoot(CompletionContext context,
-                                                        LiveParseResult live) {
+                                                        LiveParseResult live,
+                                                        TransferDescription td,
+                                                        int resolutionOffset) {
         if (context.qualifierPath() != null && !context.qualifierPath().isBlank()) {
-            return completeDomainTypeRootQualifiedMembers(context, live);
+            return completeDomainTypeRootQualifiedMembers(context, live, td, resolutionOffset);
         }
         List<CompletionItem> items = new ArrayList<>();
         addKeywords(items, domainRootKeywords(live, context), context, PRIORITY_KEYWORD);
@@ -576,20 +578,14 @@ final class InterlisCompletionProvider {
                                                                            LiveParseResult live,
                                                                            TransferDescription td,
                                                                            int resolutionOffset) {
-        String qualifierPath = context.qualifierPath();
-        if (qualifierPath != null && "INTERLIS".equalsIgnoreCase(qualifierPath)) {
-            return completeQualifiedMembers(context, live, td, resolutionOffset);
-        }
-        return Collections.emptyList();
+        return completeQualifiedMembers(context, live, td, resolutionOffset);
     }
 
     private List<CompletionItem> completeDomainTypeRootQualifiedMembers(CompletionContext context,
-                                                                        LiveParseResult live) {
-        String qualifierPath = context.qualifierPath();
-        if (qualifierPath != null && "INTERLIS".equalsIgnoreCase(qualifierPath)) {
-            return completeQualifiedMembers(context, live, null, 0);
-        }
-        return Collections.emptyList();
+                                                                        LiveParseResult live,
+                                                                        TransferDescription td,
+                                                                        int resolutionOffset) {
+        return completeQualifiedMembers(context, live, td, resolutionOffset);
     }
 
     private List<CompletionItem> completeTextLengthTail(CompletionContext context) {
@@ -908,7 +904,7 @@ final class InterlisCompletionProvider {
         LiveSymbol parent = resolveParentSymbol(live, parentPath, context.scopeOwnerId(), resolutionOffset);
         if (parent != null && live != null) {
             for (LiveSymbol child : live.scopeGraph().children(parent.id())) {
-                if (!isAllowedQualifiedCandidate(context, child, live, resolutionOffset)) {
+                if (!isAllowedQualifiedCandidate(context, child, parent.kind(), live, resolutionOffset)) {
                     continue;
                 }
                 if (!startsWithIgnoreCase(child.name(), context.prefix())) {
@@ -1019,18 +1015,36 @@ final class InterlisCompletionProvider {
 
     private boolean isAllowedQualifiedCandidate(CompletionContext context,
                                                 LiveSymbol child,
+                                                InterlisSymbolKind parentKind,
                                                 LiveParseResult live,
                                                 int resolutionOffset) {
         if (child == null || !isVisibleAt(child, resolutionOffset)) {
             return false;
         }
-        if (!isAllowed(child.kind(), context.allowedKinds())) {
+        if (!isAllowedQualifiedKind(context, child.kind(), parentKind)) {
             return false;
         }
         if (context.kind() == CompletionContext.Kind.FORMAT_TYPE_TARGET) {
             return child.kind() == InterlisSymbolKind.DOMAIN && isFormattedLocalDomain(live, child);
         }
         return true;
+    }
+
+    private boolean isAllowedQualifiedKind(CompletionContext context,
+                                           InterlisSymbolKind childKind,
+                                           InterlisSymbolKind parentKind) {
+        if (isAllowed(childKind, context.allowedKinds())) {
+            return true;
+        }
+        return childKind == InterlisSymbolKind.TOPIC && allowsQualifiedTopicNavigation(context, parentKind);
+    }
+
+    private boolean allowsQualifiedTopicNavigation(CompletionContext context, InterlisSymbolKind parentKind) {
+        if (context == null || parentKind != InterlisSymbolKind.MODEL) {
+            return false;
+        }
+        return context.kind() == CompletionContext.Kind.ATTRIBUTE_TYPE_ROOT
+                || context.kind() == CompletionContext.Kind.DOMAIN_TYPE_ROOT;
     }
 
     private boolean isFormattedLocalDomain(LiveParseResult live, LiveSymbol symbol) {
@@ -1044,16 +1058,17 @@ final class InterlisCompletionProvider {
     private void addImportedQualifiedChildren(List<CompletionItem> items,
                                               CompletionContext context,
                                               Object parentObject) {
+        InterlisSymbolKind parentKind = qualifiedParentKind(parentObject);
         if (parentObject instanceof ch.interlis.ili2c.metamodel.Model model) {
-            addImportedContainerChildren(items, context, model);
+            addImportedContainerChildren(items, context, model, parentKind);
             return;
         }
         if (parentObject instanceof ch.interlis.ili2c.metamodel.Container<?> container) {
-            addImportedContainerChildren(items, context, container);
+            addImportedContainerChildren(items, context, container, parentKind);
             return;
         }
         for (InterlisAstUtil.ChildCandidate child : InterlisAstUtil.collectChildren(parentObject)) {
-            if (!isAllowed(child.symbolKind(), context.allowedKinds())) {
+            if (!isAllowedQualifiedKind(context, child.symbolKind(), parentKind)) {
                 continue;
             }
             if (!startsWithIgnoreCase(child.name(), context.prefix())) {
@@ -1065,7 +1080,8 @@ final class InterlisCompletionProvider {
 
     private void addImportedContainerChildren(List<CompletionItem> items,
                                               CompletionContext context,
-                                              ch.interlis.ili2c.metamodel.Container<?> container) {
+                                              ch.interlis.ili2c.metamodel.Container<?> container,
+                                              InterlisSymbolKind parentKind) {
         for (java.util.Iterator<?> iterator = container.iterator(); iterator.hasNext(); ) {
             Object candidate = iterator.next();
             if (!(candidate instanceof ch.interlis.ili2c.metamodel.Element element)) {
@@ -1076,7 +1092,7 @@ final class InterlisCompletionProvider {
                 continue;
             }
             InterlisSymbolKind symbolKind = InterlisMetamodelSupport.toSymbolKind(element);
-            if (!isAllowed(symbolKind, context.allowedKinds())) {
+            if (!isAllowedQualifiedKind(context, symbolKind, parentKind)) {
                 continue;
             }
             if (context.kind() == CompletionContext.Kind.FORMAT_TYPE_TARGET
@@ -1085,6 +1101,13 @@ final class InterlisCompletionProvider {
             }
             items.add(item(name, symbolKind.toCompletionKind(), context.replaceRange(), PRIORITY_IMPORTED, context.prefix()));
         }
+    }
+
+    private InterlisSymbolKind qualifiedParentKind(Object parentObject) {
+        if (parentObject instanceof ch.interlis.ili2c.metamodel.Element element) {
+            return InterlisMetamodelSupport.toSymbolKind(element);
+        }
+        return null;
     }
 
     private void addKeywords(List<CompletionItem> items,
