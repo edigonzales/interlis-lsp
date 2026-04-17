@@ -182,6 +182,8 @@ Wie diese `CompletionItemKind`s konkret gerendert werden, entscheidet der Editor
   - Placeholder `1` ist nur der reine Name
   - Placeholder `2` ist ein optionaler Header-Suffix direkt vor einem festen `=`
 - `END Name;` spiegelt nur Placeholder `1`; Modifier und spaetere `EXTENDS`-Teile des Headers werden nicht nach `END` gespiegelt.
+- Manuelle Cursor-Tasten-Navigation (`Left`, `Right`, `Up`, `Down`, `Home`, `End`, `PageUp`, `PageDown`) aus einem aktiven Header-Placeholder solcher mehrzeiligen Block-Snippets beendet die Snippet-Session sofort und hinterlaesst genau ein Caret.
+- Das gilt auch waehrend der gespiegelten Bearbeitung von Placeholder `1`, wenn VS Code parallel den Header-Namen und `END Name;` als mehrere Selections/Carets derselben Snippet-Session fuehrt.
 - Der Body dieser mehrzeiligen Block-Snippets liegt auf der finalen Cursor-Position `$0`, damit `Tab` den Namen direkt in den Body bestaetigt und die Snippet-Navigation dort endet.
 - Mehrzeilige Topic-Body-Block-Snippets werden mit `InsertTextMode.AsIs` ausgeliefert, damit der Editor ihre Einrueckung beim Einfuegen nicht nochmals automatisch umformt.
 - In VS Code darf `Enter` bei einem weiteren Snippet-Placeholder in INTERLIS-Dateien denselben Sprung wie `Tab` ausloesen; im Body verhaelt sich `Enter` danach wieder als normales Newline.

@@ -69,6 +69,7 @@ const UNIT_COMPOSED_TARGET_TRIGGER_PATTERN = new RegExp(`${UNIT_DECLARATION_PREF
 const UNIT_COMPOSED_OPERATOR_TRIGGER_PATTERN = new RegExp(`${UNIT_DECLARATION_PREFIX_REGEX}\\([^;)]*${DOTTED_NAME_REGEX}\\s*$`, "i");
 const METAATTRIBUTE_ROOT_TRIGGER_PATTERN = /^\s*!!@\s*[A-Za-z0-9_.]*$/i;
 const METAATTRIBUTE_VALUE_TRIGGER_PATTERN = /^\s*!!@\s*[A-Za-z0-9_.]+\s*=\s*.*$/i;
+const BLOCK_SNIPPET_HEADER_PREFIX_PATTERN = /^\s*(?:CLASS|STRUCTURE|TOPIC|ASSOCIATION|VIEW|GRAPHIC)\s+/i;
 const CONTAINER_BODY_AUTO_TRIGGER_LABELS = new Set<string>([
   "MODEL",
   "TOPIC",
@@ -393,6 +394,32 @@ export async function activate(context: vscode.ExtensionContext) {
           await maybeTriggerSnippetPlaceholderSuggest(active);
         })();
       }, 25);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("interlis.snippet.cursorMove", async (targetCommand?: unknown) => {
+      const command = typeof targetCommand === "string"
+        ? targetCommand
+        : (typeof targetCommand === "object"
+          && targetCommand !== null
+          && "command" in targetCommand
+          && typeof (targetCommand as { command?: unknown }).command === "string"
+            ? (targetCommand as { command: string }).command
+            : undefined);
+      if (!command) {
+        return;
+      }
+
+      const editor = vscode.window.activeTextEditor;
+      const shouldLeaveSnippet = !!editor
+        && editor.document.languageId === "interlis"
+        && isBlockSnippetHeaderPlaceholderPosition(editor.document, editor.selection.active);
+
+      if (shouldLeaveSnippet) {
+        await vscode.commands.executeCommand("leaveSnippet");
+      }
+      await vscode.commands.executeCommand(command);
     })
   );
 
@@ -1169,6 +1196,36 @@ function isModelSnippetHeaderPlaceholderPosition(document: vscode.TextDocument, 
     return true;
   }
   return isQuotedModelSnippetField(line, position.character, /^\s*VERSION\s+"/);
+}
+
+function isBlockSnippetHeaderPlaceholderPosition(document: vscode.TextDocument, position: vscode.Position): boolean {
+  if (position.line < 0 || position.line >= document.lineCount) {
+    return false;
+  }
+
+  const line = document.lineAt(position.line).text;
+  const prefixMatch = line.match(BLOCK_SNIPPET_HEADER_PREFIX_PATTERN);
+  if (!prefixMatch) {
+    return false;
+  }
+
+  const equalsIndex = line.lastIndexOf("=");
+  if (equalsIndex < 0 || line.slice(equalsIndex + 1).trim().length > 0) {
+    return false;
+  }
+
+  const nameStart = prefixMatch[0].length;
+  const spaceAfterName = line.indexOf(" ", nameStart);
+  if (spaceAfterName < 0 || spaceAfterName > equalsIndex) {
+    return false;
+  }
+
+  if (position.character >= nameStart && position.character <= spaceAfterName) {
+    return true;
+  }
+
+  const suffixStart = spaceAfterName + 1;
+  return position.character >= suffixStart && position.character <= equalsIndex;
 }
 
 function isQuotedModelSnippetField(line: string, character: number, prefixPattern: RegExp): boolean {

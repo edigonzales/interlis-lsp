@@ -132,6 +132,70 @@
         "key": "tab",
         "command": "interlis.snippet.nextPlaceholder",
         "when": "editorTextFocus && editorLangId == interlis && inSnippetMode && hasNextTabstop && !suggestWidgetVisible"
+      },
+      {
+        "key": "left",
+        "command": "interlis.snippet.cursorMove",
+        "args": {
+          "command": "cursorLeft"
+        },
+        "when": "editorTextFocus && editorLangId == interlis && inSnippetMode"
+      },
+      {
+        "key": "right",
+        "command": "interlis.snippet.cursorMove",
+        "args": {
+          "command": "cursorRight"
+        },
+        "when": "editorTextFocus && editorLangId == interlis && inSnippetMode"
+      },
+      {
+        "key": "up",
+        "command": "interlis.snippet.cursorMove",
+        "args": {
+          "command": "cursorUp"
+        },
+        "when": "editorTextFocus && editorLangId == interlis && inSnippetMode"
+      },
+      {
+        "key": "down",
+        "command": "interlis.snippet.cursorMove",
+        "args": {
+          "command": "cursorDown"
+        },
+        "when": "editorTextFocus && editorLangId == interlis && inSnippetMode"
+      },
+      {
+        "key": "home",
+        "command": "interlis.snippet.cursorMove",
+        "args": {
+          "command": "cursorHome"
+        },
+        "when": "editorTextFocus && editorLangId == interlis && inSnippetMode"
+      },
+      {
+        "key": "end",
+        "command": "interlis.snippet.cursorMove",
+        "args": {
+          "command": "cursorEnd"
+        },
+        "when": "editorTextFocus && editorLangId == interlis && inSnippetMode"
+      },
+      {
+        "key": "pageup",
+        "command": "interlis.snippet.cursorMove",
+        "args": {
+          "command": "cursorPageUp"
+        },
+        "when": "editorTextFocus && editorLangId == interlis && inSnippetMode"
+      },
+      {
+        "key": "pagedown",
+        "command": "interlis.snippet.cursorMove",
+        "args": {
+          "command": "cursorPageDown"
+        },
+        "when": "editorTextFocus && editorLangId == interlis && inSnippetMode"
       }
     ],
     "configuration": {
