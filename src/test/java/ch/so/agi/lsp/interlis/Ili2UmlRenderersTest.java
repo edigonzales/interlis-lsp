@@ -38,14 +38,14 @@ class Ili2UmlRenderersTest {
 
         assertEquals(mermaid, Ili2Mermaid.render(td, UmlAttributeMode.OWN));
         assertEquals(plantUml, Ili2PlantUml.renderSource(td, UmlAttributeMode.OWN));
-        assertTrue(mermaid.contains("Aaaaaamyenum[0..1] : (foo, bar)"));
+        assertTrue(mermaid.contains("Aaaaaamyenum[0..1] : (foo,\n  bar)"));
         assertFalse(mermaid.contains("Aaaaaamyenum[0..1] : MyBase"));
         assertTrue(mermaid.contains("FarbenAttr[0..1] : Farben"));
         assertTrue(mermaid.contains("rot.hell"));
         assertTrue(mermaid.contains("rot.dunkel"));
         assertTrue(mermaid.contains("\n      rot\n"));
 
-        assertTrue(plantUml.contains("Aaaaaamyenum[0..1] : (foo, bar)"));
+        assertTrue(plantUml.contains("Aaaaaamyenum[0..1] : (foo,\n  bar)"));
         assertFalse(plantUml.contains("Aaaaaamyenum[0..1] : MyBase"));
         assertTrue(plantUml.contains("FarbenAttr[0..1] : Farben"));
         assertTrue(plantUml.contains("rot.hell"));
@@ -60,15 +60,37 @@ class Ili2UmlRenderersTest {
         String mermaid = Ili2Mermaid.render(td, UmlAttributeMode.NONE);
         String plantUml = Ili2PlantUml.renderSource(td, UmlAttributeMode.NONE);
 
-        assertFalse(mermaid.contains("Aaaaaamyenum[0..1] : (foo, bar)"));
+        assertFalse(mermaid.contains("Aaaaaamyenum[0..1] : (foo,\n  bar)"));
         assertFalse(mermaid.contains("FarbenAttr[0..1] : Farben"));
         assertFalse(mermaid.contains("rot.hell"));
         assertFalse(mermaid.contains("\n      rot\n"));
 
-        assertFalse(plantUml.contains("Aaaaaamyenum[0..1] : (foo, bar)"));
+        assertFalse(plantUml.contains("Aaaaaamyenum[0..1] : (foo,\n  bar)"));
         assertFalse(plantUml.contains("FarbenAttr[0..1] : Farben"));
         assertFalse(plantUml.contains("rot.hell"));
         assertFalse(plantUml.contains("\n    rot\n"));
+    }
+
+    @Test
+    void renderersCanHideLocalEnumerationValuesWithoutHidingTheAttribute() throws Exception {
+        TransferDescription td = compileEnumDiagramModel(tempDir.resolve("EnumRenderersLocalValuesHidden.ili"));
+
+        StaticUmlRenderOptions options = new StaticUmlRenderOptions(
+                UmlAttributeMode.OWN, true, true, true, false);
+        String mermaid = Ili2Mermaid.render(td, options);
+        String plantUml = Ili2PlantUml.renderSource(td, options);
+
+        assertTrue(mermaid.contains("Aaaaaamyenum[0..1] : Enumeration"));
+        assertFalse(mermaid.contains("foo"));
+        assertFalse(mermaid.contains("bar"));
+        assertTrue(mermaid.contains("FarbenAttr[0..1] : Farben"));
+        assertTrue(mermaid.contains("rot.hell"));
+
+        assertTrue(plantUml.contains("Aaaaaamyenum[0..1] : Enumeration"));
+        assertFalse(plantUml.contains("foo"));
+        assertFalse(plantUml.contains("bar"));
+        assertTrue(plantUml.contains("FarbenAttr[0..1] : Farben"));
+        assertTrue(plantUml.contains("rot.hell"));
     }
 
     @Test
@@ -133,6 +155,42 @@ class Ili2UmlRenderersTest {
         assertContainsInOrder(plantUmlInherited,
                 "HouseNo[0..1] : String",
                 "AddressBase.Street[0..1] : String");
+    }
+
+    @Test
+    void renderersCanHideAssociationNamesAndRoleCardinalitiesIndependently() throws Exception {
+        TransferDescription td = compileAssociationDiagramModel(tempDir.resolve("AssociationRenderers.ili"));
+
+        String mermaidDefault = Ili2Mermaid.render(td);
+        String plantUmlDefault = Ili2PlantUml.renderSource(td);
+        assertTrue(mermaidDefault.contains("worker–employer"));
+        assertTrue(mermaidDefault.contains("0..*"));
+        assertTrue(plantUmlDefault.contains("worker–employer"));
+        assertTrue(plantUmlDefault.contains("0..*"));
+
+        StaticUmlRenderOptions namesOnly = new StaticUmlRenderOptions(UmlAttributeMode.OWN, true, true, false);
+        String mermaidNamesOnly = Ili2Mermaid.render(td, namesOnly);
+        String plantUmlNamesOnly = Ili2PlantUml.renderSource(td, namesOnly);
+        assertTrue(mermaidNamesOnly.contains("worker–employer"));
+        assertFalse(mermaidNamesOnly.contains("0..*"));
+        assertTrue(plantUmlNamesOnly.contains("worker–employer"));
+        assertFalse(plantUmlNamesOnly.contains("0..*"));
+
+        StaticUmlRenderOptions cardinalitiesOnly = new StaticUmlRenderOptions(UmlAttributeMode.OWN, true, false, true);
+        String mermaidCardinalitiesOnly = Ili2Mermaid.render(td, cardinalitiesOnly);
+        String plantUmlCardinalitiesOnly = Ili2PlantUml.renderSource(td, cardinalitiesOnly);
+        assertFalse(mermaidCardinalitiesOnly.contains("worker–employer"));
+        assertTrue(mermaidCardinalitiesOnly.contains("0..*"));
+        assertFalse(plantUmlCardinalitiesOnly.contains("worker–employer"));
+        assertTrue(plantUmlCardinalitiesOnly.contains("0..*"));
+
+        StaticUmlRenderOptions none = new StaticUmlRenderOptions(UmlAttributeMode.OWN, true, false, false);
+        String mermaidNone = Ili2Mermaid.render(td, none);
+        String plantUmlNone = Ili2PlantUml.renderSource(td, none);
+        assertFalse(mermaidNone.contains("worker–employer"));
+        assertFalse(mermaidNone.contains("0..*"));
+        assertFalse(plantUmlNone.contains("worker–employer"));
+        assertFalse(plantUmlNone.contains("0..*"));
     }
 
     @Test
@@ -211,6 +269,30 @@ class Ili2UmlRenderersTest {
                 END EnumRenderers.
                 """);
 
+        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(new ClientSettings(), iliFile.toString());
+        TransferDescription td = outcome.getTransferDescription();
+        assertNotNull(td, outcome.getLogText());
+        return td;
+    }
+
+    private static TransferDescription compileAssociationDiagramModel(Path iliFile) throws Exception {
+        Files.writeString(iliFile, """
+                INTERLIS 2.3;
+                MODEL AssociationRenderers (en)
+                AT "http://example.com/AssociationRenderers.ili"
+                VERSION "2024-01-01" =
+                  TOPIC Demo =
+                    CLASS Employee =
+                    END Employee;
+                    CLASS Company =
+                    END Company;
+                    ASSOCIATION WorksAt =
+                      worker -- {0..*} Employee;
+                      employer -- {1} Company;
+                    END WorksAt;
+                  END Demo;
+                END AssociationRenderers.
+                """);
         Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(new ClientSettings(), iliFile.toString());
         TransferDescription td = outcome.getTransferDescription();
         assertNotNull(td, outcome.getLogText());

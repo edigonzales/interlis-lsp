@@ -28,7 +28,7 @@ public final class Ili2GraphML {
     public static String render(TransferDescription td, StaticUmlRenderOptions renderOptions) {
         Objects.requireNonNull(td, "TransferDescription is null");
         StaticUmlRenderOptions options = renderOptions != null ? renderOptions : StaticUmlRenderOptions.defaults();
-        Diagram diagram = InterlisUmlDiagram.build(td, options.getAttributeMode());
+        Diagram diagram = InterlisUmlDiagram.build(td, options);
         return new GraphMLRenderer(options).render(diagram);
     }
 
@@ -197,12 +197,17 @@ public final class Ili2GraphML {
             sb.append("          <y:LineStyle color=\"#000000\" type=\"line\" width=\"1.0\"/>\n");
             sb.append("          <y:Arrows source=\"none\" target=\"none\"/>\n");
 
-            String labelText = assoc.leftCard + " ⟷ " + assoc.rightCard;
-            if (assoc.label != null && !assoc.label.isBlank()) {
-                labelText = labelText + " (" + assoc.label + ")";
+            String labelText = "";
+            if (renderOptions.isShowRoleCardinalities()) {
+                labelText = assoc.leftCard + " ⟷ " + assoc.rightCard;
             }
-            sb.append("          <y:EdgeLabel alignment=\"center\" configuration=\"AutoFlippingLabel\" distance=\"2.0\" fontFamily=\"Dialog\" fontSize=\"11\" fontStyle=\"plain\" hasBackgroundColor=\"false\" hasLineColor=\"false\" modelName=\"two_pos\" preferredPlacement=\"center\" ratio=\"0.5\" textColor=\"#000000\" visible=\"true\">")
-                    .append(escapeXml(labelText)).append("</y:EdgeLabel>\n");
+            if (renderOptions.isShowAssociationNames() && assoc.label != null && !assoc.label.isBlank()) {
+                labelText = labelText.isBlank() ? assoc.label : labelText + " (" + assoc.label + ")";
+            }
+            if (!labelText.isBlank()) {
+                sb.append("          <y:EdgeLabel alignment=\"center\" configuration=\"AutoFlippingLabel\" distance=\"2.0\" fontFamily=\"Dialog\" fontSize=\"11\" fontStyle=\"plain\" hasBackgroundColor=\"false\" hasLineColor=\"false\" modelName=\"two_pos\" preferredPlacement=\"center\" ratio=\"0.5\" textColor=\"#000000\" visible=\"true\">")
+                        .append(escapeXml(labelText)).append("</y:EdgeLabel>\n");
+            }
             sb.append("          <y:BendStyle smoothed=\"false\"/>\n");
             sb.append("        </y:PolyLineEdge>\n");
             sb.append("      </data>\n");

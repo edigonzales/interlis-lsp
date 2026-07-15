@@ -83,6 +83,8 @@ class CommandHandlersTest {
         assertNotNull(outcome.getTransferDescription(), outcome.getLogText());
 
         InterlisLanguageServer server = new InterlisLanguageServer();
+        ClientSettings settings = new ClientSettings();
+        server.setClientSettings(settings);
         CommandHandlers handlers = new CommandHandlers(server);
 
         CompletableFuture<Object> future = handlers.generatePlantUml(iliFile.toString());
@@ -266,6 +268,38 @@ class CommandHandlersTest {
     }
 
     @Test
+    void exportDiagramModelUsesConfiguredAttributeModes() throws Exception {
+        Path iliFile = writeStaticAttributeModeModel(tempDir.resolve("GlspAttributeModes.ili"));
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        ClientSettings settings = new ClientSettings();
+        settings.setUmlAttributeMode(UmlAttributeMode.NONE.name());
+        server.setClientSettings(settings);
+        CommandHandlers handlers = new CommandHandlers(server);
+
+        InterlisDiagramModel.DiagramModel noneModel = handlers.exportDiagramModel(iliFile.toString())
+                .get(30, TimeUnit.SECONDS);
+        InterlisDiagramModel.NodeModel noneChild = noneModel.getNodes().stream()
+                .filter(node -> "Child".equals(node.getLabel()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Expected Child diagram node"));
+        assertTrue(noneChild.getAttributes().isEmpty());
+        assertTrue(noneChild.getMethods().isEmpty());
+
+        settings.setUmlAttributeMode(UmlAttributeMode.OWN_AND_INHERITED.name());
+        InterlisDiagramModel.DiagramModel inheritedModel = handlers.exportDiagramModel(iliFile.toString())
+                .get(30, TimeUnit.SECONDS);
+        InterlisDiagramModel.NodeModel inheritedChild = inheritedModel.getNodes().stream()
+                .filter(node -> "Child".equals(node.getLabel()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Expected Child diagram node"));
+        assertTrue(inheritedChild.getAttributes().contains("ChildName[0..1] : String"));
+        assertTrue(inheritedChild.getAttributes().contains("Base.BaseName[0..1] : String"));
+        assertTrue(inheritedChild.getAttributes().contains("GrandBase.LegacyId[0..1] : String"));
+        assertTrue(inheritedChild.getMethods().contains("Constraint1()"));
+    }
+
+    @Test
     void exportDiagramModelIncludesInlineAndDomainEnumerationValues() throws Exception {
         Path iliFile = tempDir.resolve("EnumDiagramModel.ili");
         Files.writeString(iliFile, """
@@ -288,6 +322,8 @@ class CommandHandlersTest {
         assertNotNull(outcome.getTransferDescription(), outcome.getLogText());
 
         InterlisLanguageServer server = new InterlisLanguageServer();
+        ClientSettings settings = new ClientSettings();
+        server.setClientSettings(settings);
         CommandHandlers handlers = new CommandHandlers(server);
 
         InterlisDiagramModel.DiagramModel model = handlers.exportDiagramModel(iliFile.toString())
@@ -299,9 +335,20 @@ class CommandHandlersTest {
                 .filter(node -> "MyBase".equals(node.getLabel()))
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Expected MyBase diagram node"));
-        assertTrue(myBase.getAttributes().contains("Aaaaaamyenum[0..1] : (foo, bar)"));
+        assertTrue(myBase.getAttributes().contains("Aaaaaamyenum[0..1] : (foo,\n  bar)"));
         assertFalse(myBase.getAttributes().contains("Aaaaaamyenum[0..1] : MyBase"));
         assertTrue(myBase.getAttributes().contains("FarbenAttr[0..1] : Farben"));
+
+        settings.setUmlShowLocalEnumerationValues(false);
+        InterlisDiagramModel.DiagramModel hiddenValuesModel = handlers.exportDiagramModel(iliFile.toString())
+                .get(30, TimeUnit.SECONDS);
+        InterlisDiagramModel.NodeModel hiddenValuesMyBase = hiddenValuesModel.getNodes().stream()
+                .filter(node -> "MyBase".equals(node.getLabel()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Expected MyBase diagram node"));
+        assertTrue(hiddenValuesMyBase.getAttributes().contains("Aaaaaamyenum[0..1] : Enumeration"));
+        assertFalse(hiddenValuesMyBase.getAttributes().stream().anyMatch(attribute -> attribute.contains("foo")));
+        assertTrue(hiddenValuesMyBase.getAttributes().contains("FarbenAttr[0..1] : Farben"));
 
         InterlisDiagramModel.NodeModel farben = model.getNodes().stream()
                 .filter(node -> "Farben".equals(node.getLabel()))

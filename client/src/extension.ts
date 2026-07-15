@@ -304,12 +304,14 @@ export async function activate(context: vscode.ExtensionContext) {
       diagram: {
         layout: {
           edgeRouting: cfg.get<string>("diagram.layout.edgeRouting") ?? "ORTHOGONAL"
-        },
-        showCardinalities: cfg.get<boolean>("diagram.showCardinalities") ?? true
+        }
       },
       uml: {
         attributeMode: cfg.get<string>("uml.attributeMode") ?? "OWN",
-        deemphasizeAbstractTypes: cfg.get<boolean>("uml.deemphasizeAbstractTypes") ?? true
+        deemphasizeAbstractTypes: cfg.get<boolean>("uml.deemphasizeAbstractTypes") ?? true,
+        showAssociationNames: cfg.get<boolean>("uml.showAssociationNames") ?? true,
+        showRoleCardinalities: cfg.get<boolean>("uml.showRoleCardinalities") ?? true,
+        showLocalEnumerationValues: cfg.get<boolean>("uml.showLocalEnumerationValues") ?? true
       }
     },
     synchronize: { configurationSection: "interlisLsp" },

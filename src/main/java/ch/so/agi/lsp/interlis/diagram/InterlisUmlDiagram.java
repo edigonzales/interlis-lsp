@@ -22,8 +22,13 @@ final class InterlisUmlDiagram {
     }
 
     static Diagram build(TransferDescription td, UmlAttributeMode attributeMode) {
+        return build(td, StaticUmlRenderOptions.withAttributeMode(attributeMode));
+    }
+
+    static Diagram build(TransferDescription td, StaticUmlRenderOptions renderOptions) {
         java.util.Objects.requireNonNull(td, "TransferDescription is null");
-        return new Ili2cAdapter(attributeMode).buildDiagram(td);
+        StaticUmlRenderOptions options = renderOptions != null ? renderOptions : StaticUmlRenderOptions.defaults();
+        return new Ili2cAdapter(options.getAttributeMode(), options.isShowLocalEnumerationValues()).buildDiagram(td);
     }
 
     // ─────────────────────────────────────────────────────────────────────────────
@@ -98,9 +103,11 @@ final class InterlisUmlDiagram {
 
     private static final class Ili2cAdapter {
         private final UmlAttributeMode attributeMode;
+        private final boolean showLocalEnumerationValues;
 
-        private Ili2cAdapter(UmlAttributeMode attributeMode) {
+        private Ili2cAdapter(UmlAttributeMode attributeMode, boolean showLocalEnumerationValues) {
             this.attributeMode = attributeMode != null ? attributeMode : UmlAttributeMode.OWN;
+            this.showLocalEnumerationValues = showLocalEnumerationValues;
         }
 
         Diagram buildDiagram(TransferDescription td) {
@@ -325,7 +332,7 @@ final class InterlisUmlDiagram {
         private List<String> attributesOf(Viewable viewable, String declaringTypeName) {
             List<String> attributes = new ArrayList<>();
             for (AttributeDef attribute : getElements(viewable, AttributeDef.class)) {
-                String typeName = TypeNamer.nameOf(attribute);
+                String typeName = TypeNamer.nameOf(attribute, showLocalEnumerationValues);
                 if (!typeName.equalsIgnoreCase("ObjectType")) {
                     attributes.add(formatAttribute(attribute, declaringTypeName, typeName));
                 }
@@ -371,6 +378,10 @@ final class InterlisUmlDiagram {
 
     static final class TypeNamer {
         static String nameOf(AttributeDef a) {
+            return nameOf(a, true);
+        }
+
+        static String nameOf(AttributeDef a, boolean showLocalEnumerationValues) {
             Type t = a.getDomain();
             if (t == null)
                 return "<Unknown>";
@@ -407,7 +418,7 @@ final class InterlisUmlDiagram {
             } else if (t instanceof TextType) {
                 return "String";
             } else if (t instanceof EnumerationType enumType) {
-                return EnumFormatter.inlineTypeOf(a, enumType);
+                return EnumFormatter.inlineTypeOf(a, enumType, showLocalEnumerationValues);
             } else if (t instanceof FormattedType ft) {
                 if (isDateOrTime(ft)) {
                     return ft.getDefinedBaseDomain().getName();    
@@ -437,11 +448,26 @@ final class InterlisUmlDiagram {
         }
 
         static String inlineTypeOf(AttributeDef attribute, EnumerationType enumType) {
+            return inlineTypeOf(attribute, enumType, true);
+        }
+
+        static String inlineTypeOf(AttributeDef attribute, EnumerationType enumType,
+                boolean showLocalEnumerationValues) {
             if (attribute != null && attribute.isDomainBoolean()) {
                 return "Boolean";
             }
+            if (!showLocalEnumerationValues) {
+                return "Enumeration";
+            }
             List<String> values = valuesOf(enumType);
-            return values.isEmpty() ? "Enumeration" : "(" + String.join(", ", values) + ")";
+            if (values.isEmpty()) {
+                return "Enumeration";
+            }
+            StringBuilder result = new StringBuilder("(").append(values.get(0));
+            for (int i = 1; i < values.size(); i++) {
+                result.append(",\n  ").append(values.get(i));
+            }
+            return result.append(")").toString();
         }
 
         static List<String> valuesOf(AbstractEnumerationType enumType) {

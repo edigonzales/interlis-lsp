@@ -87,7 +87,7 @@ class Ili2GraphMLTest {
         String graphml = Ili2GraphML.render(td);
         assertNotNull(graphml);
         assertEquals(graphml, Ili2GraphML.render(td, UmlAttributeMode.OWN));
-        assertTrue(graphml.contains("Aaaaaamyenum[0..1] : (foo, bar)"));
+        assertTrue(graphml.contains("Aaaaaamyenum[0..1] : (foo,&#10;  bar)"));
         assertFalse(graphml.contains("Aaaaaamyenum[0..1] : MyBase"));
         assertTrue(graphml.contains("FarbenAttr[0..1] : Farben"));
         assertTrue(graphml.contains("gruen"));
@@ -103,10 +103,24 @@ class Ili2GraphMLTest {
 
         String graphml = Ili2GraphML.render(td, UmlAttributeMode.NONE);
 
-        assertFalse(graphml.contains("Aaaaaamyenum[0..1] : (foo, bar)"));
+        assertFalse(graphml.contains("Aaaaaamyenum[0..1] : (foo,&#10;  bar)"));
         assertFalse(graphml.contains("FarbenAttr[0..1] : Farben"));
         assertFalse(graphml.contains("gruen"));
         assertFalse(graphml.contains("rot.hell"));
+    }
+
+    @Test
+    void graphmlCanHideLocalEnumerationValuesWithoutHidingTheAttribute() throws Exception {
+        TransferDescription td = compileEnumDiagramModel(tempDir.resolve("GraphEnumModelLocalValuesHidden.ili"));
+
+        String graphml = Ili2GraphML.render(td,
+                new StaticUmlRenderOptions(UmlAttributeMode.OWN, true, true, true, false));
+
+        assertTrue(graphml.contains("Aaaaaamyenum[0..1] : Enumeration"));
+        assertFalse(graphml.contains("foo"));
+        assertFalse(graphml.contains("bar"));
+        assertTrue(graphml.contains("FarbenAttr[0..1] : Farben"));
+        assertTrue(graphml.contains("rot.hell"));
     }
 
     @Test
@@ -145,6 +159,27 @@ class Ili2GraphMLTest {
     }
 
     @Test
+    void graphmlCanHideAssociationNamesAndRoleCardinalitiesIndependently() throws Exception {
+        TransferDescription td = compileAssociationDiagramModel(tempDir.resolve("GraphAssociationOptions.ili"));
+
+        String namesOnly = Ili2GraphML.render(td,
+                new StaticUmlRenderOptions(UmlAttributeMode.OWN, true, true, false));
+        assertTrue(namesOnly.contains("worker–employer"));
+        assertFalse(namesOnly.contains("0..* ⟷ 1"));
+
+        String cardinalitiesOnly = Ili2GraphML.render(td,
+                new StaticUmlRenderOptions(UmlAttributeMode.OWN, true, false, true));
+        assertFalse(cardinalitiesOnly.contains("worker–employer"));
+        assertTrue(cardinalitiesOnly.contains("0..* ⟷ 1"));
+
+        String none = Ili2GraphML.render(td,
+                new StaticUmlRenderOptions(UmlAttributeMode.OWN, true, false, false));
+        assertFalse(none.contains("worker–employer"));
+        assertFalse(none.contains("0..* ⟷ 1"));
+        assertFalse(none.contains("<y:EdgeLabel"));
+    }
+
+    @Test
     void graphmlDeemphasizesAbstractClassesAndStructuresByDefault() throws Exception {
         TransferDescription td = compileAbstractStylingDiagramModel(tempDir.resolve("GraphAbstractStyling.ili"));
 
@@ -176,6 +211,30 @@ class Ili2GraphMLTest {
                 END GraphEnumModel.
                 """);
 
+        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(new ClientSettings(), iliFile.toString());
+        TransferDescription td = outcome.getTransferDescription();
+        assertNotNull(td, outcome.getLogText());
+        return td;
+    }
+
+    private static TransferDescription compileAssociationDiagramModel(Path iliFile) throws Exception {
+        Files.writeString(iliFile, """
+                INTERLIS 2.3;
+                MODEL GraphAssociationOptions (en)
+                AT "http://example.com/GraphAssociationOptions.ili"
+                VERSION "2024-01-01" =
+                  TOPIC Demo =
+                    CLASS Employee =
+                    END Employee;
+                    CLASS Company =
+                    END Company;
+                    ASSOCIATION WorksAt =
+                      worker -- {0..*} Employee;
+                      employer -- {1} Company;
+                    END WorksAt;
+                  END Demo;
+                END GraphAssociationOptions.
+                """);
         Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(new ClientSettings(), iliFile.toString());
         TransferDescription td = outcome.getTransferDescription();
         assertNotNull(td, outcome.getLogText());

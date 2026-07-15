@@ -249,11 +249,6 @@
           "default": "ORTHOGONAL",
           "markdownDescription": "Edge routing strategy for INTERLIS diagram auto-layout. Changes take effect after running `INTERLIS: Auto-layout active diagram`."
         },
-        "interlisLsp.diagram.showCardinalities": {
-          "type": "boolean",
-          "default": true,
-          "markdownDescription": "Show association cardinality labels in INTERLIS diagrams."
-        },
         "interlisLsp.uml.attributeMode": {
           "type": "string",
           "enum": [
@@ -262,12 +257,27 @@
             "OWN_AND_INHERITED"
           ],
           "default": "OWN",
-          "markdownDescription": "Controls how Mermaid, PlantUML, and GraphML UML exports render attributes, enumeration values, and constraints. `OWN` shows only locally declared attributes plus local constraints, `NONE` hides all member details, and `OWN_AND_INHERITED` appends inherited attributes from the full inheritance chain while keeping constraints visible."
+          "markdownDescription": "Controls how Mermaid, PlantUML, GraphML, and GLSP UML diagrams render attributes, enumeration values, and constraints. `OWN` shows only locally declared attributes plus local constraints, `NONE` hides all member details, and `OWN_AND_INHERITED` appends inherited attributes from the full inheritance chain while keeping constraints visible."
         },
         "interlisLsp.uml.deemphasizeAbstractTypes": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Tone down abstract classes and abstract structures in static Mermaid, PlantUML, and GraphML UML outputs with a light gray palette. Disable this to keep the previous abstract color behavior."
+          "markdownDescription": "Tone down abstract classes and abstract structures in Mermaid, PlantUML, GraphML, and GLSP UML diagrams with a light gray palette. Disable this to keep the previous abstract color behavior."
+        },
+        "interlisLsp.uml.showAssociationNames": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show association role names in Mermaid, PlantUML, GraphML, and GLSP UML diagrams."
+        },
+        "interlisLsp.uml.showRoleCardinalities": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show association role cardinalities in Mermaid, PlantUML, GraphML, and GLSP UML diagrams."
+        },
+        "interlisLsp.uml.showLocalEnumerationValues": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show values of inline enumeration types declared directly on attributes in Mermaid, PlantUML, GraphML, and GLSP UML diagrams. When disabled, the attribute type is shown as `Enumeration`."
         }
       }
     },

@@ -31,7 +31,7 @@ public final class Ili2PlantUml {
     public static String renderSource(TransferDescription td, StaticUmlRenderOptions renderOptions) {
         Objects.requireNonNull(td, "TransferDescription is null");
         StaticUmlRenderOptions options = renderOptions != null ? renderOptions : StaticUmlRenderOptions.defaults();
-        Diagram diagram = InterlisUmlDiagram.build(td, options.getAttributeMode());
+        Diagram diagram = InterlisUmlDiagram.build(td, options);
         return new PlantRenderer(options).render(diagram);
     }
 
@@ -81,9 +81,16 @@ public final class Ili2PlantUml {
             }
 
             for (Assoc a : d.assocs) {
-                sb.append(id(a.leftFqn)).append(" \"").append(escape(a.leftCard)).append("\" -- ")
-                        .append("\"").append(escape(a.rightCard)).append("\" ").append(id(a.rightFqn));
-                if (a.label != null && !a.label.isEmpty()) {
+                sb.append(id(a.leftFqn));
+                if (renderOptions.isShowRoleCardinalities()) {
+                    sb.append(" \"").append(escape(a.leftCard)).append("\"");
+                }
+                sb.append(" -- ");
+                if (renderOptions.isShowRoleCardinalities()) {
+                    sb.append("\"").append(escape(a.rightCard)).append("\" ");
+                }
+                sb.append(id(a.rightFqn));
+                if (renderOptions.isShowAssociationNames() && a.label != null && !a.label.isEmpty()) {
                     sb.append(" : ").append(escape(a.label));
                 }
                 sb.append("\n");

@@ -14,6 +14,7 @@ import org.eclipse.glsp.graph.GEdge;
 import org.eclipse.glsp.graph.GGraph;
 import org.eclipse.glsp.graph.GLabel;
 import org.eclipse.glsp.graph.GModelElement;
+import org.eclipse.glsp.graph.GNode;
 import org.eclipse.glsp.graph.GraphFactory;
 import org.eclipse.glsp.server.layout.LayoutEngine;
 import org.eclipse.glsp.server.model.DefaultGModelState;
@@ -38,7 +39,7 @@ class InterlisGlspModelFactoryTest {
     @Test
     void createGModelOmitsCardinalitiesWhenDisabled() {
         ClientSettings settings = new ClientSettings();
-        settings.setShowCardinalities(false);
+        settings.setUmlShowRoleCardinalities(false);
 
         GGraph graph = buildGraph(settings, modelState -> {
             // no-op ELK simulation
@@ -55,7 +56,7 @@ class InterlisGlspModelFactoryTest {
     @Test
     void createGModelShowsCardinalitiesWhenEnabled() {
         ClientSettings settings = new ClientSettings();
-        settings.setShowCardinalities(true);
+        settings.setUmlShowRoleCardinalities(true);
 
         GGraph graph = buildGraph(settings, modelState -> {
             // no-op ELK simulation
@@ -69,9 +70,47 @@ class InterlisGlspModelFactoryTest {
     }
 
     @Test
+    void createGModelOmitsAssociationNamesWhenDisabled() {
+        ClientSettings settings = new ClientSettings();
+        settings.setUmlShowAssociationNames(false);
+        settings.setUmlShowRoleCardinalities(true);
+
+        GGraph graph = buildGraph(settings, modelState -> {
+            // no-op ELK simulation
+        });
+
+        GEdge edge = findEdge(graph, EDGE_ID);
+        List<String> labelIds = edgeLabelIds(edge);
+
+        assertFalse(labelIds.contains(EDGE_LABEL_ID));
+        assertTrue(labelIds.contains(EDGE_SOURCE_CARD_ID));
+        assertTrue(labelIds.contains(EDGE_TARGET_CARD_ID));
+    }
+
+    @Test
+    void createGModelAppliesAbstractTypeDeemphasisSetting() {
+        ClientSettings enabled = new ClientSettings();
+        GGraph mutedGraph = buildGraph(enabled, modelState -> {
+            // no-op ELK simulation
+        });
+        GModelElement mutedNode = findModelElement(mutedGraph, "node:A");
+        assertNotNull(mutedNode);
+        assertTrue(mutedNode.getCssClasses().contains("interlis-class-muted-abstract"));
+
+        ClientSettings disabled = new ClientSettings();
+        disabled.setUmlDeemphasizeAbstractTypes(false);
+        GGraph normalGraph = buildGraph(disabled, modelState -> {
+            // no-op ELK simulation
+        });
+        GModelElement normalNode = findModelElement(normalGraph, "node:A");
+        assertNotNull(normalNode);
+        assertFalse(normalNode.getCssClasses().contains("interlis-class-muted-abstract"));
+    }
+
+    @Test
     void createGModelKeepsAssociationLabelElkManagedWhenPositionIsProvided() {
         ClientSettings settings = new ClientSettings();
-        settings.setShowCardinalities(true);
+        settings.setUmlShowRoleCardinalities(true);
 
         GGraph graph = buildGraph(settings, modelState -> {
             GGraph root = (GGraph) modelState.getRoot();
@@ -90,7 +129,7 @@ class InterlisGlspModelFactoryTest {
     @Test
     void createGModelFallsBackToManualAssociationLabelPlacementWhenNoPositionExists() {
         ClientSettings settings = new ClientSettings();
-        settings.setShowCardinalities(true);
+        settings.setUmlShowRoleCardinalities(true);
 
         GGraph graph = buildGraph(settings, modelState -> {
             // no-op ELK simulation
@@ -103,13 +142,60 @@ class InterlisGlspModelFactoryTest {
         assertEquals(18d, associationLabel.getEdgePlacement().getOffset());
     }
 
+    @Test
+    void createGModelSplitsMultilineAttributesAndIncreasesNodeHeight() {
+        ClientSettings settings = new ClientSettings();
+        String singleLine = "Status[0..1] : (planned, active, completed)";
+        String multiline = "Status[0..1] : (planned,\n  active,\n  completed)";
+
+        GGraph singleLineGraph = buildGraph(settings, modelState -> {
+            // no-op ELK simulation
+        }, diagramWithAttribute(singleLine));
+        GGraph multilineGraph = buildGraph(settings, modelState -> {
+            // no-op ELK simulation
+        }, diagramWithAttribute(multiline));
+
+        GNode singleLineNode = (GNode) findModelElement(singleLineGraph, "node:enum");
+        GNode multilineNode = (GNode) findModelElement(multilineGraph, "node:enum");
+        assertNotNull(singleLineNode);
+        assertNotNull(multilineNode);
+
+        List<GLabel> labels = childLabels(multilineNode, "interlis-class-attribute");
+        assertEquals(3, labels.size());
+        assertEquals("Status[0..1] : (planned,", labels.get(0).getText());
+        assertEquals("active,", labels.get(1).getText());
+        assertEquals("completed)", labels.get(2).getText());
+        assertEquals(10d, labels.get(0).getPosition().getX());
+        assertEquals(18d, labels.get(1).getPosition().getX());
+        assertEquals(18d, labels.get(2).getPosition().getX());
+        assertTrue(multilineNode.getSize().getHeight() > singleLineNode.getSize().getHeight());
+    }
+
+    @Test
+    void createGModelKeepsHiddenLocalEnumerationValuesOnOneAttributeLine() {
+        GGraph graph = buildGraph(new ClientSettings(), modelState -> {
+            // no-op ELK simulation
+        }, diagramWithAttribute("Status[0..1] : Enumeration"));
+
+        GNode node = (GNode) findModelElement(graph, "node:enum");
+        List<GLabel> labels = childLabels(node, "interlis-class-attribute");
+
+        assertEquals(1, labels.size());
+        assertEquals("Status[0..1] : Enumeration", labels.get(0).getText());
+    }
+
     private static GGraph buildGraph(ClientSettings settings, java.util.function.Consumer<DefaultGModelState> layoutHook) {
+        return buildGraph(settings, layoutHook, sampleDiagram());
+    }
+
+    private static GGraph buildGraph(ClientSettings settings, java.util.function.Consumer<DefaultGModelState> layoutHook,
+            InterlisDiagramModel.DiagramModel diagram) {
         InterlisLanguageServer server = new InterlisLanguageServer();
         server.setClientSettings(settings);
         InterlisGlspBridge.bindLanguageServer(server);
 
         DefaultGModelState modelState = new DefaultGModelState();
-        modelState.setProperty(InterlisGlspModelStateKeys.MODEL, sampleDiagram());
+        modelState.setProperty(InterlisGlspModelStateKeys.MODEL, diagram);
         modelState.setProperty(InterlisGlspModelStateKeys.SOURCE_URI, "file:///tmp/Test.ili");
 
         InterlisGlspModelFactory factory = new InterlisGlspModelFactory();
@@ -118,6 +204,27 @@ class InterlisGlspModelFactoryTest {
         factory.createGModel();
 
         return (GGraph) modelState.getRoot();
+    }
+
+    private static InterlisDiagramModel.DiagramModel diagramWithAttribute(String attribute) {
+        InterlisDiagramModel.ContainerModel container = new InterlisDiagramModel.ContainerModel(
+                "container:enum",
+                "Demo",
+                "Demo",
+                "namespace",
+                new ArrayList<>(List.of("node:enum")));
+        InterlisDiagramModel.NodeModel node = new InterlisDiagramModel.NodeModel(
+                "node:enum",
+                "EnumHolder",
+                "container:enum",
+                List.of(),
+                List.of(attribute),
+                List.of());
+        return new InterlisDiagramModel.DiagramModel(
+                "1",
+                List.of(container),
+                List.of(node),
+                List.of());
     }
 
     private static InterlisDiagramModel.DiagramModel sampleDiagram() {
@@ -131,7 +238,7 @@ class InterlisGlspModelFactoryTest {
                 "node:A",
                 "A",
                 "container:1",
-                List.of(),
+                List.of("Abstract"),
                 List.of(),
                 List.of());
         InterlisDiagramModel.NodeModel nodeB = new InterlisDiagramModel.NodeModel(
@@ -179,6 +286,31 @@ class InterlisGlspModelFactoryTest {
         throw new AssertionError("Label not found: " + labelId);
     }
 
+    private static GModelElement findModelElement(GModelElement root, String id) {
+        if (root == null) {
+            return null;
+        }
+        if (id.equals(root.getId())) {
+            return root;
+        }
+        if (root instanceof GGraph graph) {
+            for (GModelElement child : graph.getChildren()) {
+                GModelElement result = findModelElement(child, id);
+                if (result != null) {
+                    return result;
+                }
+            }
+        } else if (root instanceof GNode node) {
+            for (GModelElement child : node.getChildren()) {
+                GModelElement result = findModelElement(child, id);
+                if (result != null) {
+                    return result;
+                }
+            }
+        }
+        return null;
+    }
+
     private static List<String> edgeLabelIds(GEdge edge) {
         List<String> ids = new ArrayList<>();
         for (GModelElement child : edge.getChildren()) {
@@ -187,5 +319,15 @@ class InterlisGlspModelFactoryTest {
             }
         }
         return ids;
+    }
+
+    private static List<GLabel> childLabels(GNode node, String cssClass) {
+        List<GLabel> labels = new ArrayList<>();
+        for (GModelElement child : node.getChildren()) {
+            if (child instanceof GLabel label && label.getCssClasses().contains(cssClass)) {
+                labels.add(label);
+            }
+        }
+        return labels;
     }
 }

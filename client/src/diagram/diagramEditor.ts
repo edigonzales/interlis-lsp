@@ -1224,6 +1224,11 @@ function createDiagramWebviewHtml(
       stroke: #708299;
       stroke-width: 1.2;
     }
+    .interlis-class-muted-abstract > path.sprotty-node,
+    .interlis-class-muted-abstract > rect.sprotty-node {
+      fill: #f3f3f3;
+      stroke: #d6d6d6;
+    }
     .interlis-class-title {
       font-size: 12px;
       font-weight: 700;
@@ -1241,6 +1246,12 @@ function createDiagramWebviewHtml(
       font-size: 10px;
       fill: #2a3a50;
       pointer-events: none;
+    }
+    .interlis-class-muted-abstract .interlis-class-title,
+    .interlis-class-muted-abstract .interlis-class-stereotype,
+    .interlis-class-muted-abstract .interlis-class-attribute,
+    .interlis-class-muted-abstract .interlis-class-method {
+      fill: #a6a6a6;
     }
     text.interlis-container-title,
     text.interlis-class-title,

@@ -32,6 +32,7 @@ import org.slf4j.LoggerFactory;
 import com.google.inject.Inject;
 
 import ch.so.agi.lsp.interlis.diagram.InterlisDiagramModel;
+import ch.so.agi.lsp.interlis.diagram.StaticUmlRenderOptions;
 import ch.so.agi.lsp.interlis.server.ClientSettings;
 import ch.so.agi.lsp.interlis.server.InterlisLanguageServer;
 import ch.so.agi.lsp.interlis.text.InterlisTextDocumentService;
@@ -113,6 +114,10 @@ public class InterlisGlspModelFactory implements GModelFactory {
 
         List<InterlisDiagramModel.ContainerModel> containers = sortedContainers(diagram, nodesByContainer);
         DiagramLayout layout = computeLayout(containers, nodesById, nodesByContainer);
+        ClientSettings settings = resolveClientSettings();
+        boolean showAssociationNames = settings.isUmlShowAssociationNames();
+        boolean showRoleCardinalities = settings.isUmlShowRoleCardinalities();
+        boolean deemphasizeAbstractTypes = settings.isUmlDeemphasizeAbstractTypes();
 
         GGraphBuilder graphBuilder = new GGraphBuilder(DefaultTypes.GRAPH)
                 .id("interlis-graph")
@@ -139,7 +144,7 @@ public class InterlisGlspModelFactory implements GModelFactory {
                     .build());
 
             for (NodeLayout nodeLayout : containerLayout.nodes) {
-                containerBuilder.add(buildClassNode(nodeLayout));
+                containerBuilder.add(buildClassNode(nodeLayout, deemphasizeAbstractTypes));
             }
 
             graphBuilder.add(containerBuilder.build());
@@ -147,7 +152,6 @@ public class InterlisGlspModelFactory implements GModelFactory {
 
         // Render edges after container/class nodes so they stay visible above topic backgrounds.
         Set<String> renderableNodeIds = new LinkedHashSet<>(nodesById.keySet());
-        boolean showCardinalities = resolveClientSettings().isShowCardinalities();
         int edgeIndex = 0;
         for (InterlisDiagramModel.EdgeModel edge : safeList(diagram.getEdges())) {
             if (edge == null || isBlank(edge.getSourceId()) || isBlank(edge.getTargetId())) {
@@ -168,15 +172,15 @@ public class InterlisGlspModelFactory implements GModelFactory {
             edgeBuilder.addCssClass(inheritance ? "interlis-edge-inheritance" : "interlis-edge-association");
 
             if (!inheritance) {
-                if (showCardinalities && !isBlank(edge.getSourceCardinality())) {
+                if (showRoleCardinalities && !isBlank(edge.getSourceCardinality())) {
                     edgeBuilder.add(edgeLabel(edgeId + ":source-card", edge.getSourceCardinality(), 0.12, 8,
                             "interlis-edge-cardinality"));
                 }
-                if (showCardinalities && !isBlank(edge.getTargetCardinality())) {
+                if (showRoleCardinalities && !isBlank(edge.getTargetCardinality())) {
                     edgeBuilder.add(edgeLabel(edgeId + ":target-card", edge.getTargetCardinality(), 0.88, 8,
                             "interlis-edge-cardinality"));
                 }
-                if (!isBlank(edge.getLabel())) {
+                if (showAssociationNames && !isBlank(edge.getLabel())) {
                     edgeBuilder.add(associationLabel(edgeId + ":label", edge.getLabel()));
                 }
             }
@@ -187,7 +191,7 @@ public class InterlisGlspModelFactory implements GModelFactory {
         return graphBuilder.build();
     }
 
-    private GModelElement buildClassNode(NodeLayout nodeLayout) {
+    private GModelElement buildClassNode(NodeLayout nodeLayout, boolean deemphasizeAbstractTypes) {
         InterlisDiagramModel.NodeModel node = nodeLayout.node;
         String nodeId = firstNonBlank(node.getId(), "node");
 
@@ -196,6 +200,10 @@ public class InterlisGlspModelFactory implements GModelFactory {
                 .position(nodeLayout.x, nodeLayout.y)
                 .size(nodeLayout.width, nodeLayout.height)
                 .addCssClass("interlis-class");
+
+        if (StaticUmlRenderOptions.isMutedAbstractType(node.getStereotypes(), deemphasizeAbstractTypes)) {
+            nodeBuilder.addCssClass("interlis-class-muted-abstract");
+        }
 
         nodeBuilder.add(new GLabelBuilder(DefaultTypes.LABEL)
                 .id(nodeId + ":name")
@@ -221,8 +229,13 @@ public class InterlisGlspModelFactory implements GModelFactory {
             if (isBlank(attribute)) {
                 continue;
             }
-            nodeBuilder.add(classLine(nodeId, "attribute", y, attribute, "interlis-class-attribute"));
-            y += NODE_LINE_HEIGHT;
+            String[] attributeLines = attribute.split("\\R", -1);
+            for (int lineIndex = 0; lineIndex < attributeLines.length; lineIndex++) {
+                String line = lineIndex == 0 ? attributeLines[lineIndex] : attributeLines[lineIndex].stripLeading();
+                nodeBuilder.add(classLine(nodeId, "attribute", y, line, "interlis-class-attribute",
+                        lineIndex == 0 ? 10 : 18));
+                y += NODE_LINE_HEIGHT;
+            }
         }
         if (!safeList(node.getAttributes()).isEmpty() && !safeList(node.getMethods()).isEmpty()) {
             y += SECTION_GAP;
@@ -248,10 +261,15 @@ public class InterlisGlspModelFactory implements GModelFactory {
     }
 
     private GModelElement classLine(String nodeId, String section, double y, String text, String cssClass) {
+        return classLine(nodeId, section, y, text, cssClass, 10);
+    }
+
+    private GModelElement classLine(String nodeId, String section, double y, String text, String cssClass,
+            double x) {
         return new GLabelBuilder(DefaultTypes.LABEL)
                 .id(nodeId + ":" + section + ":" + Math.max(0, (int) y))
                 .text(text)
-                .position(10, y)
+                .position(x, y)
                 .addCssClass(cssClass)
                 .build();
     }
@@ -546,7 +564,7 @@ public class InterlisGlspModelFactory implements GModelFactory {
 
     private static double nodeHeight(InterlisDiagramModel.NodeModel node) {
         int stereotypes = safeList(node.getStereotypes()).size();
-        int attributes = safeList(node.getAttributes()).size();
+        int attributes = attributeLineCount(node.getAttributes());
         int methods = safeList(node.getMethods()).size();
 
         int lines = stereotypes + attributes + methods;
@@ -560,6 +578,17 @@ public class InterlisGlspModelFactory implements GModelFactory {
         }
 
         return Math.max(NODE_MIN_HEIGHT, height);
+    }
+
+    private static int attributeLineCount(Collection<String> attributes) {
+        int lines = 0;
+        for (String attribute : safeList(attributes)) {
+            if (isBlank(attribute)) {
+                continue;
+            }
+            lines += attribute.split("\\R", -1).length;
+        }
+        return lines;
     }
 
     private static <T> List<T> safeList(Collection<T> values) {

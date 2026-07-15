@@ -36,8 +36,13 @@ public final class InterlisDiagramModel {
     }
 
     public static DiagramModel render(TransferDescription transferDescription) {
+        return render(transferDescription, StaticUmlRenderOptions.defaults());
+    }
+
+    public static DiagramModel render(TransferDescription transferDescription, StaticUmlRenderOptions renderOptions) {
         Objects.requireNonNull(transferDescription, "TransferDescription is null");
-        Diagram source = InterlisUmlDiagram.build(transferDescription);
+        StaticUmlRenderOptions options = renderOptions != null ? renderOptions : StaticUmlRenderOptions.defaults();
+        Diagram source = InterlisUmlDiagram.build(transferDescription, options);
 
         Map<String, ContainerModel> containersByNamespace = new LinkedHashMap<>();
         for (Namespace namespace : source.namespaces.values()) {
@@ -128,9 +133,9 @@ public final class InterlisDiagramModel {
                     "association",
                     assoc.leftFqn,
                     assoc.rightFqn,
-                    assoc.leftCard,
-                    assoc.rightCard,
-                    assoc.label));
+                    options.isShowRoleCardinalities() ? assoc.leftCard : null,
+                    options.isShowRoleCardinalities() ? assoc.rightCard : null,
+                    options.isShowAssociationNames() ? assoc.label : null));
         }
 
         List<ContainerModel> containers = new ArrayList<>(containersByNamespace.values());

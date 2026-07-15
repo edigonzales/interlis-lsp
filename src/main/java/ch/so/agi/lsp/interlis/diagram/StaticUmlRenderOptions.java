@@ -1,9 +1,10 @@
 package ch.so.agi.lsp.interlis.diagram;
 
 import ch.so.agi.lsp.interlis.diagram.InterlisUmlDiagram.Node;
+import java.util.Collection;
 
 /**
- * Shared render options for static UML outputs.
+ * Shared render options for all UML diagram outputs.
  */
 public final class StaticUmlRenderOptions {
     public static final String MUTED_ABSTRACT_FILL_COLOR = "#F3F3F3";
@@ -12,10 +13,26 @@ public final class StaticUmlRenderOptions {
 
     private final UmlAttributeMode attributeMode;
     private final boolean deemphasizeAbstractTypes;
+    private final boolean showAssociationNames;
+    private final boolean showRoleCardinalities;
+    private final boolean showLocalEnumerationValues;
 
     public StaticUmlRenderOptions(UmlAttributeMode attributeMode, boolean deemphasizeAbstractTypes) {
+        this(attributeMode, deemphasizeAbstractTypes, true, true);
+    }
+
+    public StaticUmlRenderOptions(UmlAttributeMode attributeMode, boolean deemphasizeAbstractTypes,
+            boolean showAssociationNames, boolean showRoleCardinalities) {
+        this(attributeMode, deemphasizeAbstractTypes, showAssociationNames, showRoleCardinalities, true);
+    }
+
+    public StaticUmlRenderOptions(UmlAttributeMode attributeMode, boolean deemphasizeAbstractTypes,
+            boolean showAssociationNames, boolean showRoleCardinalities, boolean showLocalEnumerationValues) {
         this.attributeMode = attributeMode != null ? attributeMode : UmlAttributeMode.OWN;
         this.deemphasizeAbstractTypes = deemphasizeAbstractTypes;
+        this.showAssociationNames = showAssociationNames;
+        this.showRoleCardinalities = showRoleCardinalities;
+        this.showLocalEnumerationValues = showLocalEnumerationValues;
     }
 
     public static StaticUmlRenderOptions defaults() {
@@ -34,19 +51,39 @@ public final class StaticUmlRenderOptions {
         return deemphasizeAbstractTypes;
     }
 
+    public boolean isShowAssociationNames() {
+        return showAssociationNames;
+    }
+
+    public boolean isShowRoleCardinalities() {
+        return showRoleCardinalities;
+    }
+
+    public boolean isShowLocalEnumerationValues() {
+        return showLocalEnumerationValues;
+    }
+
     static boolean isMutedAbstractType(Node node, StaticUmlRenderOptions options) {
-        if (node == null || options == null || !options.isDeemphasizeAbstractTypes()) {
+        return node != null && isMutedAbstractType(node.stereotypes, options);
+    }
+
+    public static boolean isMutedAbstractType(Collection<String> stereotypes, boolean deemphasizeAbstractTypes) {
+        if (stereotypes == null || !deemphasizeAbstractTypes) {
             return false;
         }
-        if (!node.stereotypes.contains("Abstract")) {
+        if (!stereotypes.contains("Abstract")) {
             return false;
         }
-        if (node.stereotypes.contains("Structure")) {
+        if (stereotypes.contains("Structure")) {
             return true;
         }
-        return !node.stereotypes.contains("Enumeration")
-                && !node.stereotypes.contains("View")
-                && !node.stereotypes.contains("Function")
-                && !node.stereotypes.contains("External");
+        return !stereotypes.contains("Enumeration")
+                && !stereotypes.contains("View")
+                && !stereotypes.contains("Function")
+                && !stereotypes.contains("External");
+    }
+
+    private static boolean isMutedAbstractType(Collection<String> stereotypes, StaticUmlRenderOptions options) {
+        return options != null && isMutedAbstractType(stereotypes, options.isDeemphasizeAbstractTypes());
     }
 }

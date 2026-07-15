@@ -65,7 +65,7 @@ public class CommandHandlers {
         }
 
         try {
-            String mermaid = Ili2Mermaid.render(td, staticUmlRenderOptions());
+            String mermaid = Ili2Mermaid.render(td, umlRenderOptions());
             String html = MermaidHtmlRenderer.render(mermaid);
             return CompletableFuture.completedFuture(html);
         } catch (Exception e) {
@@ -89,7 +89,7 @@ public class CommandHandlers {
         }
 
         try {
-            String plant = Ili2PlantUml.renderSource(td, staticUmlRenderOptions());
+            String plant = Ili2PlantUml.renderSource(td, umlRenderOptions());
             String html = PlantUmlHtmlRenderer.render(plant);
             return CompletableFuture.completedFuture(html);
         } catch (Exception e) {
@@ -112,7 +112,7 @@ public class CommandHandlers {
         }
 
         try {
-            String graphml = Ili2GraphML.render(td, staticUmlRenderOptions());
+            String graphml = Ili2GraphML.render(td, umlRenderOptions());
             return CompletableFuture.completedFuture(graphml);
         } catch (Exception e) {
             return CompletableFuture.failedFuture(e);
@@ -267,12 +267,17 @@ public class CommandHandlers {
         }
     }
 
-    private StaticUmlRenderOptions staticUmlRenderOptions() {
+    private StaticUmlRenderOptions umlRenderOptions() {
         ClientSettings settings = server.getClientSettings();
         if (settings == null) {
             return StaticUmlRenderOptions.defaults();
         }
-        return new StaticUmlRenderOptions(settings.getUmlAttributeMode(), settings.isUmlDeemphasizeAbstractTypes());
+        return new StaticUmlRenderOptions(
+                settings.getUmlAttributeMode(),
+                settings.isUmlDeemphasizeAbstractTypes(),
+                settings.isUmlShowAssociationNames(),
+                settings.isUmlShowRoleCardinalities(),
+                settings.isUmlShowLocalEnumerationValues());
     }
 
     private boolean handleBlankSource(String fileUriOrPath, String source, boolean emitCompileFinished) {
@@ -292,7 +297,8 @@ public class CommandHandlers {
 
     private CompletableFuture<InterlisDiagramModel.DiagramModel> renderDiagramModel(Ili2cUtil.CompilationOutcome outcome) {
         try {
-            InterlisDiagramModel.DiagramModel model = InterlisDiagramModel.render(outcome.getTransferDescription());
+            InterlisDiagramModel.DiagramModel model = InterlisDiagramModel.render(
+                    outcome.getTransferDescription(), umlRenderOptions());
             return CompletableFuture.completedFuture(model);
         } catch (Exception e) {
             return CompletableFuture.failedFuture(e);

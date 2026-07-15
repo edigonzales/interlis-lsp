@@ -118,15 +118,21 @@ Server-to-client notifications ✉️:
 | `interlis/clearLog` | none | Clear the shared output channel before new compiler runs. |
 | `interlis/log` | `{ text: string }` | Stream ili2c logs into the VS Code output view. |
 
-## Static UML output settings
+## UML diagram settings
 
 - `interlisLsp.uml.attributeMode=OWN|NONE|OWN_AND_INHERITED` (default: `OWN`)
 - `interlisLsp.uml.deemphasizeAbstractTypes=true|false` (default: `true`)
-- Applies to the static Mermaid preview, PlantUML preview, and GraphML export.
+- `interlisLsp.uml.showAssociationNames=true|false` (default: `true`)
+- `interlisLsp.uml.showRoleCardinalities=true|false` (default: `true`)
+- `interlisLsp.uml.showLocalEnumerationValues=true|false` (default: `true`)
+- All five settings apply to Mermaid, PlantUML, GraphML, and GLSP UML diagrams.
 - `OWN` shows locally declared attributes and enumeration values and keeps constraints visible.
 - `NONE` hides attributes, enumeration values, and constraints entirely.
 - `OWN_AND_INHERITED` appends inherited attributes from the full superclass or super-structure chain, marks them as `Base.attr[...] : Type`, and keeps constraints visible.
 - `deemphasizeAbstractTypes=true` tones down abstract classes and abstract structures with a light-gray fill, border, and text palette so they are easier to ignore.
+- `showAssociationNames=false` hides the association role-name label currently rendered as `RoleA–RoleB`.
+- `showRoleCardinalities=false` hides the cardinality labels at both association ends.
+- `showLocalEnumerationValues=false` renders inline enumeration types declared directly on attributes simply as `Enumeration`; named enumeration domains and their values remain unchanged.
 
 ## GLSP ELK layout
 
@@ -167,7 +173,7 @@ Association labels and cardinalities:
 
 - Association name labels are ELK-managed (no fixed midpoint placement).
 - If ELK does not provide a usable position, the server falls back to midpoint placement (`position=0.5`, `side=top`, `offset=18`).
-- Cardinalities are configurable via `interlisLsp.diagram.showCardinalities` (default: `true`).
+- Association names and role cardinalities are configured through the shared UML settings above.
 
 Direction tuning:
 

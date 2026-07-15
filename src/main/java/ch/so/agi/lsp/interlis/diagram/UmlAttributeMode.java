@@ -3,7 +3,7 @@ package ch.so.agi.lsp.interlis.diagram;
 import java.util.Locale;
 
 /**
- * Controls how static UML exports render attributes and enumeration values.
+ * Controls how UML diagrams render attributes and enumeration values.
  */
 public enum UmlAttributeMode {
     OWN,

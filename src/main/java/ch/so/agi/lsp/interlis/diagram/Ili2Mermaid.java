@@ -27,7 +27,7 @@ public final class Ili2Mermaid {
     public static String render(TransferDescription td, StaticUmlRenderOptions renderOptions) {
         Objects.requireNonNull(td, "TransferDescription is null");
         StaticUmlRenderOptions options = renderOptions != null ? renderOptions : StaticUmlRenderOptions.defaults();
-        Diagram diagram = InterlisUmlDiagram.build(td, options.getAttributeMode());
+        Diagram diagram = InterlisUmlDiagram.build(td, options);
         return new MermaidRenderer(options).render(diagram);
     }
 
@@ -74,11 +74,18 @@ public final class Ili2Mermaid {
                 sb.append("  ").append(id(i.subFqn)).append(" --|> ").append(id(i.supFqn)).append("\n");
             }
 
-            // 4) Associations with cardinalities on both ends
+            // 4) Associations with optional role cardinalities and names
             for (Assoc a : d.assocs) {
-                sb.append("  ").append(id(a.leftFqn)).append(" \"").append(a.leftCard).append("\" -- \"")
-                        .append(a.rightCard).append("\" ").append(id(a.rightFqn));
-                if (a.label != null && !a.label.isEmpty())
+                sb.append("  ").append(id(a.leftFqn));
+                if (renderOptions.isShowRoleCardinalities()) {
+                    sb.append(" \"").append(a.leftCard).append("\"");
+                }
+                sb.append(" -- ");
+                if (renderOptions.isShowRoleCardinalities()) {
+                    sb.append("\"").append(a.rightCard).append("\" ");
+                }
+                sb.append(id(a.rightFqn));
+                if (renderOptions.isShowAssociationNames() && a.label != null && !a.label.isEmpty())
                     sb.append(" : ").append(escape(a.label));
                 sb.append("\n");
             }

@@ -15,14 +15,20 @@ public class ClientSettings {
     /** Requested ELK edge routing (for example ORTHOGONAL/POLYLINE/SPLINES). */
     private String edgeRouting = "";
 
-    /** Whether association cardinality labels should be rendered. */
-    private boolean showCardinalities = true;
-
-    /** How static UML exports should render attributes and enumeration values. */
+    /** How UML diagrams should render attributes and enumeration values. */
     private UmlAttributeMode umlAttributeMode = UmlAttributeMode.OWN;
 
-    /** Whether abstract classes/structures in static UML outputs should be visually toned down. */
+    /** Whether abstract classes/structures in UML outputs should be visually toned down. */
     private boolean umlDeemphasizeAbstractTypes = true;
+
+    /** Whether association role names should be rendered in UML diagrams. */
+    private boolean umlShowAssociationNames = true;
+
+    /** Whether association role cardinalities should be rendered in UML diagrams. */
+    private boolean umlShowRoleCardinalities = true;
+
+    /** Whether values of inline enumerations declared directly on attributes should be rendered. */
+    private boolean umlShowLocalEnumerationValues = true;
 
     /** Parsed, trimmed list (derived from modelRepositories). */
     public List<String> getModelRepositoriesList() {
@@ -57,12 +63,28 @@ public class ClientSettings {
         this.edgeRouting = edgeRouting != null ? edgeRouting.trim() : "";
     }
 
-    public boolean isShowCardinalities() {
-        return showCardinalities;
+    public boolean isUmlShowAssociationNames() {
+        return umlShowAssociationNames;
     }
 
-    public void setShowCardinalities(boolean showCardinalities) {
-        this.showCardinalities = showCardinalities;
+    public void setUmlShowAssociationNames(boolean showAssociationNames) {
+        this.umlShowAssociationNames = showAssociationNames;
+    }
+
+    public boolean isUmlShowRoleCardinalities() {
+        return umlShowRoleCardinalities;
+    }
+
+    public void setUmlShowRoleCardinalities(boolean showRoleCardinalities) {
+        this.umlShowRoleCardinalities = showRoleCardinalities;
+    }
+
+    public boolean isUmlShowLocalEnumerationValues() {
+        return umlShowLocalEnumerationValues;
+    }
+
+    public void setUmlShowLocalEnumerationValues(boolean showLocalEnumerationValues) {
+        this.umlShowLocalEnumerationValues = showLocalEnumerationValues;
     }
 
     public UmlAttributeMode getUmlAttributeMode() {
@@ -85,9 +107,11 @@ public class ClientSettings {
         return "ClientSettings{modelRepositories='" + modelRepositories
                 + "', suppressRepositoryLogs=" + suppressRepositoryLogs
                 + ", edgeRouting='" + edgeRouting + '\''
-                + ", showCardinalities=" + showCardinalities
                 + ", umlAttributeMode=" + umlAttributeMode
                 + ", umlDeemphasizeAbstractTypes=" + umlDeemphasizeAbstractTypes
+                + ", umlShowAssociationNames=" + umlShowAssociationNames
+                + ", umlShowRoleCardinalities=" + umlShowRoleCardinalities
+                + ", umlShowLocalEnumerationValues=" + umlShowLocalEnumerationValues
                 + '}';
     }
 
@@ -138,14 +162,6 @@ public class ClientSettings {
             target.setEdgeRouting(edgeRouting);
         }
 
-        Boolean showCardinalities = asBoolean(firstNonNull(
-                readMapPath(section, "diagram", "showCardinalities"),
-                readMapPath(section, "diagram.showCardinalities"),
-                top.get("interlisLsp.diagram.showCardinalities")));
-        if (showCardinalities != null) {
-            target.setShowCardinalities(showCardinalities);
-        }
-
         String umlAttributeMode = asString(firstNonNull(
                 readMapPath(section, "uml", "attributeMode"),
                 readMapPath(section, "uml.attributeMode"),
@@ -160,6 +176,30 @@ public class ClientSettings {
                 top.get("interlisLsp.uml.deemphasizeAbstractTypes")));
         if (umlDeemphasizeAbstractTypes != null) {
             target.setUmlDeemphasizeAbstractTypes(umlDeemphasizeAbstractTypes);
+        }
+
+        Boolean showAssociationNames = asBoolean(firstNonNull(
+                readMapPath(section, "uml", "showAssociationNames"),
+                readMapPath(section, "uml.showAssociationNames"),
+                top.get("interlisLsp.uml.showAssociationNames")));
+        if (showAssociationNames != null) {
+            target.setUmlShowAssociationNames(showAssociationNames);
+        }
+
+        Boolean showRoleCardinalities = asBoolean(firstNonNull(
+                readMapPath(section, "uml", "showRoleCardinalities"),
+                readMapPath(section, "uml.showRoleCardinalities"),
+                top.get("interlisLsp.uml.showRoleCardinalities")));
+        if (showRoleCardinalities != null) {
+            target.setUmlShowRoleCardinalities(showRoleCardinalities);
+        }
+
+        Boolean showLocalEnumerationValues = asBoolean(firstNonNull(
+                readMapPath(section, "uml", "showLocalEnumerationValues"),
+                readMapPath(section, "uml.showLocalEnumerationValues"),
+                top.get("interlisLsp.uml.showLocalEnumerationValues")));
+        if (showLocalEnumerationValues != null) {
+            target.setUmlShowLocalEnumerationValues(showLocalEnumerationValues);
         }
     }
 
@@ -188,14 +228,6 @@ public class ClientSettings {
             target.setEdgeRouting(edgeRouting);
         }
 
-        Boolean showCardinalities = asBoolean(firstNonNull(
-                readJsonPath(section, "diagram", "showCardinalities"),
-                readJsonPath(section, "diagram.showCardinalities"),
-                top.get("interlisLsp.diagram.showCardinalities")));
-        if (showCardinalities != null) {
-            target.setShowCardinalities(showCardinalities);
-        }
-
         String umlAttributeMode = asString(firstNonNull(
                 readJsonPath(section, "uml", "attributeMode"),
                 readJsonPath(section, "uml.attributeMode"),
@@ -210,6 +242,30 @@ public class ClientSettings {
                 top.get("interlisLsp.uml.deemphasizeAbstractTypes")));
         if (umlDeemphasizeAbstractTypes != null) {
             target.setUmlDeemphasizeAbstractTypes(umlDeemphasizeAbstractTypes);
+        }
+
+        Boolean showAssociationNames = asBoolean(firstNonNull(
+                readJsonPath(section, "uml", "showAssociationNames"),
+                readJsonPath(section, "uml.showAssociationNames"),
+                top.get("interlisLsp.uml.showAssociationNames")));
+        if (showAssociationNames != null) {
+            target.setUmlShowAssociationNames(showAssociationNames);
+        }
+
+        Boolean showRoleCardinalities = asBoolean(firstNonNull(
+                readJsonPath(section, "uml", "showRoleCardinalities"),
+                readJsonPath(section, "uml.showRoleCardinalities"),
+                top.get("interlisLsp.uml.showRoleCardinalities")));
+        if (showRoleCardinalities != null) {
+            target.setUmlShowRoleCardinalities(showRoleCardinalities);
+        }
+
+        Boolean showLocalEnumerationValues = asBoolean(firstNonNull(
+                readJsonPath(section, "uml", "showLocalEnumerationValues"),
+                readJsonPath(section, "uml.showLocalEnumerationValues"),
+                top.get("interlisLsp.uml.showLocalEnumerationValues")));
+        if (showLocalEnumerationValues != null) {
+            target.setUmlShowLocalEnumerationValues(showLocalEnumerationValues);
         }
     }
 
