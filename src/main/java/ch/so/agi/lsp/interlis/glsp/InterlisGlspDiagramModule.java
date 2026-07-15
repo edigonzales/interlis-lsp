@@ -4,6 +4,7 @@ import org.eclipse.glsp.server.di.MultiBinding;
 import org.eclipse.glsp.server.diagram.DiagramConfiguration;
 import org.eclipse.glsp.server.features.core.model.GModelFactory;
 import org.eclipse.glsp.server.features.core.model.SourceModelStorage;
+import org.eclipse.glsp.server.features.navigation.NavigationTargetProvider;
 import org.eclipse.glsp.server.gmodel.GModelDiagramModule;
 import org.eclipse.glsp.server.layout.LayoutEngine;
 import org.eclipse.glsp.server.operations.LayoutOperationHandler;
@@ -38,5 +39,10 @@ public class InterlisGlspDiagramModule extends GModelDiagramModule {
     @Override
     protected void configureOperationHandlers(MultiBinding<OperationHandler<?>> operationHandlers) {
         operationHandlers.add(LayoutOperationHandler.class);
+    }
+
+    @Override
+    protected void configureNavigationTargetProviders(MultiBinding<NavigationTargetProvider> providers) {
+        providers.add(InterlisGlspNavigationTargetProvider.class);
     }
 }

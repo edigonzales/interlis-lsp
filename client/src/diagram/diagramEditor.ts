@@ -4,6 +4,7 @@ import { ClientState, type GLSPClient, RequestModelAction, TriggerLayoutAction }
 import { GlspEditorProvider, GlspVscodeConnector, SocketGlspVscodeServer } from "@eclipse-glsp/vscode-integration/node";
 import { LanguageClient } from "vscode-languageclient/node";
 import { ReloadableWebviewEndpoint } from "./reloadableWebviewEndpoint";
+import { reuseOpenTextEditorColumn } from "./textNavigation";
 
 export const DIAGRAM_EDITOR_VIEW_TYPE = "interlis.diagramEditor";
 const GLSP_ENDPOINT_REQUEST = "interlis/glspEndpoint";
@@ -222,7 +223,10 @@ export async function registerInterlisDiagramEditor(context: vscode.ExtensionCon
 
     glspConnector = new GlspVscodeConnector({
       server: glspServer,
-      logging: false
+      logging: false,
+      onBeforeReceiveMessageFromClient: (message, callback) => {
+        callback(reuseOpenTextEditorColumn(message));
+      }
     });
 
     const provider = new InterlisGlspEditorProvider(glspConnector, context.extensionUri, diagramType);

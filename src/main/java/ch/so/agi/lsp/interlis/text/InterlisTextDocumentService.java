@@ -25,6 +25,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
 
@@ -352,6 +353,10 @@ public class InterlisTextDocumentService implements TextDocumentService {
 
     public boolean isDocumentDirty(String uriOrPath) {
         return documents.isDirty(toDocumentUriIfPossible(uriOrPath));
+    }
+
+    public Optional<Location> findDeclaration(String sourceUri, String qualifiedName) {
+        return definitionFinder.findDeclaration(sourceUri, qualifiedName);
     }
 
     public Ili2cUtil.CompilationOutcome getLastSuccessfulCompilation(String uriOrPath) {

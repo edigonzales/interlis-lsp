@@ -41,6 +41,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiFunction;
 
@@ -127,6 +128,44 @@ final class InterlisSymbolQueryEngine {
                 qualifiedName,
                 ResolvedSymbol.collectSpellings(qualifiedName, targetSymbol.name()));
         return new ResolvedTarget(uri, resolved, td);
+    }
+
+    Optional<Location> findDeclaration(String sourceUri, String qualifiedName) {
+        if (sourceUri == null || sourceUri.isBlank() || qualifiedName == null || qualifiedName.isBlank()) {
+            return Optional.empty();
+        }
+
+        String documentUri = InterlisTextDocumentService.toDocumentUriIfPossible(sourceUri);
+        if (documents != null && documents.isDirty(documentUri)) {
+            return Optional.empty();
+        }
+
+        String pathOrUri = InterlisTextDocumentService.toFilesystemPathIfPossible(sourceUri);
+        Ili2cUtil.CompilationOutcome outcome = getOrCompile(pathOrUri, server.getClientSettings());
+        TransferDescription td = outcome != null ? outcome.getTransferDescription() : null;
+        Element element = InterlisNameResolver.resolveElement(td, qualifiedName);
+        if (element == null) {
+            return Optional.empty();
+        }
+        String resolvedQualifiedName = safeScopedName(element);
+        if (qualifiedName.indexOf('.') >= 0
+                && !LiveSymbolResolver.sameQualifiedName(qualifiedName, resolvedQualifiedName)) {
+            return Optional.empty();
+        }
+
+        String targetUri = elementUri(element);
+        if (!isLocalReadableFile(targetUri)) {
+            return Optional.empty();
+        }
+        if (documents != null && documents.isDirty(targetUri)) {
+            return Optional.empty();
+        }
+
+        LiveSymbol targetSymbol = findOrCreateSymbol(targetUri, safeScopedName(element), element);
+        if (targetSymbol == null || targetSymbol.nameRange() == null) {
+            return Optional.empty();
+        }
+        return Optional.of(new Location(targetUri, targetSymbol.nameRange()));
     }
 
     List<SymbolOccurrence> findOccurrences(ResolvedTarget target, boolean includeDeclaration) {
@@ -550,6 +589,20 @@ final class InterlisSymbolQueryEngine {
             }
             LOG.warn("Failed to read {}", uri, ex);
             return null;
+        }
+    }
+
+    private boolean isLocalReadableFile(String uri) {
+        if (uri == null || uri.isBlank()) {
+            return false;
+        }
+        try {
+            URI parsed = URI.create(uri);
+            return "file".equalsIgnoreCase(parsed.getScheme())
+                    && Files.isRegularFile(Paths.get(parsed))
+                    && Files.isReadable(Paths.get(parsed));
+        } catch (Exception ex) {
+            return false;
         }
     }
 

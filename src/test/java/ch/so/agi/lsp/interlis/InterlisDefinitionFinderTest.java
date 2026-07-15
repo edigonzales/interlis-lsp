@@ -154,6 +154,68 @@ class InterlisDefinitionFinderTest {
     }
 
     @Test
+    void findDeclarationUsesDiagramFqnAndStopsWhileSourceIsDirty(@TempDir Path tempDir) throws Exception {
+        Path repositoryDir = Files.createDirectories(tempDir.resolve("models"));
+        Path importedModel = repositoryDir.resolve("BaseModel.ili");
+        String baseModelContent = """
+                INTERLIS 2.3;
+                MODEL BaseModel (en) AT "http://example.org" VERSION "2024-01-01" =
+                  TOPIC BaseTopic =
+                    CLASS Example =
+                    END Example;
+                  END BaseTopic;
+                END BaseModel.
+                """.stripIndent();
+        Files.writeString(importedModel, baseModelContent);
+
+        Path sourceFile = repositoryDir.resolve("UsingModel.ili");
+        String sourceContent = """
+                INTERLIS 2.3;
+                MODEL UsingModel (en) AT "http://example.org" VERSION "2024-01-01" =
+                  IMPORTS BaseModel;
+                  TOPIC UsingTopic =
+                  END UsingTopic;
+                END UsingModel.
+                """.stripIndent();
+        Files.writeString(sourceFile, sourceContent);
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        ClientSettings settings = new ClientSettings();
+        settings.setModelRepositories(repositoryDir.toAbsolutePath().toString());
+        server.setClientSettings(settings);
+
+        DocumentTracker tracker = new DocumentTracker();
+        String sourceUri = sourceFile.toUri().toString();
+        tracker.open(new TextDocumentItem(sourceUri, "interlis", 1, sourceContent));
+
+        CompilationCache cache = new CompilationCache();
+        Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compile(settings, sourceFile.toString());
+        assertNotNull(outcome.getTransferDescription(), outcome.getLogText());
+        cache.putSavedAttempt(sourceFile.toString(), outcome);
+        cache.putSuccessful(sourceFile.toString(), outcome);
+
+        InterlisDefinitionFinder finder = new InterlisDefinitionFinder(server, tracker, cache);
+        Location expected = new Location(
+                importedModel.toUri().toString(),
+                new org.eclipse.lsp4j.Range(
+                        DocumentTracker.positionAt(baseModelContent, baseModelContent.indexOf("Example =")),
+                        DocumentTracker.positionAt(baseModelContent, baseModelContent.indexOf("Example =") + "Example".length())));
+
+        assertEquals(expected, finder.findDeclaration(sourceUri, "BaseModel.BaseTopic.Example").orElseThrow());
+        assertTrue(finder.findDeclaration(sourceUri, "BaseModel.DoesNotExist").isEmpty());
+        assertTrue(finder.findDeclaration(sourceUri, "BaseModel.UsingTopic").isEmpty(),
+                "A mismatching qualified name must not fall back to a simple-name match");
+
+        tracker.applyChanges(
+                new org.eclipse.lsp4j.VersionedTextDocumentIdentifier(sourceUri, 2),
+                List.of(new org.eclipse.lsp4j.TextDocumentContentChangeEvent(null, sourceContent + "\n")));
+        assertTrue(finder.findDeclaration(sourceUri, "BaseModel.BaseTopic.Example").isEmpty());
+
+        tracker.markSaved(sourceUri);
+        assertEquals(expected, finder.findDeclaration(sourceUri, "BaseModel.BaseTopic.Example").orElseThrow());
+    }
+
+    @Test
     void returnsEmptyWhenModelCannotBeResolved(@TempDir Path tempDir) throws Exception {
         Path repositoryDir = Files.createDirectories(tempDir.resolve("models"));
 

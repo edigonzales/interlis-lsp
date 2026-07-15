@@ -12,6 +12,7 @@ import org.eclipse.lsp4j.jsonrpc.messages.Either;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.BiFunction;
 
 public final class InterlisDefinitionFinder {
@@ -47,5 +48,9 @@ public final class InterlisDefinitionFinder {
         }
         Location location = new Location(target.symbol().uri(), target.symbol().nameRange());
         return Either.forLeft(List.of(location));
+    }
+
+    public Optional<Location> findDeclaration(String sourceUri, String qualifiedName) {
+        return queryEngine.findDeclaration(sourceUri, qualifiedName);
     }
 }
