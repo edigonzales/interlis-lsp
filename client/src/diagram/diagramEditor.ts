@@ -1,10 +1,19 @@
 import * as path from "path";
 import * as vscode from "vscode";
-import { ClientState, type GLSPClient, RequestModelAction, TriggerLayoutAction } from "@eclipse-glsp/protocol";
+import {
+  ActionMessage,
+  ClientState,
+  ExportSvgAction,
+  RequestExportSvgAction,
+  type GLSPClient,
+  RequestModelAction,
+  TriggerLayoutAction
+} from "@eclipse-glsp/protocol";
 import { GlspEditorProvider, GlspVscodeConnector, SocketGlspVscodeServer } from "@eclipse-glsp/vscode-integration/node";
 import { LanguageClient } from "vscode-languageclient/node";
 import { ReloadableWebviewEndpoint } from "./reloadableWebviewEndpoint";
 import { reuseOpenTextEditorColumn } from "./textNavigation";
+import { ensureInkscapeNamespace, ensureWhiteSvgBackground } from "./svgExport";
 
 export const DIAGRAM_EDITOR_VIEW_TYPE = "interlis.diagramEditor";
 const GLSP_ENDPOINT_REQUEST = "interlis/glspEndpoint";
@@ -34,6 +43,20 @@ type DiagramLoadFailedMessage = {
   detail?: string;
   reason?: DiagramLoadFailureReason;
 };
+type DiagramSvgExportedMessage = {
+  type: "interlis:svgExported";
+  clientId?: string;
+  sourceUri?: string;
+  scope: "viewport";
+  svg?: string;
+};
+type DiagramSvgExportFailedMessage = {
+  type: "interlis:svgExportFailed";
+  clientId?: string;
+  sourceUri?: string;
+  scope: "viewport";
+  message?: string;
+};
 type DiagramStatusKind = "warning" | "error";
 type DiagramStatusCommand = {
   type: "interlis:diagramStatus";
@@ -47,6 +70,10 @@ type DiagramRecoverCommand = {
   attempt: number;
   reason?: DiagramLoadFailureReason;
 };
+type DiagramViewportExportCommand = {
+  type: "interlis:exportSvgViewport";
+};
+type SvgExportScope = "full" | "visible";
 
 type GlspEndpoint = {
   protocol?: string;
@@ -225,6 +252,11 @@ export async function registerInterlisDiagramEditor(context: vscode.ExtensionCon
       server: glspServer,
       logging: false,
       onBeforeReceiveMessageFromClient: (message, callback) => {
+        if (isExportSvgActionMessage(message)) {
+          void handleFullSvgExportAction(message);
+          callback(undefined, false);
+          return;
+        }
         callback(reuseOpenTextEditorColumn(message));
       }
     });
@@ -308,6 +340,39 @@ export function registerInterlisDiagramCommands(context: vscode.ExtensionContext
       }
 
       glspConnector.dispatchAction(TriggerLayoutAction.create());
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("interlis.diagram.exportSvg", () => {
+      const activeClient = getReadyActiveDiagramClient();
+      if (!activeClient || !glspConnector) {
+        return;
+      }
+
+      glspConnector.dispatchAction(
+        RequestExportSvgAction.create(),
+        activeClient.clientId
+      );
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("interlis.diagram.exportSvgViewport", () => {
+      const activeClient = getReadyActiveDiagramClient();
+      if (!activeClient) {
+        return;
+      }
+
+      void activeClient.panel.webview.postMessage({
+        type: "interlis:exportSvgViewport"
+      } satisfies DiagramViewportExportCommand).then(delivered => {
+        if (!delivered) {
+          vscode.window.showErrorMessage("The INTERLIS diagram webview is no longer available.");
+        }
+      }, error => {
+        vscode.window.showErrorMessage(`Failed to request SVG export: ${error instanceof Error ? error.message : String(error)}`);
+      });
     })
   );
 }
@@ -423,7 +488,22 @@ function handleDiagramPanelMessage(message: unknown): void {
   }
   if (isDiagramLoadFailedMessage(message)) {
     handleDiagramLoadFailedMessage(message);
+    return;
   }
+  if (isDiagramSvgExportedMessage(message)) {
+    if (message.scope === "viewport") {
+      void saveSvgExport(message.svg, "visible", message.clientId, message.sourceUri);
+    }
+    return;
+  }
+  if (isDiagramSvgExportFailedMessage(message)) {
+    const detail = message.message?.trim() || "The visible diagram could not be exported as SVG.";
+    vscode.window.showWarningMessage(detail);
+  }
+}
+
+async function handleFullSvgExportAction(message: ActionMessage<ExportSvgAction>): Promise<void> {
+  await saveSvgExport(message.action.svg, "full", message.clientId);
 }
 
 function handleDiagramReadyMessage(message: DiagramReadyMessage): void {
@@ -634,6 +714,11 @@ function resolveDiagramMessageUri(clientId: string | undefined, sourceUri: strin
   }
 }
 
+function resolveDiagramSourceUriForClient(clientId: string | undefined, sourceUri: string | undefined): vscode.Uri | undefined {
+  const clientUri = clientId ? getConnectorClientMap()?.get(clientId)?.document?.uri : undefined;
+  return clientUri ?? resolveDiagramMessageUri(clientId, sourceUri);
+}
+
 function isDiagramReadyMessage(message: unknown): message is DiagramReadyMessage {
   return typeof message === "object"
     && message !== null
@@ -644,6 +729,79 @@ function isDiagramLoadFailedMessage(message: unknown): message is DiagramLoadFai
   return typeof message === "object"
     && message !== null
     && (message as DiagramLoadFailedMessage).type === "interlis:diagramLoadFailed";
+}
+
+function isDiagramSvgExportedMessage(message: unknown): message is DiagramSvgExportedMessage {
+  return typeof message === "object"
+    && message !== null
+    && (message as DiagramSvgExportedMessage).type === "interlis:svgExported";
+}
+
+function isDiagramSvgExportFailedMessage(message: unknown): message is DiagramSvgExportFailedMessage {
+  return typeof message === "object"
+    && message !== null
+    && (message as DiagramSvgExportFailedMessage).type === "interlis:svgExportFailed";
+}
+
+function isExportSvgActionMessage(message: unknown): message is ActionMessage<ExportSvgAction> {
+  return ActionMessage.is(message, ExportSvgAction.is);
+}
+
+async function saveSvgExport(
+  svg: string | undefined,
+  scope: SvgExportScope,
+  clientId?: string,
+  sourceUri?: string
+): Promise<void> {
+  const serializedSvg = typeof svg === "string" ? svg.trim() : undefined;
+  if (!serializedSvg || !/<svg\b[^>]*>/i.test(serializedSvg)) {
+    vscode.window.showErrorMessage("The INTERLIS GLSP diagram did not produce a valid SVG export.");
+    return;
+  }
+
+  const source = resolveDiagramSourceUriForClient(clientId, sourceUri);
+  const sourcePath = source?.scheme === "file" ? source.fsPath : source?.path;
+  const sourceBaseName = sourcePath
+    ? path.basename(sourcePath, path.extname(sourcePath))
+    : "Model";
+  const baseName = sourceBaseName || "Model";
+  const filename = `${baseName}${scope === "visible" ? "-visible" : ""}.svg`;
+  const defaultUri = source?.scheme === "file"
+    ? vscode.Uri.file(path.join(path.dirname(source.fsPath), filename))
+    : undefined;
+
+  let target: vscode.Uri | undefined;
+  try {
+    const saveOptions: vscode.SaveDialogOptions = {
+      filters: { SVG: ["svg"] },
+      saveLabel: scope === "visible" ? "Export visible INTERLIS diagram" : "Export INTERLIS diagram",
+      title: scope === "visible" ? "Export visible GLSP diagram as SVG" : "Export GLSP diagram as SVG"
+    };
+    if (defaultUri) {
+      saveOptions.defaultUri = defaultUri;
+    }
+    target = await vscode.window.showSaveDialog(saveOptions);
+  } catch (error: unknown) {
+    vscode.window.showErrorMessage(`Could not open the SVG save dialog: ${formatError(error)}`);
+    return;
+  }
+
+  if (!target) {
+    return;
+  }
+
+  try {
+    const content = ensureInkscapeNamespace(ensureWhiteSvgBackground(serializedSvg));
+    await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(content));
+    const location = target.scheme === "file" ? ` to ${target.fsPath}` : "";
+    vscode.window.showInformationMessage(`INTERLIS GLSP diagram SVG saved${location}.`);
+  } catch (error: unknown) {
+    vscode.window.showErrorMessage(`Could not save the SVG export: ${formatError(error)}`);
+  }
+}
+
+function formatError(error: unknown): string {
+  return error instanceof Error && error.message ? error.message : String(error);
 }
 
 function sendKickLayoutMessage(client: ConnectorClientLike): void {
@@ -825,6 +983,56 @@ function findDiagramPanelByClientId(clientId: string): vscode.WebviewPanel | und
   const clientMap = getConnectorClientMap();
   const client = clientMap?.get(clientId);
   return client?.webviewEndpoint?.webviewPanel;
+}
+
+type ActiveDiagramClient = {
+  clientId: string;
+  client: ConnectorClientLike;
+  panel: vscode.WebviewPanel;
+};
+
+function getReadyActiveDiagramClient(): ActiveDiagramClient | undefined {
+  if (!glspConnector) {
+    vscode.window.showWarningMessage("INTERLIS diagram editor is not ready.");
+    return undefined;
+  }
+
+  const clientMap = getConnectorClientMap();
+  if (!clientMap) {
+    vscode.window.showWarningMessage("Open an INTERLIS diagram editor tab first.");
+    return undefined;
+  }
+
+  const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
+  const activeCustomUri = activeTab?.input instanceof vscode.TabInputCustom
+    && activeTab.input.viewType === DIAGRAM_EDITOR_VIEW_TYPE
+    ? activeTab.input.uri.toString()
+    : undefined;
+
+  const clients = Array.from(clientMap.entries())
+    .map(([clientId, client]) => ({
+      clientId,
+      client,
+      panel: client.webviewEndpoint?.webviewPanel
+    }))
+    .filter((entry): entry is ActiveDiagramClient => !!entry.panel);
+
+  const activeClient = (activeCustomUri
+    ? clients.find(entry => entry.client.document?.uri?.toString() === activeCustomUri && entry.panel.visible)
+    : undefined)
+    ?? clients.find(entry => entry.panel.active);
+
+  if (!activeClient) {
+    vscode.window.showWarningMessage("Open an INTERLIS diagram editor tab first.");
+    return undefined;
+  }
+
+  if (!readyDiagramClientIds.has(activeClient.clientId)) {
+    vscode.window.showWarningMessage("The INTERLIS diagram is not ready yet. Save the file or refresh the diagram.");
+    return undefined;
+  }
+
+  return activeClient;
 }
 
 function updateDiagramCompileStatus(uri: vscode.Uri, success: boolean, blankSource: boolean): void {

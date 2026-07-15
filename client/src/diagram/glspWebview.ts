@@ -25,6 +25,7 @@ import {
 import { Container, ContainerModule, injectable } from "inversify";
 import { initializeViewportStateApi, interlisViewportPersistenceModule } from "./viewportPersistence";
 import { interlisSourceNavigationModule } from "./sourceNavigation";
+import { serializeVisibleSvg } from "./svgExport";
 
 const DIAGRAM_LOAD_WARNING_DELAY_MS = 2500;
 const MODEL_SWITCH_RETRY_DELAY_MS = 40;
@@ -46,7 +47,25 @@ type DiagramLoadFailedHostMessage = {
   detail?: string;
   reason: DiagramLoadFailureReason;
 };
-type DiagramHostMessage = DiagramReadyHostMessage | DiagramLoadFailedHostMessage;
+type DiagramSvgExportedHostMessage = {
+  type: "interlis:svgExported";
+  clientId: string;
+  sourceUri?: string;
+  scope: "viewport";
+  svg: string;
+};
+type DiagramSvgExportFailedHostMessage = {
+  type: "interlis:svgExportFailed";
+  clientId: string;
+  sourceUri?: string;
+  scope: "viewport";
+  message: string;
+};
+type DiagramHostMessage =
+  | DiagramReadyHostMessage
+  | DiagramLoadFailedHostMessage
+  | DiagramSvgExportedHostMessage
+  | DiagramSvgExportFailedHostMessage;
 type DiagramStatusCommand = {
   type: "interlis:diagramStatus";
   clear?: boolean;
@@ -59,7 +78,10 @@ type DiagramRecoverCommand = {
   attempt: number;
   reason?: DiagramLoadFailureReason;
 };
-type DiagramWebviewCommand = DiagramStatusCommand | DiagramRecoverCommand;
+type DiagramSvgExportViewportCommand = {
+  type: "interlis:exportSvgViewport";
+};
+type DiagramWebviewCommand = DiagramStatusCommand | DiagramRecoverCommand | DiagramSvgExportViewportCommand;
 type VsCodeApi = {
   postMessage(message: unknown): void;
   getState?(): unknown;
@@ -69,6 +91,7 @@ type VsCodeApi = {
 let hostBridge: VsCodeApi | undefined;
 let activeDiagramWidget: InterlisDiagramWidget | undefined;
 let hostCommandHandlersInstalled = false;
+let activeDiagramClientId: string | undefined;
 
 function initializeHostBridge(vscode: VsCodeApi | undefined): void {
   hostBridge = vscode;
@@ -101,6 +124,24 @@ function installHostCommandHandlers(): void {
 class InterlisEdgeView extends GEdgeView {
   private static readonly INHERITANCE_ARROW_LENGTH = 14;
   private static readonly INHERITANCE_ARROW_WIDTH = 12;
+
+  protected override renderLine(edge: GEdge, segments: any[], _context: any): any {
+    const pathId = `${this.domId(edge.id)}_connector`;
+    const attributes: Record<string, unknown> = {
+      id: pathId,
+      d: this.createPathForSegments(segments)
+    };
+
+    const sourceId = this.connectionDomId(edge.sourceId, edge.source);
+    const targetId = this.connectionDomId(edge.targetId, edge.target);
+    if (sourceId && targetId) {
+      attributes["inkscape:connector-type"] = this.isOrthogonalRoute(segments) ? "orthogonal" : "polyline";
+      attributes["inkscape:connection-start"] = `#${sourceId}`;
+      attributes["inkscape:connection-end"] = `#${targetId}`;
+    }
+
+    return svg("path", attributes);
+  }
 
   protected override renderAdditionals(edge: any, segments: any[], context: any): any[] {
     const additionals = [...super.renderAdditionals(edge, segments, context)];
@@ -141,6 +182,32 @@ class InterlisEdgeView extends GEdgeView {
   private isInheritanceEdge(edge: any): boolean {
     const cssClasses = edge?.cssClasses;
     return Array.isArray(cssClasses) && cssClasses.includes("interlis-edge-inheritance");
+  }
+
+  private connectionDomId(modelId: string | undefined, modelElement: unknown): string | undefined {
+    if (!modelElement || !modelId || modelId.trim().length === 0) {
+      return undefined;
+    }
+    return this.domId(modelId);
+  }
+
+  private domId(modelId: string): string {
+    return activeDiagramClientId ? `${activeDiagramClientId}_${modelId}` : modelId;
+  }
+
+  private isOrthogonalRoute(segments: any[]): boolean {
+    if (!Array.isArray(segments) || segments.length < 2) {
+      return false;
+    }
+
+    for (let index = 1; index < segments.length; index++) {
+      const previous = segments[index - 1];
+      const current = segments[index];
+      if (!previous || !current || (previous.x !== current.x && previous.y !== current.y)) {
+        return false;
+      }
+    }
+    return true;
   }
 }
 
@@ -216,6 +283,45 @@ class InterlisDiagramWidget extends GLSPDiagramWidget {
     }
     if (maybeCommand.type === "interlis:diagramStatus") {
       this.applyStatusCommand(maybeCommand as DiagramStatusCommand);
+      return;
+    }
+    if (maybeCommand.type === "interlis:exportSvgViewport") {
+      this.exportVisibleSvg();
+    }
+  }
+
+  private exportVisibleSvg(): void {
+    const graph = this.containerDiv?.querySelector("svg.sprotty-graph");
+    if (!(graph instanceof SVGSVGElement) || !this.hasRenderedGraph()) {
+      postHostMessage({
+        type: "interlis:svgExportFailed",
+        clientId: this.clientId,
+        sourceUri: this.diagramOptions.sourceUri,
+        scope: "viewport",
+        message: "The diagram has not finished rendering yet."
+      });
+      return;
+    }
+
+    try {
+      postHostMessage({
+        type: "interlis:svgExported",
+        clientId: this.clientId,
+        sourceUri: this.diagramOptions.sourceUri,
+        scope: "viewport",
+        svg: serializeVisibleSvg(graph)
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error && error.message
+        ? error.message
+        : "The visible diagram could not be serialized as SVG.";
+      postHostMessage({
+        type: "interlis:svgExportFailed",
+        clientId: this.clientId,
+        sourceUri: this.diagramOptions.sourceUri,
+        scope: "viewport",
+        message
+      });
     }
   }
 
@@ -532,6 +638,7 @@ class InterlisGlspWebviewStarter extends GLSPStarter {
   }
 
   protected override createDiagramOptionsModule(identifier: GLSPDiagramIdentifier): ContainerModule {
+    activeDiagramClientId = identifier.clientId;
     const glspClient = new WebviewGlspClient({ id: identifier.diagramType, messenger: this.messenger });
     return createDiagramOptionsModule(
       {

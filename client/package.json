@@ -34,7 +34,9 @@
     "onCommand:interlis.template.new",
     "onCommand:interlis.diagram.open",
     "onCommand:interlis.diagram.autoLayout",
-    "onCommand:interlis.diagram.refresh"
+    "onCommand:interlis.diagram.refresh",
+    "onCommand:interlis.diagram.exportSvg",
+    "onCommand:interlis.diagram.exportSvgViewport"
   ],
   "contributes": {
     "languages": [
@@ -90,6 +92,14 @@
       {
         "command": "interlis.diagram.refresh",
         "title": "INTERLIS: Force refresh active diagram"
+      },
+      {
+        "command": "interlis.diagram.exportSvg",
+        "title": "INTERLIS: Export GLSP diagram as SVG"
+      },
+      {
+        "command": "interlis.diagram.exportSvgViewport",
+        "title": "INTERLIS: Export visible GLSP diagram as SVG"
       },
       {
         "command": "interlis.uml.show",
