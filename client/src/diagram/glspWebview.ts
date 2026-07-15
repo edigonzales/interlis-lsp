@@ -522,9 +522,11 @@ class InterlisGlspWebviewStarter extends GLSPStarter {
   constructor() {
     super();
     initializeHostBridge((this.messenger as unknown as { vscode?: VsCodeApi }).vscode);
+    console.info("INTERLIS GLSP: webview booted");
   }
 
   protected override acceptDiagramIdentifier(identifier: GLSPDiagramIdentifier): void {
+    console.info("INTERLIS GLSP: identifier received", identifier);
     this.acceptDiagramIdentifierWithRetry(identifier, 0);
   }
 

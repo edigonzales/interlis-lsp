@@ -3,6 +3,7 @@ import * as vscode from "vscode";
 import { ClientState, type GLSPClient, RequestModelAction, TriggerLayoutAction } from "@eclipse-glsp/protocol";
 import { GlspEditorProvider, GlspVscodeConnector, SocketGlspVscodeServer } from "@eclipse-glsp/vscode-integration/node";
 import { LanguageClient } from "vscode-languageclient/node";
+import { ReloadableWebviewEndpoint } from "./reloadableWebviewEndpoint";
 
 export const DIAGRAM_EDITOR_VIEW_TYPE = "interlis.diagramEditor";
 const GLSP_ENDPOINT_REQUEST = "interlis/glspEndpoint";
@@ -81,6 +82,7 @@ export function setDiagramDebugLogger(logger: DiagramDebugLogger): void {
 
 class InterlisGlspEditorProvider extends GlspEditorProvider {
   override diagramType: string;
+  private diagramViewCount = 0;
 
   constructor(
     connector: GlspVscodeConnector,
@@ -89,6 +91,48 @@ class InterlisGlspEditorProvider extends GlspEditorProvider {
   ) {
     super(connector);
     this.diagramType = diagramType;
+  }
+
+  override async resolveCustomEditor(
+    document: vscode.CustomDocument,
+    webviewPanel: vscode.WebviewPanel,
+    token: vscode.CancellationToken
+  ): Promise<void> {
+    const diagramIdentifier = {
+      diagramType: this.diagramType,
+      uri: serializeDiagramUri(document.uri),
+      clientId: `${this.diagramType}_${this.diagramViewCount++}`
+    };
+
+    const endpoint = new ReloadableWebviewEndpoint(
+      {
+        diagramIdentifier,
+        messenger: this.glspVscodeConnector.messenger,
+        webviewPanel
+      },
+      {
+        onWebviewReady: () => {
+          markDiagramClientNotReady(diagramIdentifier.clientId, document.uri, "webview-ready");
+          logDiagramDebug(
+            `DIAGRAM_WEBVIEW status=ready clientId=${diagramIdentifier.clientId} uri=${document.uri.toString()}`
+          );
+        },
+        onIdentifierSent: phase => {
+          logDiagramDebug(
+            `DIAGRAM_HANDSHAKE status=identifier-sent phase=${phase} clientId=${diagramIdentifier.clientId} uri=${document.uri.toString()}`
+          );
+        }
+      }
+    );
+
+    void this.glspVscodeConnector.registerClient({
+      clientId: diagramIdentifier.clientId,
+      diagramType: diagramIdentifier.diagramType,
+      document,
+      webviewEndpoint: endpoint
+    });
+
+    this.setUpWebview(document, webviewPanel, token, diagramIdentifier.clientId);
   }
 
   override setUpWebview(
@@ -128,6 +172,15 @@ class InterlisGlspEditorProvider extends GlspEditorProvider {
       }
     });
   }
+}
+
+function serializeDiagramUri(uri: vscode.Uri): string {
+  let uriString = uri.toString();
+  const match = uriString.match(/file:\/\/\/([a-z])%3A/i);
+  if (match) {
+    uriString = "file:///" + match[1] + ":" + uriString.substring(match[0].length);
+  }
+  return uriString;
 }
 
 export async function registerInterlisDiagramEditor(context: vscode.ExtensionContext, getClient: GetClient): Promise<void> {
