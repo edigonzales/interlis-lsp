@@ -146,7 +146,7 @@ The embedded GLSP UML diagram now uses server-side ELK (Layered) layout for pack
 Configured root options (see `InterlisElkLayoutEngine`):
 
 - `org.eclipse.elk.algorithm=org.eclipse.elk.layered`
-- `org.eclipse.elk.edgeRouting=<from settings>` (`ORTHOGONAL` by default)
+- `org.eclipse.elk.edgeRouting=<from settings>` (`POLYLINE` by default)
 - `org.eclipse.elk.hierarchyHandling=INCLUDE_CHILDREN`
 - `org.eclipse.elk.layered.mergeHierarchyEdges=true`
 - `org.eclipse.elk.layered.mergeEdges=true`
@@ -165,8 +165,9 @@ Package/container defaults:
 
 Routing variants (VS Code setting):
 
-- `interlisLsp.diagram.layout.edgeRouting=ORTHOGONAL|POLYLINE|SPLINES` (default: `ORTHOGONAL`)
+- `interlisLsp.diagram.layout.edgeRouting=ORTHOGONAL|POLYLINE|SPLINES` (default: `POLYLINE`)
 - Changes apply after running `INTERLIS: Auto-layout active diagram`.
+- `POLYLINE` allows diagonal or otherwise non-orthogonal straight segments, but does not guarantee one direct line between two classes. `SPLINES` remains selectable, although the current GLSP renderer represents routed points as straight SVG segments rather than Bézier curves.
 - Optional fallback if no client setting is present: `-Dinterlis.glsp.layout.edgeRouting=ORTHOGONAL|POLYLINE|SPLINES`
 
 Association labels and cardinalities:

@@ -13,6 +13,7 @@ import {
   FeatureModule,
   GEdge,
   GEdgeView,
+  TYPES,
   initializeDiagramContainer
 } from "@eclipse-glsp/client";
 import { overrideModelElement, svg } from "@eclipse-glsp/sprotty";
@@ -25,7 +26,8 @@ import {
 import { Container, ContainerModule, injectable } from "inversify";
 import { initializeViewportStateApi, interlisViewportPersistenceModule } from "./viewportPersistence";
 import { interlisSourceNavigationModule } from "./sourceNavigation";
-import { serializeVisibleSvg } from "./svgExport";
+import type { ISvgExportPostProcessor } from "sprotty/lib/features/export/svg-export-postprocessor";
+import { normalizeSemanticSvgGroups, serializeVisibleSvg } from "./svgExport";
 
 const DIAGRAM_LOAD_WARNING_DELAY_MS = 2500;
 const MODEL_SWITCH_RETRY_DELAY_MS = 40;
@@ -213,6 +215,17 @@ class InterlisEdgeView extends GEdgeView {
 
 const interlisEdgeViewModule = new FeatureModule((bind, unbind, isBound, rebind) => {
   overrideModelElement({ bind, isBound }, DefaultTypes.EDGE, GEdge, InterlisEdgeView);
+});
+
+@injectable()
+class InterlisSvgExportPostprocessor implements ISvgExportPostProcessor {
+  postUpdate(svgRoot: SVGSVGElement): void {
+    normalizeSemanticSvgGroups(svgRoot);
+  }
+}
+
+const interlisSvgExportModule = new FeatureModule(bind => {
+  bind(TYPES.ISvgExportPostprocessor).to(InterlisSvgExportPostprocessor);
 });
 
 @injectable()
@@ -658,7 +671,16 @@ class InterlisGlspWebviewStarter extends GLSPStarter {
     return initializeDiagramContainer(
       new Container(),
       ...containerConfiguration,
-      { add: [baseViewModule, interlisEdgeViewModule, interlisDiagramWidgetModule, interlisViewportPersistenceModule, interlisSourceNavigationModule] }
+      {
+        add: [
+          baseViewModule,
+          interlisEdgeViewModule,
+          interlisSvgExportModule,
+          interlisDiagramWidgetModule,
+          interlisViewportPersistenceModule,
+          interlisSourceNavigationModule
+        ]
+      }
     );
   }
 

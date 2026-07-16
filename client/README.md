@@ -65,7 +65,7 @@ END MyNewModel.
 1. Open the GLSP diagram editor for an `.ili` model.
 2. Run **INTERLIS: Export GLSP diagram as SVG** to export the complete diagram, independent of the current zoom and scroll position.
 3. Run **INTERLIS: Export visible GLSP diagram as SVG** to export only the current viewport.
-4. The save dialog suggests `Model.svg` or `Model-visible.svg` in the folder of the `.ili` file. Both exports contain a white background and Inkscape connector metadata for classes and connection lines. Association names and cardinalities remain separate text elements.
+4. The save dialog suggests `Model.svg` or `Model-visible.svg` in the folder of the `.ili` file. Both exports contain a white background and Inkscape connector metadata for classes and connection lines. The SVG uses semantic grouping: topics/containers, classes, and connections remain separately editable groups, while technical GLSP/Sprotty wrapper groups are removed. Classes can therefore be moved as a unit in Inkscape. The default GLSP layout uses `POLYLINE`, so connections may contain diagonal straight segments; `ORTHOGONAL` and `SPLINES` remain available through `interlisLsp.diagram.layout.edgeRouting`. Association names and cardinalities remain part of the connection group, but Inkscape does not automatically reposition them when it reroutes a connector.
 
 ### Example: creating a new model from a template 🧱
 1. Run **INTERLIS: New from Template** from the command palette.

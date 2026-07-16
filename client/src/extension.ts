@@ -303,7 +303,7 @@ export async function activate(context: vscode.ExtensionContext) {
       modelRepositories: cfg.get<string>("modelRepositories") ?? "",
       diagram: {
         layout: {
-          edgeRouting: cfg.get<string>("diagram.layout.edgeRouting") ?? "ORTHOGONAL"
+          edgeRouting: cfg.get<string>("diagram.layout.edgeRouting") ?? "POLYLINE"
         }
       },
       uml: {

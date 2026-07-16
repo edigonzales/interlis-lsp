@@ -2,6 +2,7 @@ const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const XMLNS_NAMESPACE = "http://www.w3.org/2000/xmlns/";
 const INKSCAPE_NAMESPACE = "http://www.inkscape.org/namespaces/inkscape";
 const EXPORT_BACKGROUND_MARKER = "data-interlis-export-background";
+const IDENTITY_EPSILON = 0.000001;
 
 const ROOT_LAYOUT_PROPERTIES = new Set([
   "width",
@@ -44,11 +45,26 @@ export function serializeVisibleSvg(source: SVGSVGElement): string {
   clone.setAttribute("height", String(height));
 
   copyComputedStyles(source, clone);
+  normalizeSemanticSvgGroups(clone);
   clone.style.setProperty("width", `${width}px`);
   clone.style.setProperty("height", `${height}px`);
   clone.style.setProperty("background", "#ffffff");
 
   return ensureInkscapeNamespace(ensureWhiteSvgBackground(new XMLSerializer().serializeToString(clone)));
+}
+
+/**
+ * Removes only the technical Sprotty groups that do not carry any semantic
+ * information. Model element groups keep their IDs, classes, styles and
+ * children so that classes, containers and edges remain useful Inkscape
+ * objects.
+ *
+ * A non-identity viewport transform is intentionally retained. It is the
+ * only technical group needed by the visible export to preserve zoom and
+ * scroll exactly.
+ */
+export function normalizeSemanticSvgGroups(root: SVGSVGElement): void {
+  normalizeIdentityTechnicalGroups(root);
 }
 
 /**
@@ -120,6 +136,81 @@ function copyComputedStyles(source: SVGSVGElement, target: SVGSVGElement): void 
       targetElement.style.setProperty(property, value, computed.getPropertyPriority(property));
     }
   }
+}
+
+function normalizeIdentityTechnicalGroups(parent: Element): void {
+  let child = parent.firstElementChild;
+  while (child) {
+    const nextSibling = child.nextElementSibling;
+    if (isTechnicalTransformGroup(child)) {
+      if (isIdentityTransform(child)) {
+        unwrapGroup(child);
+        normalizeIdentityTechnicalGroups(parent);
+        return;
+      }
+
+      // Keep a non-identity viewport transform, but remove any identity
+      // technical wrappers nested below it.
+      normalizeIdentityTechnicalGroups(child);
+    }
+    child = nextSibling;
+  }
+}
+
+function isTechnicalTransformGroup(element: Element): element is SVGGElement {
+  if (element.localName !== "g" || !element.hasAttribute("transform")) {
+    return false;
+  }
+
+  for (const attribute of Array.from(element.attributes)) {
+    if (attribute.name !== "transform") {
+      return false;
+    }
+  }
+  return true;
+}
+
+function isIdentityTransform(group: SVGGElement): boolean {
+  try {
+    const transformList = group.transform?.baseVal;
+    if (transformList) {
+      if (transformList.numberOfItems === 0) {
+        return true;
+      }
+
+      const matrix = transformList.consolidate()?.matrix;
+      if (matrix) {
+        return Math.abs(matrix.a - 1) < IDENTITY_EPSILON
+          && Math.abs(matrix.b) < IDENTITY_EPSILON
+          && Math.abs(matrix.c) < IDENTITY_EPSILON
+          && Math.abs(matrix.d - 1) < IDENTITY_EPSILON
+          && Math.abs(matrix.e) < IDENTITY_EPSILON
+          && Math.abs(matrix.f) < IDENTITY_EPSILON;
+      }
+    }
+  } catch {
+    // Fall through to the conservative textual check below. Exporting must
+    // not fail just because a browser cannot consolidate an SVG transform.
+  }
+
+  const transform = group.getAttribute("transform")?.replace(/\s+/g, "") ?? "";
+  return transform === ""
+    || transform === "matrix(1,0,0,1,0,0)"
+    || transform === "matrix(1 0 0 1 0 0)"
+    || transform === "scale(1)translate(0,0)"
+    || transform === "translate(0,0)scale(1)";
+}
+
+function unwrapGroup(group: SVGGElement): void {
+  const parent = group.parentElement;
+  if (!parent) {
+    return;
+  }
+
+  while (group.firstChild) {
+    parent.insertBefore(group.firstChild, group);
+  }
+  parent.removeChild(group);
 }
 
 function resolveDimension(...candidates: Array<number | string | null | undefined>): number {

@@ -9,9 +9,10 @@ import {
   RequestModelAction,
   TriggerLayoutAction
 } from "@eclipse-glsp/protocol";
-import { GlspEditorProvider, GlspVscodeConnector, SocketGlspVscodeServer } from "@eclipse-glsp/vscode-integration/node";
+import { GlspEditorProvider, GlspVscodeConnector } from "@eclipse-glsp/vscode-integration/node";
 import { LanguageClient } from "vscode-languageclient/node";
 import { ReloadableWebviewEndpoint } from "./reloadableWebviewEndpoint";
+import { RecoverableGlspVscodeServer } from "./recoverableGlspServer";
 import { reuseOpenTextEditorColumn } from "./textNavigation";
 import { ensureInkscapeNamespace, ensureWhiteSvgBackground } from "./svgExport";
 
@@ -21,6 +22,7 @@ const DEFAULT_DIAGRAM_TYPE = "interlis-uml";
 const POST_REFRESH_KICK_DELAYS_MS = [0, 60, 180, 420] as const;
 const REFRESH_RETRY_DELAYS_MS = [140, 360, 860] as const;
 const STARTUP_RECOVERY_DELAYS_MS = [120, 360, 960] as const;
+const GLSP_RECONNECT_DELAYS_MS = [250, 1000, 3000, 10000] as const;
 
 const CFG_AUTO_OPEN_BESIDE = "diagram.autoOpenBeside";
 const BLANK_SOURCE_STATUS_TITLE = "Source file is empty";
@@ -83,7 +85,7 @@ type GlspEndpoint = {
   diagramType?: string;
 };
 
-let glspServer: SocketGlspVscodeServer | undefined;
+let glspServer: RecoverableGlspVscodeServer | undefined;
 let glspConnector: GlspVscodeConnector | undefined;
 let registrationPromise: Promise<void> | undefined;
 let registeredDiagramType = DEFAULT_DIAGRAM_TYPE;
@@ -98,6 +100,10 @@ const everReadyDiagramClientIds = new Set<string>();
 const knownDiagramClientUris = new Map<string, string>();
 const startupRecoveryTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const startupRecoveryAttempts = new Map<string, number>();
+let glspReconnectTimer: ReturnType<typeof setTimeout> | undefined;
+let glspReconnectPromise: Promise<void> | undefined;
+let glspReconnectAttempt = 0;
+let glspTransportDisposed = false;
 const diagramStatusByUri = new Map<string, DiagramStatusCommand>();
 const panelMessageSubscriptions = new WeakMap<vscode.WebviewPanel, vscode.Disposable>();
 const autoOpenedDiagramUris = new Set<string>();
@@ -221,6 +227,8 @@ export async function registerInterlisDiagramEditor(context: vscode.ExtensionCon
       return;
     }
 
+    glspTransportDisposed = false;
+
     const client = getClient();
     if (!client) {
       throw new Error("Language server is not available.");
@@ -235,7 +243,7 @@ export async function registerInterlisDiagramEditor(context: vscode.ExtensionCon
       : DEFAULT_DIAGRAM_TYPE;
     registeredDiagramType = diagramType;
 
-    glspServer = new SocketGlspVscodeServer({
+    glspServer = new RecoverableGlspVscodeServer({
       clientId: "interlis-vscode",
       clientName: "INTERLIS VSCode",
       connectionOptions: {
@@ -244,7 +252,7 @@ export async function registerInterlisDiagramEditor(context: vscode.ExtensionCon
         port: endpoint.port,
         path: normalizePath(endpoint.path)
       }
-    });
+    }, message => logDiagramDebug(message));
     await glspServer.start();
     await bindHostGlspTransportState(context, glspServer);
 
@@ -266,10 +274,14 @@ export async function registerInterlisDiagramEditor(context: vscode.ExtensionCon
     context.subscriptions.push(glspServer);
     context.subscriptions.push(glspConnector);
     context.subscriptions.push(new vscode.Disposable(() => {
+      glspTransportDisposed = true;
+      clearGlspReconnectTimer();
       glspServer = undefined;
       glspConnector = undefined;
       hostGlspClient = undefined;
       hostGlspClientState = ClientState.Initial;
+      glspReconnectPromise = undefined;
+      glspReconnectAttempt = 0;
       registrationPromise = undefined;
     }));
     context.subscriptions.push(
@@ -921,7 +933,7 @@ function clearStartupRecovery(clientId: string): void {
 
 async function bindHostGlspTransportState(
   context: vscode.ExtensionContext,
-  server: SocketGlspVscodeServer
+  server: RecoverableGlspVscodeServer
 ): Promise<void> {
   const client = await server.glspClient;
   hostGlspClient = client;
@@ -956,8 +968,127 @@ function updateHostGlspTransportState(state: ClientState, source: string): void 
     );
   }
 
+  if (state === ClientState.ServerError || state === ClientState.StartFailed) {
+    queueOpenDiagramRefreshes(`transport-${describeHostGlspState(state).toLowerCase()}`);
+    scheduleGlspTransportReconnect(`state=${describeHostGlspState(state)}`);
+  }
+
   if (previous !== ClientState.Running && state === ClientState.Running) {
-    flushAllPendingRefreshes("transport-running");
+    if (glspReconnectPromise) {
+      logDiagramDebug("DIAGRAM_TRANSPORT status=running action=refresh-deferred reason=reconnect-in-progress");
+    } else {
+      flushAllPendingRefreshes("transport-running");
+    }
+  }
+}
+
+function queueOpenDiagramRefreshes(source: string): void {
+  const clientMap = getConnectorClientMap();
+  if (!clientMap) {
+    return;
+  }
+
+  const queuedUris = new Set<string>();
+  for (const client of clientMap.values()) {
+    const uri = client.document?.uri;
+    if (!uri) {
+      continue;
+    }
+
+    const key = uri.toString();
+    if (queuedUris.has(key)) {
+      continue;
+    }
+    queuedUris.add(key);
+    rememberPendingRefresh(uri, source);
+  }
+
+  if (queuedUris.size > 0) {
+    logDiagramDebug(`DIAGRAM_REFRESH status=queued reason=transport-reconnect diagrams=${queuedUris.size}`);
+  }
+}
+
+function scheduleGlspTransportReconnect(reason: string): void {
+  if (glspTransportDisposed || !glspServer || glspReconnectPromise || glspReconnectTimer) {
+    return;
+  }
+
+  const delayIndex = Math.min(glspReconnectAttempt, GLSP_RECONNECT_DELAYS_MS.length - 1);
+  const delayMs = GLSP_RECONNECT_DELAYS_MS[delayIndex];
+  glspReconnectTimer = setTimeout(() => {
+    glspReconnectTimer = undefined;
+    glspReconnectAttempt += 1;
+    const promise = reconnectGlspTransport(glspReconnectAttempt, reason);
+    glspReconnectPromise = promise;
+    void promise;
+  }, delayMs);
+
+  logDiagramDebug(
+    `DIAGRAM_TRANSPORT status=reconnect-scheduled reason=${reason} attempt=${glspReconnectAttempt + 1} delayMs=${delayMs}`
+  );
+}
+
+async function reconnectGlspTransport(attempt: number, reason: string): Promise<void> {
+  const server = glspServer;
+  if (!server || glspTransportDisposed) {
+    return;
+  }
+
+  let retry = false;
+  logDiagramDebug(`DIAGRAM_TRANSPORT status=reconnect-start attempt=${attempt} reason=${reason}`);
+  try {
+    await server.start();
+    await reinitializeOpenDiagramSessions(server);
+    flushAllPendingRefreshes("transport-reconnected");
+    glspReconnectAttempt = 0;
+    logDiagramDebug("DIAGRAM_TRANSPORT status=reconnected action=refresh-dispatched");
+  } catch (error: unknown) {
+    retry = true;
+    logDiagramDebug(
+      `DIAGRAM_TRANSPORT status=reconnect-failed attempt=${attempt} message=${formatError(error)}`
+    );
+  } finally {
+    glspReconnectPromise = undefined;
+    if (retry && !glspTransportDisposed) {
+      scheduleGlspTransportReconnect("retry-after-failure");
+    }
+  }
+}
+
+async function reinitializeOpenDiagramSessions(server: RecoverableGlspVscodeServer): Promise<void> {
+  const clientMap = getConnectorClientMap();
+  if (!clientMap) {
+    return;
+  }
+
+  const client = await server.glspClient;
+  for (const [clientId, diagramClient] of clientMap.entries()) {
+    const webviewEndpoint = diagramClient.webviewEndpoint;
+    const clientActionKinds = webviewEndpoint?.clientActions;
+    if (!diagramClient.diagramType || !Array.isArray(clientActionKinds)) {
+      logDiagramDebug(`DIAGRAM_SESSION status=skipped clientId=${clientId} reason=client-not-initialized`);
+      continue;
+    }
+
+    try {
+      await client.initializeClientSession({
+        clientSessionId: clientId,
+        diagramType: diagramClient.diagramType,
+        clientActionKinds
+      });
+      logDiagramDebug(`DIAGRAM_SESSION status=reinitialized clientId=${clientId}`);
+    } catch (error: unknown) {
+      logDiagramDebug(
+        `DIAGRAM_SESSION status=reinitialize-failed clientId=${clientId} message=${formatError(error)}`
+      );
+    }
+  }
+}
+
+function clearGlspReconnectTimer(): void {
+  if (glspReconnectTimer) {
+    clearTimeout(glspReconnectTimer);
+    glspReconnectTimer = undefined;
   }
 }
 
@@ -1120,9 +1251,12 @@ async function maybeAutoOpenSuppressedDiagram(uri: vscode.Uri, wasSuppressed: bo
 
 type ConnectorClientLike = {
   clientId: string;
+  diagramType?: string;
   document?: { uri?: vscode.Uri };
   webviewEndpoint?: {
     webviewPanel?: vscode.WebviewPanel;
+    clientActions?: string[];
+    serverActions?: string[];
   };
 };
 

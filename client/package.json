@@ -256,7 +256,7 @@
             "POLYLINE",
             "SPLINES"
           ],
-          "default": "ORTHOGONAL",
+          "default": "POLYLINE",
           "markdownDescription": "Edge routing strategy for INTERLIS diagram auto-layout. Changes take effect after running `INTERLIS: Auto-layout active diagram`."
         },
         "interlisLsp.uml.attributeMode": {

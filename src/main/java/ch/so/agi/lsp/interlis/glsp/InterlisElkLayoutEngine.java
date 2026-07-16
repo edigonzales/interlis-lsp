@@ -28,7 +28,7 @@ public class InterlisElkLayoutEngine extends ElkLayoutEngine {
     public static final String EDGE_ROUTING_PROPERTY = "interlis.glsp.layout.edgeRouting";
 
     private static final Direction DEFAULT_DIRECTION = Direction.RIGHT;
-    private static final EdgeRouting DEFAULT_EDGE_ROUTING = EdgeRouting.ORTHOGONAL;
+    private static final EdgeRouting DEFAULT_EDGE_ROUTING = EdgeRouting.POLYLINE;
     private static final int DEFAULT_THOROUGHNESS = 10;
     private static final double ROOT_NODE_NODE_SPACING = 60d;
     private static final double ROOT_EDGE_NODE_SPACING = 30d;

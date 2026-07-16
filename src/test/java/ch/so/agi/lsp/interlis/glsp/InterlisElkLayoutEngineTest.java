@@ -41,6 +41,22 @@ class InterlisElkLayoutEngineTest {
     }
 
     @Test
+    void resolveEdgeRoutingUsesPolylineAsDefault() {
+        assertEquals(EdgeRouting.POLYLINE, engine.exposedResolveEdgeRouting());
+    }
+
+    @Test
+    void resolveEdgeRoutingPreservesExplicitOrthogonalSetting() {
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        ClientSettings settings = new ClientSettings();
+        settings.setEdgeRouting("ORTHOGONAL");
+        server.setClientSettings(settings);
+        InterlisGlspBridge.bindLanguageServer(server);
+
+        assertEquals(EdgeRouting.ORTHOGONAL, engine.exposedResolveEdgeRouting());
+    }
+
+    @Test
     void resolveEdgeRoutingFallsBackToDefaultForInvalidValue() {
         InterlisLanguageServer server = new InterlisLanguageServer();
         ClientSettings settings = new ClientSettings();
@@ -48,7 +64,7 @@ class InterlisElkLayoutEngineTest {
         server.setClientSettings(settings);
         InterlisGlspBridge.bindLanguageServer(server);
 
-        assertEquals(EdgeRouting.ORTHOGONAL, engine.exposedResolveEdgeRouting());
+        assertEquals(EdgeRouting.POLYLINE, engine.exposedResolveEdgeRouting());
     }
 
     private static final class ExposedInterlisElkLayoutEngine extends InterlisElkLayoutEngine {
