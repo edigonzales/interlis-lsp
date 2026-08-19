@@ -304,7 +304,15 @@ public final class IliDocxRenderer {
         applyParagraphSpacing(paragraph);
         XWPFRun run = paragraph.createRun();
         applyRunFont(run);
-        run.setText(viewableTitle(viewable));
+        run.setText(docxViewableTitle(viewable));
+    }
+
+    private static String docxViewableTitle(Viewable viewable) {
+        if (viewable instanceof AssociationDef association) {
+            String name = association.getName();
+            return (name != null && !name.isEmpty()) ? name + " (Association)" : "(Association)";
+        }
+        return viewableTitle(viewable);
     }
 
     private static String tableStereotypes(Table table) {
@@ -358,7 +366,7 @@ public final class IliDocxRenderer {
             if (viewable instanceof Table) {
                 continue;
             }
-            if (viewable instanceof View) {
+            if (viewable instanceof View || viewable instanceof AssociationDef) {
                 writeViewableSection(doc, model, scope, viewable, headingLevel);
             }
         }
@@ -381,10 +389,35 @@ public final class IliDocxRenderer {
             int headingLevel) {
         writeViewableHeading(doc, viewable, headingLevel);
         writeDocumentationParagraph(doc, viewable.getDocumentation());
-        writeAttributeTable(doc, collectRowsForViewable(model, scope, viewable));
+        if (viewable instanceof AssociationDef association) {
+            writeAttributeTable(doc, collectRowsForAssociationRoles(association), "Rollenname");
+            List<Row> attributeRows = collectRowsForViewable(model, scope, viewable);
+            if (!attributeRows.isEmpty()) {
+                writeAttributeTable(doc, attributeRows);
+            }
+        } else {
+            writeAttributeTable(doc, collectRowsForViewable(model, scope, viewable));
+        }
         if (viewable instanceof AbstractClassDef<?> classDef) {
             writeUniquenessTable(doc, classDef);
         }
+    }
+
+    private static List<Row> collectRowsForAssociationRoles(AssociationDef association) {
+        List<Row> rows = new ArrayList<>();
+        if (association == null || association.getRoles() == null) {
+            return rows;
+        }
+        for (RoleDef role : association.getRoles()) {
+            if (role == null) {
+                continue;
+            }
+            AbstractClassDef destination = role.getDestination();
+            String type = destination != null ? destination.getName() : "Reference";
+            rows.add(new Row(role.getName(), formatCardinality(role.getCardinality()), type, "",
+                    nz(role.getDocumentation())));
+        }
+        return rows;
     }
 
     public static List<Row> collectRowsForViewable(Model model, Container scope, Viewable viewable) {
