@@ -5,6 +5,7 @@ import ch.so.agi.lsp.interlis.server.InterlisLanguageServer;
 import ch.so.agi.lsp.interlis.text.DocumentTracker;
 import ch.so.agi.lsp.interlis.text.InterlisTextDocumentService;
 import org.eclipse.lsp4j.CompletionItem;
+import org.eclipse.lsp4j.CompletionItemKind;
 import org.eclipse.lsp4j.InsertTextFormat;
 import org.eclipse.lsp4j.CompletionParams;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
@@ -73,6 +74,82 @@ class InterlisLiveEditingFeatureTest {
         assertFalse(labels.contains("LocalDomain"));
         assertFalse(labels.contains("LocalStruct"));
         assertFalse(labels.contains("Lo"));
+    }
+
+    @Test
+    void completionOffersOwnAndImportedModelsAtAttributeAndDomainTypeRoots(@TempDir Path tempDir) throws Exception {
+        Path baseFile = tempDir.resolve("ImportedRootModel.ili");
+        String baseContent = """
+                INTERLIS 2.3;
+                MODEL ImportedRootModel (en) AT "http://example.org" VERSION "2024-01-01" =
+                  DOMAIN ImportedType = TEXT;
+                END ImportedRootModel.
+                """;
+        Files.writeString(baseFile, baseContent);
+
+        Path usingFile = tempDir.resolve("UsingRootModels.ili");
+        String usingContent = """
+                INTERLIS 2.3;
+                MODEL UsingRootModels (en) AT "http://example.org" VERSION "2024-01-01" =
+                  IMPORTS ImportedRootModel;
+                  DOMAIN Alias = TEXT;
+                  TOPIC T =
+                    CLASS C =
+                      attr : TEXT;
+                    END C;
+                  END T;
+                END UsingRootModels.
+                """;
+        Files.writeString(usingFile, usingContent);
+
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        ClientSettings settings = new ClientSettings();
+        settings.setModelRepositories(tempDir.toAbsolutePath().toString());
+        server.setClientSettings(settings);
+        InterlisTextDocumentService service = server.getInterlisTextDocumentService();
+
+        String uri = usingFile.toUri().toString();
+        service.didOpen(new DidOpenTextDocumentParams(new TextDocumentItem(uri, "interlis", 1, usingContent)));
+
+        String dirtyAttribute = usingContent.replace("attr : TEXT;", "attr : I");
+        service.didChange(fullDocumentChange(uri, 2, dirtyAttribute));
+        List<CompletionItem> attributeItems = completionItems(service, uri, dirtyAttribute,
+                dirtyAttribute.indexOf("attr : I") + "attr : I".length());
+        CompletionItem importedAttributeModel = findItemByLabel(attributeItems, "ImportedRootModel");
+        assertNotNull(importedAttributeModel);
+        assertEquals(CompletionItemKind.Module, importedAttributeModel.getKind());
+
+        String dirtyOwnAttribute = usingContent.replace("attr : TEXT;", "attr : U");
+        service.didChange(fullDocumentChange(uri, 3, dirtyOwnAttribute));
+        List<CompletionItem> ownAttributeItems = completionItems(service, uri, dirtyOwnAttribute,
+                dirtyOwnAttribute.indexOf("attr : U") + "attr : U".length());
+        CompletionItem ownAttributeModel = findItemByLabel(ownAttributeItems, "UsingRootModels");
+        assertNotNull(ownAttributeModel);
+        assertEquals(CompletionItemKind.Module, ownAttributeModel.getKind());
+
+        String dirtyDomain = usingContent.replace("DOMAIN Alias = TEXT;", "DOMAIN Alias = I");
+        service.didChange(fullDocumentChange(uri, 4, dirtyDomain));
+        List<CompletionItem> domainItems = completionItems(service, uri, dirtyDomain,
+                dirtyDomain.indexOf("DOMAIN Alias = I") + "DOMAIN Alias = I".length());
+        CompletionItem importedDomainModel = findItemByLabel(domainItems, "ImportedRootModel");
+        assertNotNull(importedDomainModel,
+                () -> domainItems.stream().map(CompletionItem::getLabel).toList().toString());
+        assertEquals(CompletionItemKind.Module, importedDomainModel.getKind());
+
+        String dirtyOwnDomain = usingContent.replace("DOMAIN Alias = TEXT;", "DOMAIN Alias = U");
+        service.didChange(fullDocumentChange(uri, 5, dirtyOwnDomain));
+        List<CompletionItem> ownDomainItems = completionItems(service, uri, dirtyOwnDomain,
+                dirtyOwnDomain.indexOf("DOMAIN Alias = U") + "DOMAIN Alias = U".length());
+        CompletionItem ownDomainModel = findItemByLabel(ownDomainItems, "UsingRootModels");
+        assertNotNull(ownDomainModel);
+        assertEquals(CompletionItemKind.Module, ownDomainModel.getKind());
+
+        String emptyAttribute = usingContent.replace("attr : TEXT;", "attr : ");
+        service.didChange(fullDocumentChange(uri, 6, emptyAttribute));
+        List<String> emptyLabels = completionLabels(service, uri, emptyAttribute,
+                emptyAttribute.indexOf("attr : ") + "attr : ".length());
+        assertFalse(emptyLabels.contains("ImportedRootModel"));
+        assertFalse(emptyLabels.contains("UsingRootModels"));
     }
 
     @Test

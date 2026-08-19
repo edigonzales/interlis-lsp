@@ -34,8 +34,9 @@ Wie diese `CompletionItemKind`s konkret gerendert werden, entscheidet der Editor
 ## Attributtyp-Root nach `:`
 
 - Root-Vorschlaege enthalten nur editorisch sinnvolle Standardpfade.
-- Root- und Tail-Slots nach `:` liefern keine normalen Symbol-Items.
-- In diesen Slots werden nur Keywords, Operatoren, Snippets und portable `INTERLIS.XML*`-Vorschlaege geliefert.
+- Root- und Tail-Slots nach `:` liefern keine lokalen normalen Symbol-Items.
+- Bei einem nichtleeren Identifier-Prefix duerfen zusaetzlich eigene und direkt importierte Modellnamen als `Module`-Items angeboten werden, damit qualifizierte Typreferenzen begonnen werden koennen.
+- In diesen Slots werden ansonsten Keywords, Operatoren, Snippets und portable `INTERLIS.XML*`-Vorschlaege geliefert.
 - `MANDATORY` wird nach `:` als Keyword angeboten.
 - Nach `MANDATORY ` werden dieselben Typvorschlaege wie nach `:` angeboten, aber `MANDATORY` selbst nicht erneut.
 - Seltene Meta-Typen wie `CLASS`, `STRUCTURE`, `ATTRIBUTE` erscheinen nicht als Default-Root-Vorschlaege, sondern nur bei passendem Prefix.
@@ -277,6 +278,7 @@ Wie diese `CompletionItemKind`s konkret gerendert werden, entscheidet der Editor
   - Basistypen wie `TEXT`, `MTEXT`, `NAME`, `URI`, `BOOLEAN`, `NUMERIC`, `FORMAT`, `DATE`, `TIMEOFDAY`, `DATETIME`, `COORD`, `MULTICOORD`, `POLYLINE`, `AREA`, `SURFACE`, `OID`, `UUIDOID`, `BLACKBOX`
   - Meta-/Typkonstrukte wie `CLASS`, `STRUCTURE`, `ATTRIBUTE` und `ALL OF`
   - kuratierte Snippets wie `TEXT*<length>`, `MTEXT*<length>`, `1 .. 10`, `(A, B, C)`, `CLASS RESTRICTION (...)` und `ALL OF BaseDomain`
+- Bei einem nichtleeren Identifier-Prefix duerfen auch eigene und direkt importierte Modellnamen als `Module`-Items angeboten werden, um qualifizierte Domain-Typreferenzen zu beginnen.
 - Nicht angeboten werden dort Attribut-only Konstrukte wie `REFERENCE`, `BAG` oder `LIST`.
 - Die bestehenden Tail-Mechanismen gelten auch im `DOMAIN`-RHS:
   - nach `TEXT` bzw. `MTEXT` werden `*` und `* <length>` angeboten

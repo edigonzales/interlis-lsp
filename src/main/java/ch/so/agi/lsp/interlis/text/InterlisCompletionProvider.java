@@ -520,6 +520,7 @@ final class InterlisCompletionProvider {
         List<CompletionItem> items = new ArrayList<>();
         addKeywords(items, attributeRootKeywords(live, context), context, PRIORITY_KEYWORD);
         addPortableDateTimeSuggestions(items, context, live != null ? live.languageLevel() : InterlisLanguageLevel.UNKNOWN);
+        addModelStarters(items, live, td, context, PRIORITY_IMPORTED, resolutionOffset);
         if (context.prefix() != null && !context.prefix().isBlank()) {
             addKeywords(items, ATTRIBUTE_META_KEYWORDS, context, PRIORITY_META);
         }
@@ -537,6 +538,7 @@ final class InterlisCompletionProvider {
         List<CompletionItem> items = new ArrayList<>();
         addKeywords(items, domainRootKeywords(live, context), context, PRIORITY_KEYWORD);
         addPortableDateTimeSuggestions(items, context, live != null ? live.languageLevel() : InterlisLanguageLevel.UNKNOWN);
+        addModelStarters(items, live, td, context, PRIORITY_IMPORTED, resolutionOffset);
         addDomainRootSnippets(items, context);
         return items;
     }
@@ -2491,14 +2493,14 @@ final class InterlisCompletionProvider {
                     DECLARATION_HEADER_MODIFIER_VALUE, DECLARATION_HEADER_BLOCK_SUFFIX_MODIFIER_VALUE,
                     DECLARATION_HEADER_MODIFIER_CLOSE, DECLARATION_HEADER_BLOCK_SUFFIX_MODIFIER_CLOSE,
                     DECLARATION_HEADER_AFTER_MODIFIER, DECLARATION_HEADER_BLOCK_SUFFIX_AFTER_MODIFIER,
-                    DECLARATION_HEADER_AFTER_EXTENDS, DOMAIN_TYPE_ROOT, UNIT_TYPE_ROOT,
+                    DECLARATION_HEADER_AFTER_EXTENDS, UNIT_TYPE_ROOT,
                     UNIT_COMPOSED_OPERATOR -> false;
             case METAATTRIBUTE_ROOT, METAATTRIBUTE_VALUE -> true;
             case DECLARATION_HEADER_BLOCK_SUFFIX_EXTENDS_TARGET ->
                     (context.qualifierPath() != null && !context.qualifierPath().isBlank())
                             || (context.prefix() != null && !context.prefix().isBlank());
             case QUALIFIED_MEMBER -> true;
-            case ATTRIBUTE_TYPE_ROOT, FORMAT_TYPE_TARGET, COLLECTION_OF_TARGET, REFERENCE_TARGET, EXTENDS_TARGET,
+            case ATTRIBUTE_TYPE_ROOT, DOMAIN_TYPE_ROOT, FORMAT_TYPE_TARGET, COLLECTION_OF_TARGET, REFERENCE_TARGET, EXTENDS_TARGET,
                     UNIT_BRACKET_TARGET, UNIT_COMPOSED_TARGET ->
                     context.prefix() != null && !context.prefix().isBlank();
             case IMPORT_MODEL, END_NAME, TEXT_LENGTH_TAIL, TEXT_LENGTH_VALUE_TAIL,
