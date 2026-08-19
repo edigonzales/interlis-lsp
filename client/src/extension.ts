@@ -9,6 +9,7 @@ import {
   reconcileOpenDiagramAfterCompile,
   registerInterlisDiagramCommands,
   registerInterlisDiagramEditor,
+  refreshOpenDiagramsForUmlSettings,
   setDiagramDebugLogger
 } from "./diagram/diagramEditor";
 
@@ -32,6 +33,14 @@ const DOTTED_NAME_REGEX = "[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*"
 const TEMPLATE_URL_SETTING = "interlisLsp.template.url";
 const DEFAULT_TEMPLATE_URL = "https://geo.so.ch/models/AGI/SO_AGI_Modellvorlage_20260324.ili";
 const TEMPLATE_FETCH_TIMEOUT_MS = 3000;
+const UML_RENDERING_CONFIGURATION_KEYS = [
+  "interlisLsp.uml.attributeMode",
+  "interlisLsp.uml.deemphasizeAbstractTypes",
+  "interlisLsp.uml.showAssociationNames",
+  "interlisLsp.uml.showRoleCardinalities",
+  "interlisLsp.uml.showLocalEnumerationValues"
+];
+const UML_SETTINGS_REFRESH_DEBOUNCE_MS = 100;
 const UNIT_DECLARATION_PREFIX_REGEX =
   `^\\s*UNIT\\s+[A-Za-z_][A-Za-z0-9_]*(?:\\s*\\[\\s*[A-Za-z_][A-Za-z0-9_]*\\s*\\])?(?:\\s*\\(\\s*ABSTRACT\\s*\\))?(?:\\s+EXTENDS\\s+${DOTTED_NAME_REGEX})?\\s*=\\s*`;
 const CONTAINER_BODY_PREFIX_PATTERN = /^\s*[A-Za-z_][A-Za-z0-9_]*\s*$/;
@@ -374,6 +383,30 @@ export async function activate(context: vscode.ExtensionContext) {
   } catch (err: any) {
     vscode.window.showErrorMessage(`INTERLIS GLSP diagram integration failed to start: ${err?.message ?? err}`);
   }
+
+  let umlSettingsRefreshTimer: ReturnType<typeof setTimeout> | undefined;
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(event => {
+      if (!UML_RENDERING_CONFIGURATION_KEYS.some(key => event.affectsConfiguration(key))) {
+        return;
+      }
+
+      if (umlSettingsRefreshTimer) {
+        clearTimeout(umlSettingsRefreshTimer);
+      }
+
+      umlSettingsRefreshTimer = setTimeout(() => {
+        umlSettingsRefreshTimer = undefined;
+        refreshOpenDiagramsForUmlSettings();
+      }, UML_SETTINGS_REFRESH_DEBOUNCE_MS);
+    }),
+    new vscode.Disposable(() => {
+      if (umlSettingsRefreshTimer) {
+        clearTimeout(umlSettingsRefreshTimer);
+        umlSettingsRefreshTimer = undefined;
+      }
+    })
+  );
 
   context.subscriptions.push(
     vscode.commands.registerCommand("interlis.snippet.nextPlaceholder", async () => {

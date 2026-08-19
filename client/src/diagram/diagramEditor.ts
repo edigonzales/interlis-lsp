@@ -438,6 +438,25 @@ export function refreshOpenDiagramByUri(uri: vscode.Uri): boolean {
   return refreshDiagramByUri(uri, true, "compileFinished");
 }
 
+export function refreshOpenDiagramsForUmlSettings(): void {
+  const clientMap = getConnectorClientMap();
+  if (!clientMap) {
+    return;
+  }
+
+  const uris = new Map<string, vscode.Uri>();
+  for (const client of clientMap.values()) {
+    const uri = client?.document?.uri;
+    if (uri) {
+      uris.set(uri.toString(), uri);
+    }
+  }
+
+  for (const uri of uris.values()) {
+    refreshDiagramByUri(uri, true, "uml-settings-change");
+  }
+}
+
 export function cancelScheduledDiagramRefresh(document: vscode.TextDocument): void {
   clearPendingRefresh(document.uri);
   clearRefreshRetryTimers(document.uri);
