@@ -120,7 +120,7 @@ public final class IliDocxRenderer {
             renderEnumerations(doc, model, model, 1);
 
             for (Topic topic : getElements(model, Topic.class)) {
-                writeHeading(doc, topic.getName(), 0);
+                writeHeading(doc, topicTitle(topic), 0);
                 writeDocumentationParagraph(doc, topic.getDocumentation());
                 renderViewables(doc, model, topic, 1);
                 renderEnumerations(doc, model, topic, 1);
@@ -321,6 +321,14 @@ public final class IliDocxRenderer {
         }
         String name = domain.getName();
         return (name != null && !name.isEmpty()) ? name + " (Enumeration)" : "(Enumeration)";
+    }
+
+    private static String topicTitle(Topic topic) {
+        if (topic == null) {
+            return "";
+        }
+        String name = topic.getName();
+        return (name != null && !name.isEmpty()) ? name + " (Topic)" : "(Topic)";
     }
 
     private static void renderViewables(XWPFDocument doc, Model model, Container scope, int headingLevel) {

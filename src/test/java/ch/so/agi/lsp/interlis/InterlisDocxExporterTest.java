@@ -165,7 +165,8 @@ class InterlisDocxExporterTest {
             assertTrue(paragraphs.get(modelIndex + 2).contains("Beschreibung: Model short description"),
                     "Expected model short description metadata after title");
 
-            int topicIndex = indexContaining(paragraphs, "DocTopic");
+            int topicIndex = paragraphs.indexOf("DocTopic (Topic)");
+            assertTrue(topicIndex >= 0, "Expected Topic heading to include (Topic)");
             assertTrue(paragraphs.get(topicIndex + 1).contains("Topic documentation"),
                     "Expected topic documentation after heading");
 
