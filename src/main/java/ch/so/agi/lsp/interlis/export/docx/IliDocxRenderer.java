@@ -8,19 +8,24 @@ import ch.interlis.ili2c.metamodel.AttributeDef;
 import ch.interlis.ili2c.metamodel.Cardinality;
 import ch.interlis.ili2c.metamodel.CompositionType;
 import ch.interlis.ili2c.metamodel.Container;
+import ch.interlis.ili2c.metamodel.Constant;
 import ch.interlis.ili2c.metamodel.CoordType;
 import ch.interlis.ili2c.metamodel.Domain;
 import ch.interlis.ili2c.metamodel.Element;
+import ch.interlis.ili2c.metamodel.Evaluable;
 import ch.interlis.ili2c.metamodel.Enumeration;
 import ch.interlis.ili2c.metamodel.EnumerationType;
 import ch.interlis.ili2c.metamodel.EnumTreeValueType;
+import ch.interlis.ili2c.metamodel.Expression;
 import ch.interlis.ili2c.metamodel.FormattedType;
+import ch.interlis.ili2c.metamodel.FunctionCall;
 import ch.interlis.ili2c.metamodel.Model;
 import ch.interlis.ili2c.metamodel.MultiAreaType;
 import ch.interlis.ili2c.metamodel.MultiCoordType;
 import ch.interlis.ili2c.metamodel.MultiPolylineType;
 import ch.interlis.ili2c.metamodel.MultiSurfaceType;
 import ch.interlis.ili2c.metamodel.NumericalType;
+import ch.interlis.ili2c.metamodel.NumericType;
 import ch.interlis.ili2c.metamodel.ObjectType;
 import ch.interlis.ili2c.metamodel.PredefinedModel;
 import ch.interlis.ili2c.metamodel.PolylineType;
@@ -34,6 +39,9 @@ import ch.interlis.ili2c.metamodel.Topic;
 import ch.interlis.ili2c.metamodel.TransferDescription;
 import ch.interlis.ili2c.metamodel.Type;
 import ch.interlis.ili2c.metamodel.TypeAlias;
+import ch.interlis.ili2c.metamodel.ObjectPath;
+import ch.interlis.ili2c.metamodel.UniqueEl;
+import ch.interlis.ili2c.metamodel.UniquenessConstraint;
 import ch.interlis.ili2c.metamodel.View;
 import ch.interlis.ili2c.metamodel.Viewable;
 import java.math.BigInteger;
@@ -41,9 +49,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import org.apache.poi.xwpf.usermodel.XWPFAbstractNum;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFNumbering;
@@ -88,16 +98,24 @@ import org.openxmlformats.schemas.wordprocessingml.x2006.main.STStyleType;
 public final class IliDocxRenderer {
     private static final String FONT_FAMILY = "Arial";
     private static final BigInteger DEFAULT_SPACING_AFTER = BigInteger.valueOf(144L);
-    private static final BigInteger TABLE_WIDTH = BigInteger.valueOf(9000L);
+    private static final BigInteger ATTRIBUTE_TABLE_WIDTH = BigInteger.valueOf(13500L);
+    private static final BigInteger ENUM_TABLE_WIDTH = ATTRIBUTE_TABLE_WIDTH;
     private static final BigInteger[] TABLE_COLUMN_WIDTHS = new BigInteger[] {
-            BigInteger.valueOf(2250L),
+            BigInteger.valueOf(3000L),
             BigInteger.valueOf(1500L),
-            BigInteger.valueOf(2250L),
-            BigInteger.valueOf(3000L)
+            BigInteger.valueOf(2500L),
+            BigInteger.valueOf(6500L)
     };
     private static final BigInteger[] ENUM_TABLE_COLUMN_WIDTHS = new BigInteger[] {
             BigInteger.valueOf(3000L),
-            BigInteger.valueOf(6000L)
+            BigInteger.valueOf(3500L),
+            BigInteger.valueOf(7000L)
+    };
+    private static final BigInteger UNIQUE_TABLE_WIDTH = ATTRIBUTE_TABLE_WIDTH;
+    private static final BigInteger[] UNIQUE_TABLE_COLUMN_WIDTHS = new BigInteger[] {
+            BigInteger.valueOf(1000L),
+            BigInteger.valueOf(10000L),
+            BigInteger.valueOf(2500L)
     };
 
     private IliDocxRenderer() {}
@@ -364,6 +382,9 @@ public final class IliDocxRenderer {
         writeViewableHeading(doc, viewable, headingLevel);
         writeDocumentationParagraph(doc, viewable.getDocumentation());
         writeAttributeTable(doc, collectRowsForViewable(model, scope, viewable));
+        if (viewable instanceof AbstractClassDef<?> classDef) {
+            writeUniquenessTable(doc, classDef);
+        }
     }
 
     public static List<Row> collectRowsForViewable(Model model, Container scope, Viewable viewable) {
@@ -379,7 +400,8 @@ public final class IliDocxRenderer {
             if (domainType instanceof EnumerationType enumType && isInlineEnumeration(attribute, enumType)) {
                 description = inlineEnumerationValues(enumType);
             }
-            rows.add(new Row(attribute.getName(), formatCardinality(attribute.getCardinality()), type, description));
+            rows.add(new Row(attribute.getName(), formatCardinality(attribute.getCardinality()), type,
+                    valueRange(attribute), description));
         }
 
         if (viewable instanceof Table table) {
@@ -404,17 +426,21 @@ public final class IliDocxRenderer {
         if (destination instanceof Table && otherDest instanceof Table) {
             if (destination == cls) {
                 rows.add(new Row(roleLabel(me), formatCardinality(me.getCardinality()),
-                        ((Table) otherDest).getName(), ""));
+                        ((Table) otherDest).getName(), "", ""));
             }
         }
     }
 
     private static void writeAttributeTable(XWPFDocument doc, List<Row> rows) {
+        writeAttributeTable(doc, rows, "Attributname");
+    }
+
+    private static void writeAttributeTable(XWPFDocument doc, List<Row> rows, String nameHeader) {
         XWPFTable table = doc.createTable();
         CTTbl ctTable = table.getCTTbl();
-        configureTable(ctTable);
+        configureTable(ctTable, ATTRIBUTE_TABLE_WIDTH);
 
-        final int cols = 4;
+        final int cols = TABLE_COLUMN_WIDTHS.length;
         CTTblGrid grid = ctTable.addNewTblGrid();
         for (int i = 0; i < cols; i++) {
             grid.addNewGridCol().setW(TABLE_COLUMN_WIDTHS[i]);
@@ -425,7 +451,7 @@ public final class IliDocxRenderer {
             header = table.createRow();
         }
         ensureCellCount(header, cols);
-        setCellText(header.getCell(0), "Attributname", true, TABLE_COLUMN_WIDTHS[0]);
+        setCellText(header.getCell(0), nz(nameHeader), true, TABLE_COLUMN_WIDTHS[0]);
         setCellText(header.getCell(1), "Kardinalität", true, TABLE_COLUMN_WIDTHS[1]);
         setCellText(header.getCell(2), "Typ", true, TABLE_COLUMN_WIDTHS[2]);
         setCellText(header.getCell(3), "Beschreibung", true, TABLE_COLUMN_WIDTHS[3]);
@@ -436,7 +462,7 @@ public final class IliDocxRenderer {
                 ensureCellCount(tr, cols);
                 setCellText(tr.getCell(0), nz(row.name), false, TABLE_COLUMN_WIDTHS[0]);
                 setCellText(tr.getCell(1), nz(row.card), false, TABLE_COLUMN_WIDTHS[1]);
-                setCellText(tr.getCell(2), nz(row.type), false, TABLE_COLUMN_WIDTHS[2]);
+                setCellText(tr.getCell(2), displayType(row), false, TABLE_COLUMN_WIDTHS[2]);
                 setCellText(tr.getCell(3), nz(row.descr), false, TABLE_COLUMN_WIDTHS[3]);
             }
         }
@@ -445,10 +471,219 @@ public final class IliDocxRenderer {
         applyParagraphSpacing(spacer);
     }
 
+    private static void writeUniquenessTable(XWPFDocument doc, AbstractClassDef<?> viewable) {
+        List<UniqueEntry> entries = collectUniquenessEntries(viewable);
+        if (entries.isEmpty()) {
+            return;
+        }
+
+        XWPFParagraph label = doc.createParagraph();
+        applyParagraphSpacing(label);
+        XWPFRun labelRun = label.createRun();
+        applyRunFont(labelRun);
+        labelRun.setBold(true);
+        labelRun.setText("UNIQUE");
+
+        XWPFTable table = doc.createTable();
+        CTTbl ctTable = table.getCTTbl();
+        configureTable(ctTable, UNIQUE_TABLE_WIDTH);
+
+        final int cols = UNIQUE_TABLE_COLUMN_WIDTHS.length;
+        CTTblGrid grid = ctTable.addNewTblGrid();
+        for (int i = 0; i < cols; i++) {
+            grid.addNewGridCol().setW(UNIQUE_TABLE_COLUMN_WIDTHS[i]);
+        }
+
+        XWPFTableRow header = table.getRow(0);
+        if (header == null) {
+            header = table.createRow();
+        }
+        ensureCellCount(header, cols);
+        setCellText(header.getCell(0), "Nr.", true, UNIQUE_TABLE_COLUMN_WIDTHS[0]);
+        setCellText(header.getCell(1), "UNIQUE-Definition", true, UNIQUE_TABLE_COLUMN_WIDTHS[1]);
+        setCellText(header.getCell(2), "Herkunft", true, UNIQUE_TABLE_COLUMN_WIDTHS[2]);
+
+        for (UniqueEntry entry : entries) {
+            XWPFTableRow row = table.createRow();
+            ensureCellCount(row, cols);
+            setCellText(row.getCell(0), nz(entry.number()), false, UNIQUE_TABLE_COLUMN_WIDTHS[0]);
+            setCellText(row.getCell(1), nz(entry.definition()), false, UNIQUE_TABLE_COLUMN_WIDTHS[1]);
+            setCellText(row.getCell(2), nz(entry.origin()), false, UNIQUE_TABLE_COLUMN_WIDTHS[2]);
+        }
+
+        XWPFParagraph spacer = doc.createParagraph();
+        applyParagraphSpacing(spacer);
+    }
+
+    private static List<UniqueEntry> collectUniquenessEntries(AbstractClassDef<?> viewable) {
+        List<UniqueEntry> entries = new ArrayList<>();
+        if (viewable == null) {
+            return entries;
+        }
+
+        List<AbstractClassDef<?>> inheritance = new ArrayList<>();
+        Set<AbstractClassDef<?>> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        Element current = viewable;
+        while (current instanceof AbstractClassDef<?> classDef && visited.add(classDef)) {
+            inheritance.add(0, classDef);
+            current = classDef.getExtending();
+        }
+
+        int number = 1;
+        for (AbstractClassDef<?> source : inheritance) {
+            String origin = source == viewable
+                    ? "direkt"
+                    : "geerbt von " + nz(source.getScopedName());
+            for (UniquenessConstraint constraint : getElements(source, UniquenessConstraint.class)) {
+                entries.add(new UniqueEntry("U" + number++, formatUniqueness(constraint), origin));
+            }
+        }
+        return entries;
+    }
+
+    private static String formatUniqueness(UniquenessConstraint constraint) {
+        if (constraint == null) {
+            return "UNIQUE [Definition nicht darstellbar];";
+        }
+
+        String scope = constraint.getLocal() ? "LOCAL" : "GLOBAL";
+        if (constraint.perBasket()) {
+            scope += ", per Basket";
+        }
+
+        StringBuilder definition = new StringBuilder("UNIQUE (").append(scope).append(") ");
+        ObjectPath prefix = constraint.getPrefix();
+        if (prefix != null) {
+            definition.append(formatObjectPath(prefix)).append(" : ");
+        }
+
+        UniqueEl elements = constraint.getElements();
+        List<String> paths = new ArrayList<>();
+        if (elements != null && elements.getAttributes() != null) {
+            for (ObjectPath path : elements.getAttributes()) {
+                if (path != null) {
+                    paths.add(formatObjectPath(path));
+                }
+            }
+        }
+        definition.append(paths.isEmpty() ? "[keine Schlüsselattribute]" : String.join(", ", paths));
+
+        Evaluable preCondition = constraint.getPreCondition();
+        if (preCondition != null) {
+            definition.append(" WHERE ").append(formatEvaluable(preCondition));
+        }
+        return definition.append(";").toString();
+    }
+
+    private static String formatObjectPath(ObjectPath path) {
+        if (path == null) {
+            return "[Pfad nicht darstellbar]";
+        }
+        String value = path.toString();
+        return value == null || value.isBlank() ? "[Pfad nicht darstellbar]" : value;
+    }
+
+    private static String formatEvaluable(Evaluable evaluable) {
+        if (evaluable == null) {
+            return "[Bedingung nicht darstellbar]";
+        }
+        if (evaluable instanceof ObjectPath path) {
+            return formatObjectPath(path);
+        }
+        if (evaluable instanceof FunctionCall functionCall) {
+            String name = functionCall.getFunction() != null ? functionCall.getFunction().getName() : "FUNCTION";
+            Evaluable[] arguments = functionCall.getArguments();
+            List<String> formattedArguments = new ArrayList<>();
+            if (arguments != null) {
+                for (Evaluable argument : arguments) {
+                    formattedArguments.add(formatEvaluable(argument));
+                }
+            }
+            return nz(name) + "(" + String.join(", ", formattedArguments) + ")";
+        }
+        if (evaluable instanceof Expression.Equality expression) {
+            return formatBinary(expression.getLeft(), " == ", expression.getRight());
+        }
+        if (evaluable instanceof Expression.Inequality expression) {
+            return formatBinary(expression.getLeft(), " <> ", expression.getRight());
+        }
+        if (evaluable instanceof Expression.GreaterThan expression) {
+            return formatBinary(expression.getLeft(), " > ", expression.getRight());
+        }
+        if (evaluable instanceof Expression.GreaterThanOrEqual expression) {
+            return formatBinary(expression.getLeft(), " >= ", expression.getRight());
+        }
+        if (evaluable instanceof Expression.LessThan expression) {
+            return formatBinary(expression.getLeft(), " < ", expression.getRight());
+        }
+        if (evaluable instanceof Expression.LessThanOrEqual expression) {
+            return formatBinary(expression.getLeft(), " <= ", expression.getRight());
+        }
+        if (evaluable instanceof Expression.Addition expression) {
+            return formatBinary(expression.getLeft(), " + ", expression.getRight());
+        }
+        if (evaluable instanceof Expression.Subtraction expression) {
+            return formatBinary(expression.getLeft(), " - ", expression.getRight());
+        }
+        if (evaluable instanceof Expression.Multiplication expression) {
+            return formatBinary(expression.getLeft(), " * ", expression.getRight());
+        }
+        if (evaluable instanceof Expression.Division expression) {
+            return formatBinary(expression.getLeft(), " / ", expression.getRight());
+        }
+        if (evaluable instanceof Expression.Implication expression) {
+            return formatBinary(expression.getLeft(), " => ", expression.getRight());
+        }
+        if (evaluable instanceof Expression.Conjunction expression) {
+            return joinEvaluables(expression.getConjoined(), " AND ");
+        }
+        if (evaluable instanceof Expression.Disjunction expression) {
+            return joinEvaluables(expression.getDisjoined(), " OR ");
+        }
+        if (evaluable instanceof Expression.DefinedCheck expression) {
+            return "DEFINED(" + formatEvaluable(expression.getArgument()) + ")";
+        }
+        if (evaluable instanceof Expression.Negation expression) {
+            return "NOT (" + formatEvaluable(expression.getNegated()) + ")";
+        }
+        if (evaluable instanceof Expression.Subexpression expression) {
+            return "(" + formatEvaluable(expression.getSubexpression()) + ")";
+        }
+        if (evaluable instanceof Constant.EnumerationRange range) {
+            String[] prefix = range.getCommonPrefix();
+            String prefixText = prefix == null ? "" : String.join(".", prefix);
+            String separator = prefixText.isEmpty() ? "" : ".";
+            return prefixText + separator + nz(range.getFrom()) + ".." + nz(range.getTo());
+        }
+        if (evaluable instanceof Constant.AttributePath
+                || evaluable instanceof Constant.Class
+                || evaluable instanceof Constant.Enumeration
+                || evaluable instanceof Constant.Numeric
+                || evaluable instanceof Constant.Text
+                || evaluable instanceof Constant.Undefined) {
+            return evaluable.toString();
+        }
+        return "[Bedingung nicht darstellbar]";
+    }
+
+    private static String formatBinary(Evaluable left, String operator, Evaluable right) {
+        return formatEvaluable(left) + operator + formatEvaluable(right);
+    }
+
+    private static String joinEvaluables(Evaluable[] evaluables, String separator) {
+        List<String> values = new ArrayList<>();
+        if (evaluables != null) {
+            for (Evaluable evaluable : evaluables) {
+                values.add(formatEvaluable(evaluable));
+            }
+        }
+        return String.join(separator, values);
+    }
+
     private static void writeEnumerationTable(XWPFDocument doc, AbstractEnumerationType enumType) {
         XWPFTable table = doc.createTable();
         CTTbl ctTable = table.getCTTbl();
-        configureTable(ctTable);
+        configureTable(ctTable, ENUM_TABLE_WIDTH);
 
         final int cols = ENUM_TABLE_COLUMN_WIDTHS.length;
         CTTblGrid grid = ctTable.addNewTblGrid();
@@ -462,14 +697,16 @@ public final class IliDocxRenderer {
         }
         ensureCellCount(header, cols);
         setCellText(header.getCell(0), "Wert", true, ENUM_TABLE_COLUMN_WIDTHS[0]);
-        setCellText(header.getCell(1), "Beschreibung", true, ENUM_TABLE_COLUMN_WIDTHS[1]);
+        setCellText(header.getCell(1), "Anzeigename", true, ENUM_TABLE_COLUMN_WIDTHS[1]);
+        setCellText(header.getCell(2), "Beschreibung", true, ENUM_TABLE_COLUMN_WIDTHS[2]);
 
-        List<EnumEntry> entries = collectEnumerationEntries(enumType);
-        for (EnumEntry entry : entries) {
+        List<DetailedEnumEntry> entries = collectDetailedEnumerationEntries(enumType);
+        for (DetailedEnumEntry entry : entries) {
             XWPFTableRow tr = table.createRow();
             ensureCellCount(tr, cols);
             setCellText(tr.getCell(0), nz(entry.value()), false, ENUM_TABLE_COLUMN_WIDTHS[0]);
-            setCellText(tr.getCell(1), nz(entry.documentation()), false, ENUM_TABLE_COLUMN_WIDTHS[1]);
+            setCellText(tr.getCell(1), nz(entry.displayName()), false, ENUM_TABLE_COLUMN_WIDTHS[1]);
+            setCellText(tr.getCell(2), nz(entry.documentation()), false, ENUM_TABLE_COLUMN_WIDTHS[2]);
         }
 
         XWPFParagraph spacer = doc.createParagraph();
@@ -478,6 +715,14 @@ public final class IliDocxRenderer {
 
     public static List<EnumEntry> collectEnumerationEntries(AbstractEnumerationType enumType) {
         List<EnumEntry> entries = new ArrayList<>();
+        for (DetailedEnumEntry entry : collectDetailedEnumerationEntries(enumType)) {
+            entries.add(new EnumEntry(entry.value(), entry.documentation()));
+        }
+        return entries;
+    }
+
+    private static List<DetailedEnumEntry> collectDetailedEnumerationEntries(AbstractEnumerationType enumType) {
+        List<DetailedEnumEntry> entries = new ArrayList<>();
         if (enumType == null) {
             return entries;
         }
@@ -489,7 +734,7 @@ public final class IliDocxRenderer {
         return entries;
     }
 
-    private static void appendEnumerationEntries(List<EnumEntry> target, String prefix, Enumeration enumeration,
+    private static void appendEnumerationEntries(List<DetailedEnumEntry> target, String prefix, Enumeration enumeration,
             boolean includeIntermediateValues) {
         if (enumeration == null) {
             return;
@@ -507,12 +752,20 @@ public final class IliDocxRenderer {
             Enumeration sub = element.getSubEnumeration();
             boolean hasSubElements = sub != null && sub.size() > 0;
             if (!hasSubElements || includeIntermediateValues) {
-                target.add(new EnumEntry(value, nz(element.getDocumentation())));
+                target.add(new DetailedEnumEntry(value, enumDisplayName(element),
+                        nz(element.getDocumentation())));
             }
             if (hasSubElements) {
                 appendEnumerationEntries(target, value, sub, includeIntermediateValues);
             }
         }
+    }
+
+    private static String enumDisplayName(Enumeration.Element element) {
+        if (element == null || element.getMetaValues() == null) {
+            return "";
+        }
+        return nz(element.getMetaValues().getValue("ili2db.dispName"));
     }
 
     private static boolean isInlineEnumeration(AttributeDef attribute, EnumerationType enumType) {
@@ -524,11 +777,14 @@ public final class IliDocxRenderer {
     }
 
     private static String inlineEnumerationValues(EnumerationType enumType) {
-        List<EnumEntry> entries = collectEnumerationEntries(enumType);
+        List<DetailedEnumEntry> entries = collectDetailedEnumerationEntries(enumType);
         List<String> values = new ArrayList<>();
-        for (EnumEntry entry : entries) {
+        for (DetailedEnumEntry entry : entries) {
             if (entry.value() != null && !entry.value().isEmpty()) {
-                values.add(entry.value());
+                String displayName = nz(entry.displayName()).trim();
+                values.add(displayName.isEmpty()
+                        ? entry.value()
+                        : entry.value() + " (" + displayName + ")");
             }
         }
         return String.join(", ", values);
@@ -566,7 +822,7 @@ public final class IliDocxRenderer {
         run.setText(text != null ? text : "");
     }
 
-    private static void configureTable(CTTbl ctTable) {
+    private static void configureTable(CTTbl ctTable, BigInteger tableWidth) {
         if (ctTable == null) {
             return;
         }
@@ -578,7 +834,7 @@ public final class IliDocxRenderer {
         if (width == null) {
             width = tblPr.addNewTblW();
         }
-        width.setW(TABLE_WIDTH);
+        width.setW(tableWidth);
         width.setType(STTblWidth.DXA);
 
         CTTblBorders borders = tblPr.getTblBorders();
@@ -688,6 +944,25 @@ public final class IliDocxRenderer {
         }
         String name = type.getName();
         return (name != null && !name.isEmpty()) ? name : type.getClass().getSimpleName();
+    }
+
+    private static String valueRange(AttributeDef attribute) {
+        if (attribute == null || attribute.getDomain() == null) {
+            return "";
+        }
+        Type type = Type.findReal(attribute.getDomain());
+        if (type instanceof TextType || type instanceof NumericType) {
+            return type.toString();
+        }
+        return "";
+    }
+
+    private static String displayType(Row row) {
+        if (row == null) {
+            return "";
+        }
+        String range = nz(row.range());
+        return range.isBlank() ? nz(row.type()) : range;
     }
 
     private static boolean isDateOrTime(FormattedType type) {
@@ -815,7 +1090,15 @@ public final class IliDocxRenderer {
         spacing.setAfter(DEFAULT_SPACING_AFTER);
     }
 
+    private static record DetailedEnumEntry(String value, String displayName, String documentation) {}
+
+    private static record UniqueEntry(String number, String definition, String origin) {}
+
     public static record EnumEntry(String value, String documentation) {}
 
-    public static record Row(String name, String card, String type, String descr) {}
+    public static record Row(String name, String card, String type, String range, String descr) {
+        public Row(String name, String card, String type, String descr) {
+            this(name, card, type, "", descr);
+        }
+    }
 }

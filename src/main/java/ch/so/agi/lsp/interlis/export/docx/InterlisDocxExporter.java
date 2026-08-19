@@ -79,9 +79,9 @@ public final class InterlisDocxExporter {
                 ? doc.getDocument().getBody().getSectPr()
                 : doc.getDocument().getBody().addNewSectPr();
         CTPageSz pageSz = sectPr.isSetPgSz() ? sectPr.getPgSz() : sectPr.addNewPgSz();
-        pageSz.setW(A4_WIDTH_TWIPS);
-        pageSz.setH(A4_HEIGHT_TWIPS);
-        pageSz.setOrient(STPageOrientation.PORTRAIT);
+        pageSz.setW(A4_HEIGHT_TWIPS);
+        pageSz.setH(A4_WIDTH_TWIPS);
+        pageSz.setOrient(STPageOrientation.LANDSCAPE);
     }
 
     private static void configureDefaults(XWPFDocument doc) {
