@@ -410,7 +410,7 @@ class InterlisTextDocumentServiceTest {
     }
 
     @Test
-    void formattingDoesNotRecompileDirtyDocuments(@TempDir Path tempDir) throws Exception {
+    void formattingCompilesDirtyTextWithoutReplacingSavedCache(@TempDir Path tempDir) throws Exception {
         Path modelPath = Files.createTempFile(tempDir, "ModelDirtyFormat", ".ili");
         String content = """
                 INTERLIS 2.4;
@@ -436,21 +436,26 @@ class InterlisTextDocumentServiceTest {
                 cache,
                 (cfg, path) -> {
                     compileCount.incrementAndGet();
-                    return outcome;
+                    return Ili2cUtil.compile(cfg, path);
                 });
 
         TextDocumentItem item = new TextDocumentItem(modelPath.toUri().toString(), "interlis", 1, content);
         service.didOpen(new DidOpenTextDocumentParams(item));
 
-        service.didChange(fullDocumentChange(item.getUri(), 2, content + "\n! unsaved"));
+        service.didChange(fullDocumentChange(item.getUri(), 2, content.replace("ModelDirtyFormat", "UnsavedModel")));
 
         DocumentFormattingParams params = new DocumentFormattingParams();
         params.setTextDocument(new TextDocumentIdentifier(item.getUri()));
         List<? extends TextEdit> edits = service.formatting(params).get();
 
         assertTrue(service.isDocumentDirty(item.getUri()));
-        assertEquals(1, compileCount.get(), "Expected formatting on a dirty document to avoid recompilation");
-        assertTrue(edits.isEmpty(), "Expected dirty formatting to no-op instead of applying a stale saved snapshot");
+        assertEquals(2, compileCount.get());
+        assertEquals(1, edits.size());
+        assertTrue(edits.get(0).getNewText().contains("MODEL UnsavedModel"));
+        assertEquals(content, Files.readString(modelPath));
+        assertEquals("ModelDirtyFormat", cache.getSavedAttempt(modelPath.toString()).getTransferDescription()
+                .getModelsFromLastFile()[0].getName());
+        assertSame(cache.getSavedAttempt(modelPath.toString()), cache.getSuccessful(modelPath.toString()));
     }
 
     @Test

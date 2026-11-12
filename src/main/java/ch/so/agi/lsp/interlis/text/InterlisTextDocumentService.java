@@ -119,42 +119,40 @@ public class InterlisTextDocumentService implements TextDocumentService {
 
     @Override
     public CompletableFuture<List<? extends TextEdit>> formatting(DocumentFormattingParams params) {
-        List<? extends TextEdit> edits = Collections.emptyList();
-        try {
-            String uri = params.getTextDocument().getUri();
-            String pathOrUri = toFilesystemPathIfPossible(uri);
-            boolean tracked = documents.isTracked(uri);
-            boolean dirty = tracked && documents.isDirty(uri);
-            String originalText = documents.getText(uri);
-            if (originalText == null) {
-                originalText = readDocument(uri);
+        String uri = params.getTextDocument().getUri();
+        DocumentTracker.Snapshot snapshot = documents.snapshot(uri);
+        return CompletableFutures.computeAsync(cancelChecker -> {
+            cancelChecker.checkCanceled();
+            try {
+                if (!uri.startsWith("file:")) return Collections.emptyList();
+                String path = toFilesystemPathIfPossible(uri);
+                String text = snapshot != null ? snapshot.text() : readDocument(uri);
+                if (text.isBlank()) return Collections.emptyList();
+                Ili2cUtil.CompilationOutcome outcome = Ili2cUtil.compileSnapshot(
+                        server.getClientSettings(), path, text, compiler);
+                cancelChecker.checkCanceled();
+                if (!isFormattingSnapshotCurrent(uri, snapshot, text)) return Collections.emptyList();
+                if (outcome == null || outcome.getTransferDescription() == null) {
+                    publishFormattingDiagnostics(uri, outcome);
+                    return Collections.emptyList();
+                }
+                String formatted = Ili2cUtil.prettyPrint(outcome.getTransferDescription(), path);
+                cancelChecker.checkCanceled();
+                if (!isFormattingSnapshotCurrent(uri, snapshot, text)) return Collections.emptyList();
+                if (formatted == null || formatted.equals(text)) return Collections.emptyList();
+                return Collections.singletonList(new TextEdit(fullDocumentRange(text), formatted));
+            } catch (Exception ex) {
+                if (CancellationUtil.isCancellation(ex)) throw CancellationUtil.propagateCancellation(ex);
+                LOG.error("Formatting failed for {}", uri, ex);
+                return Collections.emptyList();
             }
+        });
+    }
 
-            Ili2cUtil.CompilationOutcome outcome = resolveOutcomeForInteractiveFeature(uri, pathOrUri, "formatting-fallback");
-            if (dirty) {
-                // Formatting from a stale saved snapshot would overwrite unsaved user edits.
-                return CompletableFuture.completedFuture(Collections.emptyList());
-            }
-
-            String formattedText = Ili2cUtil.prettyPrint(outcome != null ? outcome.getTransferDescription() : null, pathOrUri);
-            if (formattedText == null) {
-                publishFormattingDiagnostics(uri, outcome);
-                return CompletableFuture.completedFuture(Collections.emptyList());
-            }
-
-            if (formattedText != null && !formattedText.equals(originalText)) {
-                TextEdit edit = new TextEdit(fullDocumentRange(originalText), formattedText);
-                edits = Collections.singletonList(edit);
-            }
-        } catch (Exception ex) {
-            if (CancellationUtil.isCancellation(ex)) {
-                LOG.debug("Formatting cancelled for {}", params.getTextDocument() != null
-                        ? params.getTextDocument().getUri() : "<unknown>");
-            } else {
-                LOG.error("Formatting failed", ex);
-            }
-        }
-        return CompletableFuture.completedFuture(edits);
+    private boolean isFormattingSnapshotCurrent(String uri, DocumentTracker.Snapshot snapshot, String text)
+            throws Exception {
+        return snapshot != null ? documents.isCurrent(snapshot)
+                : !documents.isTracked(uri) && text.equals(readDocument(uri));
     }
 
     @Override

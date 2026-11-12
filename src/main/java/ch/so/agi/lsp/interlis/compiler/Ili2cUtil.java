@@ -1,8 +1,8 @@
 package ch.so.agi.lsp.interlis.compiler;
 
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStreamWriter;
+import java.io.StringWriter;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -11,6 +11,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.function.BiFunction;
 import java.util.concurrent.locks.ReentrantLock;
 
 import org.slf4j.Logger;
@@ -100,54 +101,72 @@ public class Ili2cUtil {
         }
     }
 
-    /**
-     * Pretty print the provided INTERLIS source using ili2c's formatter.
-     * <p>
-     * In the real implementation this would delegate to the ili2c library. For
-     * testing purposes we normalise leading/trailing whitespace and ensure the
-     * document ends with a newline.
-     *
-     * @param source raw INTERLIS source code
-     * @return formatted INTERLIS source code
-     * @throws IOException 
-     */
+    /** Pretty print a saved source file. */
     public static String prettyPrint(ClientSettings settings, String sourceFile) throws IOException {
-        settings = settings != null ? settings : new ClientSettings();
-
-        if (sourceFile == null) {
-            return "";
-        }
-        
+        if (sourceFile == null) return "";
         CompilationOutcome outcome = compile(settings, sourceFile);
-        TransferDescription td = outcome != null ? outcome.getTransferDescription() : null;
-        return prettyPrint(td, sourceFile);
+        return prettyPrint(outcome != null ? outcome.getTransferDescription() : null, sourceFile);
     }
 
     public static String prettyPrint(TransferDescription td, String sourceFile) throws IOException {
-        if (sourceFile == null) {
-            return "";
-        }
-        
-        Path targetFile = Files.createTempFile("", ".ili");
-        if (td == null) {
-            return null;
-        }
-        
+        if (sourceFile == null) return "";
+        if (td == null) return null;
+        // The generator accepts a Writer; no temporary output file is necessary.
+        StringWriter target = new StringWriter();
         TransferDescription desc = new TransferDescription();
-        // TODO Do we want to use a cache again?
-        try (OutputStreamWriter target = new OutputStreamWriter(
-                new FileOutputStream(targetFile.toAbsolutePath().toString()), StandardCharsets.UTF_8)) {
-
-            for (Model model : td.getModelsFromLastFile()) {
-                desc.add(model);
-            }
-            
-            Interlis2Generator gen = new Interlis2Generator();
-            gen.generate(target, desc, false); // emitPredefined = config.isIncPredefModel() ?
+        for (Model model : td.getModelsFromLastFile()) {
+            desc.add(model);
         }
-        
-        String formattedBody = Files.readString(targetFile);            
-        return formattedBody;
+        new Interlis2Generator().generate(target, desc, false);
+        return target.toString();
+    }
+
+    public static CompilationOutcome compileSnapshot(ClientSettings settings, String originalPath, String text)
+            throws IOException {
+        return compileSnapshot(settings, originalPath, text, Ili2cUtil::compile);
+    }
+
+    /** Compile isolated editor text without touching the source file or saved compilation caches. */
+    public static CompilationOutcome compileSnapshot(ClientSettings settings, String originalPath, String text,
+            BiFunction<ClientSettings, String, CompilationOutcome> compiler) throws IOException {
+        Path original = (originalPath.startsWith("file:") ? Path.of(URI.create(originalPath)) : Path.of(originalPath))
+                .toAbsolutePath().normalize();
+        Path directory = Files.createTempDirectory("ili-snapshot-");
+        Path source = directory.resolve(original.getFileName());
+        try {
+            Files.writeString(source, text, StandardCharsets.UTF_8);
+            String repositories = settings != null ? settings.getModelRepositories() : "";
+            if (repositories == null || repositories.isBlank()) repositories = Ili2cSettings.DEFAULT_ILIDIRS;
+            List<String> resolved = new ArrayList<>();
+            for (String entry : repositories.split(";")) {
+                entry = entry.trim().replace("%ILI_DIR", original.getParent().toString());
+                if (entry.isEmpty()) continue;
+                if (!entry.contains("%") && !entry.matches("^[a-zA-Z][a-zA-Z0-9+.-]*:.*")
+                        && !Path.of(entry).isAbsolute()) {
+                    entry = original.getParent().resolve(entry).normalize().toString();
+                }
+                resolved.add(entry);
+            }
+            ClientSettings snapshotSettings = new ClientSettings();
+            snapshotSettings.setModelRepositories(String.join(";", resolved));
+            CompilationOutcome outcome = compiler.apply(snapshotSettings, source.toString());
+            if (outcome == null) return null;
+            String sourcePath = source.toString();
+            String targetPath = original.toString();
+            List<Message> messages = outcome.getMessages().stream().map(message -> new Message(
+                    message.getSeverity(),
+                    sourcePath.equals(message.getFileUriOrPath()) || source.toUri().toString().equals(message.getFileUriOrPath())
+                            ? targetPath : message.getFileUriOrPath(),
+                    message.getLine(), message.getColumn(), message.getText().replace(source.toUri().toString(), original.toUri().toString()).replace(sourcePath, targetPath))).toList();
+            return new CompilationOutcome(outcome.getTransferDescription(),
+                    outcome.getLogText().replace(source.toUri().toString(), original.toUri().toString()).replace(sourcePath, targetPath), messages);
+        } finally {
+            try {
+                Files.deleteIfExists(source);
+            } finally {
+                Files.deleteIfExists(directory);
+            }
+        }
     }
 
     /** Validate an .ili file by calling ili2c's Java API (no external process!). */

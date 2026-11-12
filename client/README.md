@@ -33,6 +33,20 @@
 - **Caret-aware templates** 🧠 – caret tracking middleware makes sure auto-inserted templates leave the cursor at the expected position after edits are applied.
 - **SVG exports** 💾 – GLSP diagrams can be exported either as a complete model diagram or as the currently visible viewport; both variants use a white background and default to the source model folder. Mermaid and PlantUML previews also support saving generated SVG diagrams.
 
+### Formatting on save
+
+INTERLIS files are formatted on save by default using ili2c’s pretty printer. Manual **Format Document** also formats unsaved changes. Only the current document's editor text is compiled; imports use saved files and configured repositories.
+
+If compilation fails (including syntax errors, semantic errors, or missing imports), formatting makes no changes and saving continues. Normal save validation reports the errors. Compiler warnings do not prevent formatting.
+
+To disable automatic formatting, add this to your VS Code user or workspace settings (set it to `true` to enable it again):
+
+```json
+"[interlis]": {
+  "editor.formatOnSave": false
+}
+```
+
 ### Example: MODEL template via completion 🧱
 After `INTERLIS 2.4;`, trigger completion on a new top-level line and choose the `MODEL` template. It inserts a documentation banner, example meta-attributes, and a full `MODEL ... END` block with editable stops for model name, language, URL, and version. The four header fields are intentionally popup-free, so `Tab` and `Enter` just move to the next placeholder:
 

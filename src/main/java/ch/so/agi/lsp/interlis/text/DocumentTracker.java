@@ -30,18 +30,18 @@ public final class DocumentTracker {
 
     private final Map<String, DocumentState> documents = new ConcurrentHashMap<>();
 
-    public void open(TextDocumentItem item) {
+    public synchronized void open(TextDocumentItem item) {
         if (item == null) return;
         documents.put(item.getUri(), new DocumentState(item.getText(), item.getVersion(), false));
     }
 
-    public void close(String uri) {
+    public synchronized void close(String uri) {
         if (uri != null) {
             documents.remove(uri);
         }
     }
 
-    public void applyChanges(VersionedTextDocumentIdentifier identifier, List<TextDocumentContentChangeEvent> changes) {
+    public synchronized void applyChanges(VersionedTextDocumentIdentifier identifier, List<TextDocumentContentChangeEvent> changes) {
         if (identifier == null || identifier.getUri() == null || changes == null || changes.isEmpty()) {
             return;
         }
@@ -75,30 +75,43 @@ public final class DocumentTracker {
         state.dirty = true;
     }
 
-    public String getText(String uri) {
+    public synchronized String getText(String uri) {
         DocumentState state = uri == null ? null : documents.get(uri);
         return state != null ? state.text : null;
     }
 
-    public Integer getVersion(String uri) {
+    public synchronized Integer getVersion(String uri) {
         DocumentState state = uri == null ? null : documents.get(uri);
         return state != null ? state.version : null;
     }
 
-    public boolean isDirty(String uri) {
+    public synchronized boolean isDirty(String uri) {
         DocumentState state = uri == null ? null : documents.get(uri);
         return state != null && state.dirty;
     }
 
-    public boolean isTracked(String uri) {
+    public synchronized boolean isTracked(String uri) {
         return uri != null && documents.containsKey(uri);
     }
 
-    public void markSaved(String uri) {
+    public synchronized void markSaved(String uri) {
         DocumentState state = uri == null ? null : documents.get(uri);
         if (state != null) {
             state.dirty = false;
         }
+    }
+
+    public record Snapshot(String uri, String text, Integer version, Object session) {}
+
+    public synchronized Snapshot snapshot(String uri) {
+        DocumentState state = documents.get(uri);
+        return state == null ? null : new Snapshot(uri, state.text, state.version, state);
+    }
+
+    public synchronized boolean isCurrent(Snapshot snapshot) {
+        DocumentState state = documents.get(snapshot.uri());
+        return state == snapshot.session() && state != null
+                && java.util.Objects.equals(state.version, snapshot.version()) && state.text.equals(snapshot.text());
     }
 
     public static int toOffset(String text, Position position) {

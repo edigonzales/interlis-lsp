@@ -2,8 +2,8 @@ package ch.so.agi.lsp.interlis;
 
 import ch.so.agi.lsp.interlis.compiler.Ili2cUtil;
 import ch.so.agi.lsp.interlis.server.ClientSettings;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
+import java.util.concurrent.atomic.AtomicReference;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -85,5 +85,66 @@ class Ili2cUtilTest {
 
         assertTrue(maxConcurrentRuns.get() <= 1,
                 "Expected at most one compile invocation to run at a time but saw " + maxConcurrentRuns.get());
+    }
+
+    private static String model(String name, String body) {
+        return "INTERLIS 2.4;\nMODEL " + name
+                + " (de) AT \"https://example.com\" VERSION \"2025-09-17\" =\n"
+                + body + "\nEND " + name + ".\n";
+    }
+
+    @Test
+    void snapshotResolvesLocalAndRelativeRepositories(@TempDir Path directory) throws Exception {
+        Path repositories = Files.createDirectory(directory.resolve("repos"));
+        Files.writeString(directory.resolve("LocalDependency.ili"), model("LocalDependency", "DOMAIN LocalText = TEXT;"));
+        Files.writeString(repositories.resolve("OtherDependency.ili"), model("OtherDependency", "DOMAIN OtherText = TEXT;"));
+        Path original = directory.resolve("Snapshot.ili");
+        Files.writeString(original, "original disk text");
+        String source = model("Snapshot", "IMPORTS LocalDependency, OtherDependency;\n"
+                + "STRUCTURE S = a : LocalDependency.LocalText; b : OtherDependency.OtherText; END S;");
+        ClientSettings settings = new ClientSettings();
+        settings.setModelRepositories("%ILI_DIR;repos;%JAR_DIR");
+        var outcome = Ili2cUtil.compileSnapshot(settings, original.toString(), source);
+        assertNotNull(outcome.getTransferDescription(), outcome.getLogText());
+        assertEquals("original disk text", Files.readString(original));
+        assertEquals("%ILI_DIR;repos;%JAR_DIR", settings.getModelRepositories());
+        String formatted = Ili2cUtil.prettyPrint(outcome.getTransferDescription(), original.toString());
+        assertTrue(formatted.contains("MODEL Snapshot"));
+        assertFalse(formatted.contains("MODEL LocalDependency"));
+        assertFalse(formatted.contains("MODEL OtherDependency"));
+    }
+
+    @Test
+    void snapshotDefaultRepositoryStillUsesOriginalDirectory(@TempDir Path directory) throws Exception {
+        Files.writeString(directory.resolve("LocalDependency.ili"), model("LocalDependency", "DOMAIN LocalText = TEXT;"));
+        var outcome = Ili2cUtil.compileSnapshot(new ClientSettings(), directory.resolve("Snapshot.ili").toString(),
+                model("Snapshot", "IMPORTS LocalDependency;"));
+        assertNotNull(outcome.getTransferDescription(), outcome.getLogText());
+    }
+
+    @Test
+    void snapshotRemapsErrorsAndCleansUpOnFailure(@TempDir Path directory) throws Exception {
+        Path original = directory.resolve("Snapshot.ili");
+        AtomicReference<Path> temporary = new AtomicReference<>();
+        var outcome = Ili2cUtil.compileSnapshot(new ClientSettings(), original.toString(), model("Snapshot", "STRUCTURE S = a : ; END S;"), (settings, path) -> {
+            temporary.set(Path.of(path));
+            assertEquals("Snapshot.ili", Path.of(path).getFileName().toString());
+            try { assertEquals(model("Snapshot", "STRUCTURE S = a : ; END S;"), Files.readString(Path.of(path))); }
+            catch (java.io.IOException ex) { throw new AssertionError(ex); }
+            return Ili2cUtil.compile(settings, path);
+        });
+        assertNull(outcome.getTransferDescription());
+        assertFalse(outcome.getMessages().isEmpty(), outcome.getLogText());
+        assertTrue(outcome.getMessages().stream().anyMatch(message -> original.toString().equals(message.getFileUriOrPath())), outcome.getLogText());
+        assertTrue(outcome.getMessages().stream().noneMatch(message -> temporary.get().toString().equals(message.getFileUriOrPath())));
+        assertFalse(outcome.getLogText().contains(temporary.get().toString()));
+        assertFalse(Files.exists(temporary.get().getParent()));
+        assertThrows(java.util.concurrent.CancellationException.class, () ->
+            Ili2cUtil.compileSnapshot(new ClientSettings(), original.toString(), "source", (settings, path) -> {
+                temporary.set(Path.of(path));
+                throw new java.util.concurrent.CancellationException();
+            }));
+        assertFalse(Files.exists(temporary.get().getParent()));
+        assertFalse(Files.exists(original));
     }
 }
