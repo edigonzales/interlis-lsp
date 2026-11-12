@@ -36,6 +36,8 @@ class FormattingFeatureTest {
         assertNotNull(provider);
         assertTrue(provider.isLeft());
         assertTrue(provider.getLeft());
+        assertEquals("=", capabilities.getDocumentOnTypeFormattingProvider().getFirstTriggerCharacter());
+        assertEquals(List.of("*"), capabilities.getDocumentOnTypeFormattingProvider().getMoreTriggerCharacter());
     }
 
     @Test

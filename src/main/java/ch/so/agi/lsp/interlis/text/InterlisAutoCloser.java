@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Auto-inserts boilerplate when '=' is typed after selected INTERLIS headers.
+ * Inserts header boilerplate on '=' and promotes newly auto-closed comments to ilidoc on '*'.
  * Ported from the jEdit plugin implementation, but adapted to return LSP TextEdits.
  */
 public final class InterlisAutoCloser {
@@ -27,6 +27,9 @@ public final class InterlisAutoCloser {
             return Collections.emptyList();
         }
 
+        if ("*".equals(params.getCh())) {
+            return ilidocCommentEdits(text, params);
+        }
         if (!"=".equals(params.getCh())) {
             return Collections.emptyList();
         }
@@ -68,6 +71,53 @@ public final class InterlisAutoCloser {
             default:
                 return Collections.emptyList();
         }
+    }
+
+    private static List<TextEdit> ilidocCommentEdits(String text, DocumentOnTypeFormattingParams params) {
+        Position position = params.getPosition();
+        if (position == null || position.getLine() < 0 || position.getCharacter() < 0) return List.of();
+        int offset = DocumentTracker.toOffset(text, position);
+        // Only promote the empty pair immediately surrounding the newly typed '*'.
+        if (offset < 2 || offset + 2 > text.length()
+                || !text.regionMatches(offset - 2, "/**/", 0, 4)
+                || !DocumentTracker.positionAt(text, offset).equals(position)
+                || !isCodeAt(text, offset - 2)) return List.of();
+        return List.of(insertAfter(position, "*" + CARET_SENTINEL));
+    }
+
+    private enum CommentContext { CODE, STRING, LINE_COMMENT, BLOCK_COMMENT, EXPLANATION }
+
+    /** Scan the entire prefix so even long or unfinished strings/comments keep their context. */
+    private static boolean isCodeAt(String text, int end) {
+        CommentContext state = CommentContext.CODE;
+        for (int i = 0; i < end; i++) {
+            char current = text.charAt(i);
+            char next = i + 1 < text.length() ? text.charAt(i + 1) : '\0';
+            switch (state) {
+                case CODE -> {
+                    if (current == '"') state = CommentContext.STRING;
+                    else if (current == '!' && next == '!') { state = CommentContext.LINE_COMMENT; i++; }
+                    else if (current == '/' && next == '*') { state = CommentContext.BLOCK_COMMENT; i++; }
+                    else if (current == '/' && next == '/') { state = CommentContext.EXPLANATION; i++; }
+                }
+                case STRING -> {
+                    if (current == '\\') i++;
+                    else if (current == '"') state = CommentContext.CODE;
+                }
+                case LINE_COMMENT -> {
+                    if (current == '\r' || current == '\n') state = CommentContext.CODE;
+                }
+                case BLOCK_COMMENT -> {
+                    if (current == '*' && next == '/') { state = CommentContext.CODE; i++; }
+                }
+                case EXPLANATION -> {
+                    if (current == '/' && next == '/') { state = CommentContext.CODE; i++; }
+                }
+            }
+            // A two-character token crossing the boundary consumes the candidate's opening slash.
+            if (i >= end) return false;
+        }
+        return state == CommentContext.CODE;
     }
 
     private static TextEdit insertAfter(Position position, String text) {

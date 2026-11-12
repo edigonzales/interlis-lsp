@@ -1,6 +1,7 @@
 package ch.so.agi.lsp.interlis;
 
 import ch.so.agi.lsp.interlis.text.InterlisAutoCloser;
+import ch.so.agi.lsp.interlis.text.DocumentTracker;
 import org.eclipse.lsp4j.DocumentOnTypeFormattingParams;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
@@ -51,6 +52,45 @@ class InterlisAutoCloserTest {
 
         List<TextEdit> edits = InterlisAutoCloser.computeEdits(text, params);
         assertTrue(edits.isEmpty());
+    }
+
+    @Test
+    void promotesOnlyFreshEmptyCommentsAndPlacesCaretAfterSecondStar() {
+        for (String marked : List.of("/*|*/", "  /*|*/", "MODEL A = /*|*/",
+                "!! old line\n/*|*/", "!! old line\r\n  /*|*/", "!! old line\r/*|*/",
+                "/* old comment */\n/*|*/", "// old explanation // /*|*/",
+                "\"closed string\" /*|*/", "\"escaped \\\" quote\" /*|*/")) {
+            String text = marked.replace("|", "");
+            int offset = marked.indexOf('|');
+            Position position = DocumentTracker.positionAt(text, offset);
+            List<TextEdit> edits = InterlisAutoCloser.computeEdits(text, params(position.getLine(), position.getCharacter(), "*"));
+            assertEquals(1, edits.size(), marked);
+            assertEquals(new Range(position, position), edits.get(0).getRange());
+            assertEquals("*" + InterlisAutoCloser.CARET_SENTINEL, edits.get(0).getNewText());
+            String result = text.substring(0, offset) + edits.get(0).getNewText() + text.substring(offset);
+            assertTrue(result.contains("/**" + InterlisAutoCloser.CARET_SENTINEL + "*/"), result);
+        }
+    }
+
+    @Test
+    void leavesStringsCommentsExplanationsAndOrdinaryStarsAlone() {
+        for (String marked : List.of("\"/*|*/\"", "\"unfinished /*|*/", "\"escaped \\\" /*|*/",
+                "!! /*|*/", "!!@ description = /*|*/", "/* existing /*|*/", "/* existing\n/*|*/",
+                "/** existing /*|*/", "// explanation /*|*/ //", "// unfinished\n/*|*/",
+                "///*|*/", "/* before */*|*/", "/**|*/", "/* content*|*/", "/*| */", "/*|",
+                "a *| b", "/*" + "x".repeat(2000) + "/*|*/")) {
+            String text = marked.replace("|", "");
+            Position position = DocumentTracker.positionAt(text, marked.indexOf('|'));
+            assertTrue(InterlisAutoCloser.computeEdits(text,
+                    params(position.getLine(), position.getCharacter(), "*")).isEmpty(), marked);
+        }
+    }
+
+    @Test
+    void doesNotUseClampedPositionsForComments() {
+        assertTrue(InterlisAutoCloser.computeEdits("/**/", params(5, 2, "*")).isEmpty());
+        assertTrue(InterlisAutoCloser.computeEdits("/**/", params(0, 99, "*")).isEmpty());
+        assertTrue(InterlisAutoCloser.computeEdits("/**/", params(-1, 2, "*")).isEmpty());
     }
 
     private static DocumentOnTypeFormattingParams params(int line, int character, String ch) {

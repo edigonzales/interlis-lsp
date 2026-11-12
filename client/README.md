@@ -33,6 +33,10 @@
 - **Caret-aware templates** 🧠 – caret tracking middleware makes sure auto-inserted templates leave the cursor at the expected position after edits are applied.
 - **SVG exports** 💾 – GLSP diagrams can be exported either as a complete model diagram or as the currently visible viewport; both variants use a white background and default to the source model folder. Mermaid and PlantUML previews also support saving generated SVG diagrams.
 
+### ilidoc comments while typing
+
+Typing `/*` automatically produces `/***/`, with the cursor after the second `*`, ready for an ilidoc description: `/**Description*/`. This uses the existing `editor.formatOnType` and `editor.autoClosingComments` settings; disabling either leaves the normal editor behaviour. Strings, existing comments, explanations and multiple cursors are not promoted. Block-comment toggling and Enter behaviour are unchanged.
+
 ### Formatting on save
 
 INTERLIS files are formatted on save by default using ili2c’s pretty printer. Manual **Format Document** also formats unsaved changes. Only the current document's editor text is compiled; imports use saved files and configured repositories.

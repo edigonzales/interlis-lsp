@@ -114,7 +114,11 @@ let htmlPanel: vscode.WebviewPanel | undefined;
 let lastDiagramSource: vscode.Uri | undefined;
 const BLANK_INTERLIS_PREFIX = "The INTERLIS file is empty.";
 
-type PendingCaret = { version: number; position: vscode.Position };
+type PendingCaret = {
+  version: number;
+  position: vscode.Position;
+  comment?: { document: vscode.TextDocument; editor: vscode.TextEditor; at: vscode.Position };
+};
 
 function isBlankInterlisDocument(document: vscode.TextDocument | undefined): boolean {
   return !!document && document.getText().trim().length === 0;
@@ -247,7 +251,30 @@ export async function activate(context: vscode.ExtensionContext) {
 
   const caretMiddleware: LanguageClientOptions["middleware"] = {
     provideOnTypeFormattingEdits: async (document, position, ch, options, token, next) => {
-      const edits = await next(document, position, ch, options, token);
+      const comment = ch === "*";
+      const version = document.version;
+      const editor = vscode.window.activeTextEditor;
+      if (comment) {
+        if (!editor || editor.document !== document || editor.selections.length !== 1
+            || !editor.selection.isEmpty || !editor.selection.active.isEqual(position)) return [];
+        const offset = document.offsetAt(position);
+        if (document.getText().slice(offset - 2, offset + 2) !== "/**/") return [];
+      }
+      let cursorChanged = false;
+      const selectionListener = comment ? vscode.window.onDidChangeTextEditorSelection(event => {
+        if (event.textEditor === editor && (event.selections.length !== 1
+            || !event.selections[0]?.isEmpty || !event.selections[0].active.isEqual(position))) cursorChanged = true;
+      }) : undefined;
+      let edits: vscode.TextEdit[] | null | undefined;
+      try {
+        edits = await next(document, position, ch, options, token);
+      } finally {
+        selectionListener?.dispose();
+      }
+      if (comment && (cursorChanged || token.isCancellationRequested || document.isClosed || document.version !== version
+          || vscode.window.activeTextEditor !== editor || editor!.document !== document
+          || editor!.selections.length !== 1 || !editor!.selection.isEmpty
+          || !editor!.selection.active.isEqual(position))) return [];
       if (!edits || edits.length === 0) {
         pendingCarets.delete(document.uri.toString());
         return edits;
@@ -286,7 +313,9 @@ export async function activate(context: vscode.ExtensionContext) {
       });
 
       if (caret) {
-        pendingCarets.set(document.uri.toString(), { version: document.version + 1, position: caret });
+        const pending: PendingCaret = { version: document.version + 1, position: caret };
+        if (comment && editor) pending.comment = { document, editor, at: position };
+        pendingCarets.set(document.uri.toString(), pending);
       } else {
         pendingCarets.delete(document.uri.toString());
       }
@@ -456,7 +485,15 @@ export async function activate(context: vscode.ExtensionContext) {
           pendingCarets.delete(key);
 
           const active = vscode.window.activeTextEditor;
-          if (active && active.document.uri.toString() === key) {
+          const comment = pending.comment;
+          const change = event.contentChanges[0];
+          const commentMatches = !comment || (event.document === comment.document
+            && event.document.version === pending.version && active === comment.editor
+            && active.selections.length === 1 && active.selection.isEmpty
+            && (active.selection.active.isEqual(comment.at) || active.selection.active.isEqual(pending.position))
+            && event.contentChanges.length === 1 && change?.range.isEmpty
+            && change.range.start.isEqual(comment.at) && change.text === "*");
+          if (active && active.document.uri.toString() === key && commentMatches) {
             const { position } = pending;
             const selection = new vscode.Selection(position, position);
             active.selection = selection;
@@ -495,6 +532,7 @@ export async function activate(context: vscode.ExtensionContext) {
       cancelScheduledDiagramRefresh(document);
       forgetAutoOpenedDiagram(document);
       const key = document.uri.toString();
+      pendingCarets.delete(key);
       const timer = pendingTailSuggestTimers.get(key);
       if (timer) {
         clearTimeout(timer);
