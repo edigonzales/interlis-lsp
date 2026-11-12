@@ -304,15 +304,7 @@ public final class IliDocxRenderer {
         applyParagraphSpacing(paragraph);
         XWPFRun run = paragraph.createRun();
         applyRunFont(run);
-        run.setText(docxViewableTitle(viewable));
-    }
-
-    private static String docxViewableTitle(Viewable viewable) {
-        if (viewable instanceof AssociationDef association) {
-            String name = association.getName();
-            return (name != null && !name.isEmpty()) ? name + " (Association)" : "(Association)";
-        }
-        return viewableTitle(viewable);
+        run.setText(viewableTitle(viewable));
     }
 
     private static String tableStereotypes(Table table) {
@@ -330,6 +322,10 @@ public final class IliDocxRenderer {
     public static String viewableTitle(Viewable viewable) {
         if (viewable == null) {
             return "";
+        }
+        if (viewable instanceof AssociationDef association) {
+            String name = association.getName();
+            return (name != null && !name.isEmpty()) ? name + " (Association)" : "(Association)";
         }
         if (viewable instanceof Table table) {
             String stereos = tableStereotypes(table);
@@ -349,7 +345,7 @@ public final class IliDocxRenderer {
         return (name != null && !name.isEmpty()) ? name + " (Enumeration)" : "(Enumeration)";
     }
 
-    private static String topicTitle(Topic topic) {
+    public static String topicTitle(Topic topic) {
         if (topic == null) {
             return "";
         }
@@ -403,7 +399,7 @@ public final class IliDocxRenderer {
         }
     }
 
-    private static List<Row> collectRowsForAssociationRoles(AssociationDef association) {
+    public static List<Row> collectRowsForAssociationRoles(AssociationDef association) {
         List<Row> rows = new ArrayList<>();
         if (association == null || association.getRoles() == null) {
             return rows;
@@ -548,7 +544,7 @@ public final class IliDocxRenderer {
         applyParagraphSpacing(spacer);
     }
 
-    private static List<UniqueEntry> collectUniquenessEntries(AbstractClassDef<?> viewable) {
+    public static List<UniqueEntry> collectUniquenessEntries(AbstractClassDef<?> viewable) {
         List<UniqueEntry> entries = new ArrayList<>();
         if (viewable == null) {
             return entries;
@@ -1125,7 +1121,7 @@ public final class IliDocxRenderer {
 
     private static record DetailedEnumEntry(String value, String displayName, String documentation) {}
 
-    private static record UniqueEntry(String number, String definition, String origin) {}
+    public static record UniqueEntry(String number, String definition, String origin) {}
 
     public static record EnumEntry(String value, String documentation) {}
 

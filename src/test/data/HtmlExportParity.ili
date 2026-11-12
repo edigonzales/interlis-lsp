@@ -1,0 +1,49 @@
+INTERLIS 2.3;
+MODEL HtmlParity (en) AT "http://example.com/HtmlParity.ili" VERSION "2026-11-12" =
+  STRUCTURE Address =
+    Street : MANDATORY TEXT*50;
+  END Address;
+  STRUCTURE AddressList =
+    Addresses : BAG {1..*} OF Address;
+    UNIQUE (LOCAL) Addresses : Street;
+  END AddressList;
+  TOPIC Documentation =
+    CLASS UniqueBase =
+      BaseCode : TEXT*10;
+      UNIQUE BaseCode;
+    END UniqueBase;
+    CLASS UniqueChild EXTENDS UniqueBase =
+      ChildCode : TEXT*10;
+      UNIQUE ChildCode;
+    END UniqueChild;
+    CLASS NoUnique =
+      Value : TEXT*10;
+    END NoUnique;
+    CLASS Building =
+      Name : MANDATORY TEXT*50;
+      Score : 0..10;
+      Address : Address;
+      LongIdentifierForDocumentationAndReadableUniquenessDefinitions : TEXT*40;
+      UNIQUE (LOCAL) Address : Street;
+      UNIQUE Name;
+      UNIQUE Name, Score;
+      UNIQUE WHERE Score <= 5 : Name, Score;
+      UNIQUE WHERE Name == "A&B" : Name;
+      UNIQUE Name, LongIdentifierForDocumentationAndReadableUniquenessDefinitions;
+    END Building;
+    /** A documented association. */
+    ASSOCIATION BuildingLink =
+      /** Left role documentation. */
+      Left -- {0..*} Building;
+      /** Right role documentation. */
+      Right -- {1} Building;
+      /** Association attribute documentation. */
+      LinkCode : TEXT*5;
+      UNIQUE Left->Name, Right->Score;
+    END BuildingLink;
+    ASSOCIATION PlainLink =
+      Owner -- {0..1} Building;
+      Members -- {0..*} UniqueChild;
+    END PlainLink;
+  END Documentation;
+END HtmlParity.

@@ -22,6 +22,8 @@
 - **GLSP diagram editor (topic containers)** 🧭 – open a dedicated `.ili` diagram editor beside the source view; it renders classes inside topic containers from the compiled transfer description via an embedded Eclipse GLSP server.
 - **HTML & DOCX exports** 📄 – render human-readable documentation (including custom titles) as HTML or export styled Word documents.
 
+HTML documentation includes `(Topic)` headings, direct and inherited UNIQUE definitions with their origins, and association sections with role tables, optional attributes, and UNIQUE definitions, matching the Word export.
+
 ### VS Code client experience 💡
 - **Activation on INTERLIS files** 📂 – the extension activates for `.ili` files and contributes a TextMate grammar and language configuration for syntax highlighting and editor defaults.
 - **Bundled runtime** 📦 – ships with a self-contained fat JAR and optional platform-specific JRE; paths can be overridden via settings.

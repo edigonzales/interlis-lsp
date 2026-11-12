@@ -105,7 +105,7 @@ class InterlisHtmlExporterTest {
 
         assertTrue(html.contains("<span class=\"heading-number\">1</span><span class=\"heading-text\">DocTest</span>"));
         assertTrue(html.contains("<p class=\"metadata\"><strong>Titel:</strong> Model Title</p>"));
-        assertTrue(html.contains("<span class=\"heading-number\">2</span><span class=\"heading-text\">DocTopic</span>"));
+        assertTrue(html.contains("<span class=\"heading-number\">2</span><span class=\"heading-text\">DocTopic (Topic)</span>"));
         assertTrue(html.contains("<span class=\"heading-number\">2.1</span><span class=\"heading-text\">Address (Abstract Structure)</span>"));
         assertTrue(html.contains("<span class=\"heading-number\">2.2</span><span class=\"heading-text\">Building (Class)</span>"));
         assertTrue(html.contains("<span class=\"heading-number\">2.3</span><span class=\"heading-text\">BuildingView (View)</span>"));

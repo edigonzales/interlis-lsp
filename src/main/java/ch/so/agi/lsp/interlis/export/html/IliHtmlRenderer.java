@@ -2,6 +2,8 @@ package ch.so.agi.lsp.interlis.export.html;
 
 import ch.so.agi.lsp.interlis.export.docx.IliDocxRenderer;
 import ch.interlis.ili2c.metamodel.AbstractEnumerationType;
+import ch.interlis.ili2c.metamodel.AbstractClassDef;
+import ch.interlis.ili2c.metamodel.AssociationDef;
 import ch.interlis.ili2c.metamodel.Container;
 import ch.interlis.ili2c.metamodel.Domain;
 import ch.interlis.ili2c.metamodel.EnumerationType;
@@ -100,6 +102,20 @@ th {
   font-weight: 600;
   background-color: #f1f1f1;
 }
+.subheading {
+  font-size: 15px;
+  margin: 16px 0 8px;
+}
+table.uniqueness, table.roles {
+  table-layout: fixed;
+}
+table.uniqueness td, table.roles td {
+  overflow-wrap: anywhere;
+}
+table.uniqueness td:nth-child(2) {
+  white-space: pre-wrap;
+  font-family: Consolas, "Liberation Mono", monospace;
+}
 .annotation {
   color: #6b6b6b;
   font-size: 13px;
@@ -135,7 +151,7 @@ th {
                 renderEnumerations(sb, numbering, model, model, 1);
 
                 for (Topic topic : IliDocxRenderer.getElements(model, Topic.class)) {
-                    appendHeading(sb, numbering, 0, topic.getName());
+                    appendHeading(sb, numbering, 0, IliDocxRenderer.topicTitle(topic));
                     appendDocumentation(sb, topic.getDocumentation());
                     renderViewables(sb, numbering, model, topic, 1);
                     renderEnumerations(sb, numbering, model, topic, 1);
@@ -156,7 +172,7 @@ th {
             if (viewable instanceof Table) {
                 continue;
             }
-            if (viewable instanceof View) {
+            if (viewable instanceof View || viewable instanceof AssociationDef) {
                 writeViewableSection(sb, numbering, model, scope, viewable, headingLevel);
             }
         }
@@ -178,7 +194,16 @@ th {
             Viewable viewable, int headingLevel) {
         appendHeading(sb, numbering, headingLevel, IliDocxRenderer.viewableTitle(viewable));
         appendDocumentation(sb, viewable.getDocumentation());
-        appendAttributeTable(sb, IliDocxRenderer.collectRowsForViewable(model, scope, viewable));
+        if (viewable instanceof AssociationDef association) {
+            appendMemberTable(sb, IliDocxRenderer.collectRowsForAssociationRoles(association), "roles", "Rollenname");
+            List<IliDocxRenderer.Row> attributes = IliDocxRenderer.collectRowsForViewable(model, scope, viewable);
+            if (!attributes.isEmpty()) appendAttributeTable(sb, attributes);
+        } else {
+            appendAttributeTable(sb, IliDocxRenderer.collectRowsForViewable(model, scope, viewable));
+        }
+        if (viewable instanceof AbstractClassDef<?> classDef) {
+            appendUniquenessTable(sb, IliDocxRenderer.collectUniquenessEntries(classDef));
+        }
     }
 
     private static void appendModelMetadata(StringBuilder sb, Model model) {
@@ -212,9 +237,15 @@ th {
     }
 
     private static void appendAttributeTable(StringBuilder sb, List<IliDocxRenderer.Row> rows) {
-        sb.append("<table class=\"attributes\">\n");
+        appendMemberTable(sb, rows, "attributes", "Attributname");
+    }
+
+    private static void appendMemberTable(StringBuilder sb, List<IliDocxRenderer.Row> rows,
+            String tableClass, String nameColumn) {
+        sb.append("<table class=\"").append(tableClass).append("\">\n");
         sb.append("<colgroup><col style=\"width:25%\"/><col style=\"width:17%\"/><col style=\"width:25%\"/><col style=\"width:33%\"/></colgroup>\n");
-        sb.append("<thead><tr><th>Attributname</th><th>Kardinalität</th><th>Typ</th><th>Beschreibung</th></tr></thead>\n<tbody>\n");
+        sb.append("<thead><tr><th>").append(escape(nameColumn))
+                .append("</th><th>Kardinalität</th><th>Typ</th><th>Beschreibung</th></tr></thead>\n<tbody>\n");
         if (rows != null) {
             for (IliDocxRenderer.Row row : rows) {
                 sb.append("<tr><td>").append(escape(IliDocxRenderer.nz(row.name()))).append("</td>");
@@ -222,6 +253,19 @@ th {
                 sb.append("<td>").append(escape(IliDocxRenderer.nz(row.type()))).append("</td>");
                 sb.append("<td>").append(escape(IliDocxRenderer.nz(row.descr()))).append("</td></tr>\n");
             }
+        }
+        sb.append("</tbody>\n</table>\n");
+    }
+
+    private static void appendUniquenessTable(StringBuilder sb, List<IliDocxRenderer.UniqueEntry> entries) {
+        if (entries.isEmpty()) return;
+        sb.append("<h4 class=\"subheading\">UNIQUE</h4>\n<table class=\"uniqueness\">\n");
+        sb.append("<colgroup><col style=\"width:8%\"/><col style=\"width:72%\"/><col style=\"width:20%\"/></colgroup>\n");
+        sb.append("<thead><tr><th>Nr.</th><th>UNIQUE-Definition</th><th>Herkunft</th></tr></thead>\n<tbody>\n");
+        for (IliDocxRenderer.UniqueEntry entry : entries) {
+            sb.append("<tr><td>").append(escape(entry.number())).append("</td><td>")
+                    .append(escape(entry.definition())).append("</td><td>")
+                    .append(escape(entry.origin())).append("</td></tr>\n");
         }
         sb.append("</tbody>\n</table>\n");
     }
