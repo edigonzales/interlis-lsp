@@ -136,7 +136,7 @@ public final class Ili2Mermaid {
         }
 
         private static String escape(String s) {
-            return s.replace("\"", "\\\"");
+            return s.replaceAll("\\R\\s*", " ").replace("\"", "\\\"");
         }
     }
 }

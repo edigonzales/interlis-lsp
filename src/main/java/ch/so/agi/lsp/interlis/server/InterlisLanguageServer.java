@@ -29,6 +29,7 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
     public static final String CMD_GENERATE_UML = "interlis.uml";
     public static final String CMD_GENERATE_PLANTUML = "interlis.uml.plant";
     public static final String REQ_GLSP_ENDPOINT = "interlis/glspEndpoint";
+    public static final String REQ_MERMAID_DIAGRAM = "interlis/mermaidDiagram";
     public static final String REQ_DIAGRAM_MODEL = "interlis/diagramModel";
     public static final String REQ_EXPORT_GRAPHML = "interlis/exportGraphml";
     public static final String REQ_EXPORT_DOCX = "interlis/exportDocx";

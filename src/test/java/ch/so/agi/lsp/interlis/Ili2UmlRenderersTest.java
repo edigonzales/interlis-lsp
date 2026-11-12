@@ -38,7 +38,7 @@ class Ili2UmlRenderersTest {
 
         assertEquals(mermaid, Ili2Mermaid.render(td, UmlAttributeMode.OWN));
         assertEquals(plantUml, Ili2PlantUml.renderSource(td, UmlAttributeMode.OWN));
-        assertTrue(mermaid.contains("Aaaaaamyenum[0..1] : (foo,\n  bar)"));
+        assertTrue(mermaid.contains("Aaaaaamyenum[0..1] : (foo, bar)"));
         assertFalse(mermaid.contains("Aaaaaamyenum[0..1] : MyBase"));
         assertTrue(mermaid.contains("FarbenAttr[0..1] : Farben"));
         assertTrue(mermaid.contains("rot.hell"));
@@ -60,7 +60,7 @@ class Ili2UmlRenderersTest {
         String mermaid = Ili2Mermaid.render(td, UmlAttributeMode.NONE);
         String plantUml = Ili2PlantUml.renderSource(td, UmlAttributeMode.NONE);
 
-        assertFalse(mermaid.contains("Aaaaaamyenum[0..1] : (foo,\n  bar)"));
+        assertFalse(mermaid.contains("Aaaaaamyenum[0..1] : (foo, bar)"));
         assertFalse(mermaid.contains("FarbenAttr[0..1] : Farben"));
         assertFalse(mermaid.contains("rot.hell"));
         assertFalse(mermaid.contains("\n      rot\n"));

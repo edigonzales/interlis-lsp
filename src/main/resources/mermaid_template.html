@@ -35,6 +35,11 @@
       flex: 1 1 auto;
       overflow: hidden;
     }
+    .diagram-canvas { position: absolute; inset: 0; }
+    .diagram-status { padding: 12px 16px; background: #fff3cd; border-bottom: 1px solid #e5d28d; }
+    .diagram-status[hidden] { display: none; }
+    .diagram-status div { margin-top: 4px; font-size: 12px; }
+    button:disabled { opacity: 0.5; cursor: default; }
     .diagram-toolbar {
       position: absolute;
       top: 8px;
@@ -116,126 +121,236 @@ ${mermaidString}
   <script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>
 
   <script>
-    mermaid.initialize({
-      startOnLoad: false,
-      securityLevel: 'loose',
-      maxTextSize: 1000000,
+    const vscode = acquireVsCodeApi();
+    const viewId = document.body.dataset.mermaidView || '';
+    const initialSource = document.getElementById('m1').textContent.trim();
+    const page = document.querySelector('.page');
+    page.innerHTML = '';
 
-      // 1) Ask Mermaid not to force max-width on diagrams
-      flowchart: { useMaxWidth: false },
-      er:        { useMaxWidth: false },
-      sequence:  { useMaxWidth: false },
-      class:     { useMaxWidth: false },       // for classDiagram
-      classDiagram: { useMaxWidth: false },    // (some versions use this key)
+    const diagramPane = document.createElement('div');
+    diagramPane.className = 'diagram-pane';
+    const statusBox = document.createElement('div');
+    statusBox.className = 'diagram-status';
+    statusBox.setAttribute('role', 'status');
+    statusBox.hidden = true;
+    diagramPane.appendChild(statusBox);
+    const wrap = document.createElement('div');
+    wrap.className = 'diagram-wrap';
+    diagramPane.appendChild(wrap);
+    const toolbar = document.createElement('div');
+    toolbar.className = 'diagram-toolbar';
+    toolbar.innerHTML =
+      '<button type="button" data-a="zin">+</button>' +
+      '<button type="button" data-a="zout">−</button>' +
+      '<button type="button" data-a="fit">Fit</button>' +
+      '<button type="button" data-a="download">Download SVG</button>' +
+      '<button type="button" data-a="toggle-source" aria-expanded="false">Show code</button>';
+    wrap.appendChild(toolbar);
+    let canvas = document.createElement('div');
+    canvas.className = 'diagram-canvas';
+    wrap.appendChild(canvas);
+    const sourcePane = document.createElement('div');
+    sourcePane.className = 'source-pane';
+    sourcePane.innerHTML = '<div class="source-header"><span>Mermaid source</span><span class="copy-status" aria-live="polite" role="status"></span><button type="button" class="copy-button">Copy</button></div>';
+    const sourceContent = document.createElement('pre');
+    sourceContent.className = 'source-content';
+    sourcePane.appendChild(sourceContent);
+    page.append(diagramPane, sourcePane);
+    const copyButton = sourcePane.querySelector('.copy-button');
 
-      // extra belt-and-suspenders: CSS injection at render time
-      themeCSS: '.mermaid svg{max-width:none !important;height:100% !important;width:100% !important;}'
+    let svgEl = null;
+    let pz = null;
+    let exportViewBox = null;
+    let renderedSource = null;
+    let renderedCompact = null;
+    let generation = 0;
+    let renderSequence = 0;
+    let rendering = Promise.resolve();
+    let deferredUpdate = null;
+
+    function viewportAvailable() {
+      return !document.hidden && wrap.clientWidth > 0 && wrap.clientHeight > 0;
+    }
+
+    function showStatus(title, detail) {
+      statusBox.replaceChildren();
+      statusBox.hidden = !title;
+      if (!title) { if (pz && viewportAvailable()) pz.resize(); return; }
+      const heading = document.createElement('strong');
+      heading.textContent = title;
+      const description = document.createElement('div');
+      description.textContent = detail;
+      statusBox.append(heading, description);
+      if (pz && viewportAvailable()) pz.resize();
+    }
+
+    function showCompileStatus(status) {
+      if (status === 'last-valid') {
+        showStatus('Last valid diagram snapshot shown', 'The latest saved model did not compile. Fix the errors and save again to refresh the diagram.');
+      } else if (status === 'empty') {
+        showStatus('Source file is empty', 'Add INTERLIS content and save to render the diagram.');
+      } else if (status === 'unavailable') {
+        showStatus('Diagram unavailable', 'No valid saved model snapshot is available. Save a valid model to refresh the diagram.');
+      } else showStatus('', '');
+    }
+
+    function setControlsEnabled(enabled) {
+      toolbar.querySelectorAll('button:not([data-a="toggle-source"])').forEach(button => button.disabled = !enabled);
+      copyButton.disabled = !enabled;
+    }
+
+    function clearDiagram() {
+      deferredUpdate = null;
+      if (pz) pz.destroy();
+      pz = null;
+      svgEl = null;
+      exportViewBox = null;
+      renderedSource = null;
+      renderedCompact = null;
+      canvas.replaceChildren();
+      sourceContent.textContent = '';
+      setControlsEnabled(false);
+    }
+
+    async function updateDiagram(diagram, revision) {
+      if (revision !== generation) return;
+      if (diagram.status === 'empty' || diagram.status === 'unavailable') {
+        clearDiagram();
+        showCompileStatus(diagram.status);
+        return;
+      }
+      if (diagram.source === renderedSource && diagram.hideEmptyMembersBox === renderedCompact) {
+        showCompileStatus(diagram.status);
+        return;
+      }
+      if (!viewportAvailable()) {
+        deferredUpdate = { diagram, revision };
+        return;
+      }
+      deferredUpdate = null;
+      let stage = null;
+      let nextPz = null;
+      try {
+        mermaid.initialize({
+          startOnLoad: false,
+          securityLevel: 'loose',
+          maxTextSize: 1000000,
+          flowchart: { useMaxWidth: false },
+          er: { useMaxWidth: false },
+          sequence: { useMaxWidth: false },
+          class: { useMaxWidth: false, hideEmptyMembersBox: diagram.hideEmptyMembersBox },
+          classDiagram: { useMaxWidth: false },
+          themeCSS: '.mermaid svg{max-width:none !important;height:100% !important;width:100% !important;}'
+        });
+        stage = document.createElement('div');
+        stage.className = 'diagram-canvas';
+        stage.style.visibility = 'hidden';
+        wrap.appendChild(stage);
+        // Keep Mermaid's temporary/error SVGs inside a disposable container as well.
+        const out = await mermaid.render('mermaid-svg-' + (++renderSequence), diagram.source, stage);
+        if (revision !== generation) return;
+        stage.innerHTML = out.svg;
+        const nextSvg = stage.querySelector('svg');
+        if (!nextSvg) throw new Error('Mermaid did not return an SVG diagram.');
+        const nextViewBox = nextSvg.getAttribute('viewBox');
+        nextSvg.style.maxWidth = 'none';
+        nextSvg.style.width = '100%';
+        nextSvg.style.height = '100%';
+        nextSvg.setAttribute('width', '100%');
+        nextSvg.setAttribute('height', '100%');
+        wrap.appendChild(stage);
+        // Keep effective scale and translation, even if the new graph has different dimensions.
+        const viewport = pz ? { scale: pz.getSizes().realZoom, pan: pz.getPan() } : null;
+        nextPz = svgPanZoom(nextSvg, {
+          zoomEnabled: true, panEnabled: true, mouseWheelZoomEnabled: true,
+          controlIconsEnabled: false, fit: true, center: true,
+          minZoom: 0.2, maxZoom: 10, contain: false, preventMouseEventsDefault: true
+        });
+        if (viewport) {
+          const baseScale = nextPz.getSizes().realZoom / nextPz.getZoom();
+          const zoom = viewport.scale / baseScale;
+          nextPz.setMinZoom(Math.min(0.2, zoom));
+          nextPz.setMaxZoom(Math.max(10, zoom));
+          nextPz.zoom(zoom);
+          nextPz.pan(viewport.pan);
+        }
+        if (out.bindFunctions) out.bindFunctions(nextSvg);
+        if (pz) pz.destroy();
+        canvas.remove();
+        canvas = stage;
+        canvas.style.visibility = '';
+        stage = null;
+        pz = nextPz;
+        nextPz = null;
+        svgEl = nextSvg;
+        exportViewBox = nextViewBox;
+        renderedSource = diagram.source;
+        renderedCompact = diagram.hideEmptyMembersBox;
+        sourceContent.textContent = diagram.source.trim();
+        setControlsEnabled(true);
+        showCompileStatus(diagram.status);
+      } catch (error) {
+        if (revision !== generation) return;
+        showStatus('Diagram update failed', svgEl ? 'The previous diagram is still shown. See INTERLIS LSP Debug for details.' : 'See INTERLIS LSP Debug for details.');
+        vscode.postMessage({ type: 'mermaid:renderError', viewId, detail: String(error && (error.stack || error.message) || error) });
+      } finally {
+        if (nextPz) nextPz.destroy();
+        if (stage) stage.remove();
+      }
+    }
+
+    function scheduleUpdate(diagram, revision) {
+      // Mermaid configuration is global. Serialize rendering and discard obsolete revisions.
+      rendering = rendering.then(() => updateDiagram(diagram, revision));
+      return rendering;
+    }
+
+    window.addEventListener('message', event => {
+      const message = event.data;
+      if (!message || message.viewId !== viewId || !Number.isInteger(message.generation)
+          || message.generation < generation) return;
+      generation = message.generation;
+      if (message.type === 'mermaid:update' && message.diagram) scheduleUpdate(message.diagram, generation);
+      else if (message.type === 'mermaid:error') showStatus('Diagram update failed', 'The previous diagram is still shown. See INTERLIS LSP Debug for details.');
     });
 
-    const vscode = acquireVsCodeApi();
-
-    (async function () {
-      var src = document.getElementById('m1');
-      var graphText = src ? src.textContent : '';
-      var out = await mermaid.render('m1-svg', graphText);
-
-      var wrap = document.createElement('div');
-      wrap.className = 'diagram-wrap';
-
-      var toolbar = document.createElement('div');
-      toolbar.className = 'diagram-toolbar';
-      toolbar.innerHTML =
-        '<button type="button" data-a="zin">+</button>' +
-        '<button type="button" data-a="zout">−</button>' +
-        '<button type="button" data-a="fit">Fit</button>' +
-        '<button type="button" data-a="download">Download SVG</button>' +
-        '<button type="button" data-a="toggle-source" aria-expanded="false">Show code</button>';
-      wrap.appendChild(toolbar);
-
-      wrap.insertAdjacentHTML('beforeend', out.svg);
-      var page = src.parentNode;
-      page.innerHTML = '';
-
-      var diagramPane = document.createElement('div');
-      diagramPane.className = 'diagram-pane';
-      diagramPane.appendChild(wrap);
-
-      var sourcePane = document.createElement('div');
-      sourcePane.className = 'source-pane';
-      sourcePane.innerHTML = '<div class="source-header"><span>Mermaid source</span><span class="copy-status" aria-live="polite" role="status"></span><button type="button" class="copy-button">Copy</button></div>';
-      var sourceContent = document.createElement('pre');
-      sourceContent.className = 'source-content';
-      sourceContent.textContent = graphText.trim();
-      sourcePane.appendChild(sourceContent);
-
-      page.appendChild(diagramPane);
-      page.appendChild(sourcePane);
-
-      function setSourceCollapsed(collapsed) {
+    toolbar.addEventListener('click', event => {
+      const action = event.target && event.target.getAttribute('data-a');
+      if (!action) return;
+      event.preventDefault();
+      if (action === 'zin' && pz) pz.zoomBy(1.2);
+      if (action === 'zout' && pz) pz.zoomBy(1 / 1.2);
+      if (action === 'fit' && pz) { pz.resize(); pz.fit(); pz.center(); }
+      if (action === 'download' && svgEl) downloadSVG(svgEl, 'diagram.svg', exportViewBox);
+      if (action === 'toggle-source') {
+        const collapsed = !page.classList.contains('source-collapsed');
         page.classList.toggle('source-collapsed', collapsed);
-        sourcePane.classList.toggle('collapsed', collapsed);
-        var toggle = toolbar.querySelector('[data-a="toggle-source"]');
-        if (toggle) {
-          toggle.textContent = collapsed ? 'Show code' : 'Hide code';
-          toggle.setAttribute('aria-expanded', (!collapsed).toString());
-        }
+        const button = toolbar.querySelector('[data-a="toggle-source"]');
+        button.textContent = collapsed ? 'Show code' : 'Hide code';
+        button.setAttribute('aria-expanded', String(!collapsed));
+        if (pz) pz.resize();
       }
-
-      setSourceCollapsed(true);
-
-      // 3) Normalize the rendered <svg> just in case
-      var svgEl = wrap.querySelector('svg');
-      if (svgEl) {
-        svgEl.style.maxWidth = 'none';
-        svgEl.style.width = '100%';
-        svgEl.style.height = '100%';
-        // Sometimes Mermaid sets explicit width/height numbers; wipe them
-        svgEl.setAttribute('width', '100%');
-        svgEl.setAttribute('height', '100%');
+    });
+    copyButton.addEventListener('click', () => {
+      copyTextToClipboard(sourceContent.textContent || '').then(success => showCopyFeedback(copyButton, success));
+    });
+    function resumeVisibleDiagram() {
+      if (!viewportAvailable()) return;
+      if (pz) pz.resize();
+      if (deferredUpdate) {
+        const update = deferredUpdate;
+        deferredUpdate = null;
+        scheduleUpdate(update.diagram, update.revision);
       }
-
-      var pz = svgPanZoom(svgEl, {
-        zoomEnabled: true,
-        panEnabled: true,
-        mouseWheelZoomEnabled: true,
-        controlIconsEnabled: false,
-        fit: true, center: true,
-        minZoom: 0.2, maxZoom: 10,
-        contain: false,
-        preventMouseEventsDefault: true
-      });
-
-      pz.enablePan();
-
-      var STEP = 0.2;
-      toolbar.addEventListener('click', function (e) {
-        var a = e.target && e.target.getAttribute('data-a');
-        if (!a) { return; }
-        e.preventDefault();
-        if (a === 'zin')  pz.zoomBy(1 + STEP);
-        if (a === 'zout') pz.zoomBy(1 / (1 + STEP));
-        if (a === 'fit')  { pz.resize(); pz.fit(); pz.center(); }
-        if (a === 'download') downloadSVG(svgEl, 'diagram.svg');
-        if (a === 'toggle-source') setSourceCollapsed(!page.classList.contains('source-collapsed'));
-      });
-
-      var copyButton = sourcePane.querySelector('.copy-button');
-      if (copyButton) {
-        copyButton.addEventListener('click', function () {
-          copyTextToClipboard(sourceContent.textContent || '').then(function (success) {
-            showCopyFeedback(copyButton, success);
-          });
-        });
-      }
-
-      window.addEventListener('resize', function () {
-        pz.resize(); pz.fit(); pz.center();
-      }, { passive: true });
-    })();
+    }
+    document.addEventListener('visibilitychange', resumeVisibleDiagram);
+    window.addEventListener('resize', resumeVisibleDiagram, { passive: true });
+    setControlsEnabled(false);
+    scheduleUpdate({ source: initialSource, hideEmptyMembersBox: ${hideEmptyMembersBox}, status: 'current' }, 0)
+      .then(() => vscode.postMessage({ type: 'mermaid:ready', viewId }));
 
 
-
-function downloadSVG(svgEl, filename) {
+function downloadSVG(svgEl, filename, viewBox) {
   // Clone so we can tweak without touching the on-page SVG
   var clone = svgEl.cloneNode(true);
 
@@ -244,7 +359,8 @@ function downloadSVG(svgEl, filename) {
   if (vp) vp.removeAttribute('transform');
 
   // Ensure clean sizing (portable in other tools)
-  var vb = clone.getAttribute('viewBox');
+  var vb = viewBox || clone.getAttribute('viewBox');
+  if (vb) clone.setAttribute('viewBox', vb);
   if (vb) {
     var p = vb.trim().split(/\s+/);
     var w = parseFloat(p[2]), h = parseFloat(p[3]);

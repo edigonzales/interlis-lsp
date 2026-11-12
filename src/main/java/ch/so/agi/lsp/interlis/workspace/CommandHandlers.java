@@ -6,6 +6,7 @@ import ch.so.agi.lsp.interlis.diagram.Ili2Mermaid;
 import ch.so.agi.lsp.interlis.diagram.Ili2PlantUml;
 import ch.so.agi.lsp.interlis.diagram.InterlisDiagramModel;
 import ch.so.agi.lsp.interlis.diagram.StaticUmlRenderOptions;
+import ch.so.agi.lsp.interlis.diagram.UmlAttributeMode;
 import ch.so.agi.lsp.interlis.export.docx.InterlisDocxExporter;
 import ch.so.agi.lsp.interlis.export.html.InterlisHtmlExporter;
 import ch.so.agi.lsp.interlis.export.html.MermaidHtmlRenderer;
@@ -65,11 +66,40 @@ public class CommandHandlers {
         }
 
         try {
-            String mermaid = Ili2Mermaid.render(td, umlRenderOptions());
-            String html = MermaidHtmlRenderer.render(mermaid);
+            StaticUmlRenderOptions options = umlRenderOptions();
+            String mermaid = Ili2Mermaid.render(td, options);
+            String html = MermaidHtmlRenderer.render(mermaid, options.getAttributeMode() == UmlAttributeMode.NONE);
             return CompletableFuture.completedFuture(html);
         } catch (Exception e) {
             return CompletableFuture.failedFuture(e);
+        }
+    }
+
+    /** Render saved snapshots only: this path must never compile or emit compileFinished. */
+    public CompletableFuture<MermaidDiagram> mermaidDiagram(String fileUriOrPath) {
+        StaticUmlRenderOptions options = umlRenderOptions();
+        boolean compact = options.getAttributeMode() == UmlAttributeMode.NONE;
+        try {
+            Path file = Paths.get(InterlisTextDocumentService.toFilesystemPathIfPossible(fileUriOrPath));
+            if (!Files.isRegularFile(file)) {
+                return CompletableFuture.completedFuture(new MermaidDiagram(null, compact, "unavailable"));
+            }
+            InterlisTextDocumentService documents = server.getInterlisTextDocumentService();
+            Ili2cUtil.CompilationOutcome saved = documents.getLastSavedCompilationAttempt(fileUriOrPath);
+            // Blank saves invalidate both caches. Read disk, never the possibly dirty editor buffer.
+            if (saved == null && Files.readString(file).isBlank()) {
+                return CompletableFuture.completedFuture(new MermaidDiagram(null, compact, "empty"));
+            }
+            Ili2cUtil.CompilationOutcome outcome = resolveTrackedDiagramOutcome(
+                    saved, documents.getLastSuccessfulCompilation(fileUriOrPath));
+            if (outcome == null || outcome.getTransferDescription() == null) {
+                return CompletableFuture.completedFuture(new MermaidDiagram(null, compact, "unavailable"));
+            }
+            String status = saved != null && saved.getTransferDescription() != null ? "current" : "last-valid";
+            return CompletableFuture.completedFuture(new MermaidDiagram(
+                    Ili2Mermaid.render(outcome.getTransferDescription(), options), compact, status));
+        } catch (Exception error) {
+            return CompletableFuture.failedFuture(error);
         }
     }
 

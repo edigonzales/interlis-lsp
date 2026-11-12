@@ -51,6 +51,12 @@ To disable automatic formatting, add this to your VS Code user or workspace sett
 }
 ```
 
+### Automatic Mermaid updates
+
+An open Mermaid diagram refreshes after its source model finishes compiling on save, and when UML display settings change. It does not open a closed diagram or move editor focus. Zoom, pan, and the source-code pane are preserved; use **Fit** to show the whole graph again.
+
+If the saved model is invalid, the last valid diagram remains visible with **Last valid diagram snapshot shown**. Display settings also apply to this last valid model. Saving an empty source clears the diagram and disables export until a valid model is available again. SVG export and copied Mermaid code always use the displayed snapshot. Automatic updates reuse saved compiler results; they do not compile again. Saving an imported model alone does not refresh diagrams of dependent models.
+
 ### Network errors
 
 Repository and template download failures are explained in the **INTERLIS LSP** output channel without additional network pop-ups. Messages distinguish recognized timeouts, DNS, connection, certificate, and HTTP errors; they do not assume that your computer is offline. Check the indicated server/address, network, VPN, or proxy. Technical compiler details remain in the output; template download causes are recorded in **INTERLIS LSP Debug**.
@@ -104,7 +110,7 @@ END MyNewModel.
 - `interlisLsp.template.url` – template URL used by **INTERLIS: New from Template**; leave empty to fall back to the default template.
 - `interlisLsp.autoShowOutputOnStart` – show the INTERLIS output channel when the extension activates.
 - `interlisLsp.diagram.autoOpenBeside` – auto-open the diagram editor beside `.ili` files.
-- `interlisLsp.uml.attributeMode` – control Mermaid, PlantUML, GraphML, and GLSP UML diagrams with `OWN`, `NONE`, or `OWN_AND_INHERITED`; `NONE` hides attributes, enum values, and constraints.
+- `interlisLsp.uml.attributeMode` – control Mermaid, PlantUML, GraphML, and GLSP UML diagrams with `OWN`, `NONE`, or `OWN_AND_INHERITED`; `NONE` hides attributes, enum values, and constraints. In Mermaid, it also removes empty member compartments and separators, leaving compact boxes sized to their names and stereotypes; SVG downloads use the same compact layout.
 - `interlisLsp.uml.deemphasizeAbstractTypes` – tone down abstract classes and abstract structures in Mermaid, PlantUML, GraphML, and GLSP UML diagrams with a light gray palette; enabled by default.
 - `interlisLsp.uml.showAssociationNames` – show or hide association role names in all UML diagram implementations; enabled by default.
 - `interlisLsp.uml.showRoleCardinalities` – show or hide association role cardinalities in all UML diagram implementations; enabled by default.

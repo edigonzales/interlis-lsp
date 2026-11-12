@@ -3,6 +3,7 @@ import * as path from "path";
 import { LanguageClient, LanguageClientOptions, Executable, ServerOptions, State } from "vscode-languageclient/node";
 import { resolveJavaPath, resolveServerJarPath } from "./configuration";
 import { fetchTemplateContent, TemplateDownloadError } from "./templateDownload";
+import { MermaidRefreshController, type MermaidDiagram } from "./mermaidRefresh";
 import {
   cancelScheduledDiagramRefresh,
   forgetAutoOpenedDiagram,
@@ -230,6 +231,12 @@ export async function activate(context: vscode.ExtensionContext) {
   const rawDebugOutput = vscode.window.createOutputChannel("INTERLIS LSP Debug");
   const debugOutput = new TimestampedOutputChannel(rawDebugOutput);
   context.subscriptions.push(output, rawDebugOutput);
+  const mermaidRefresh = new MermaidRefreshController(
+    uri => client!.sendRequest<MermaidDiagram>("interlis/mermaidDiagram", { uri }),
+    message => { void umlPanel?.webview.postMessage(message); },
+    error => debugOutput.appendLine(`Mermaid refresh failed: ${error instanceof Error ? error.stack ?? error.message : String(error)}`)
+  );
+  context.subscriptions.push(new vscode.Disposable(() => mermaidRefresh.close()));
   setDiagramDebugLogger(message => debugOutput.appendLine(message));
   context.subscriptions.push(new vscode.Disposable(() => setDiagramDebugLogger(undefined)));
   debugOutput.appendLine(`Using server JAR: ${jarPath}`);
@@ -382,6 +389,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     client!.onNotification("interlis/compileFinished", (p: { uri?: string; success?: boolean }) => {
       if (p?.uri) {
+        mermaidRefresh.refresh(p.uri);
         try {
           void reconcileOpenDiagramAfterCompile(vscode.Uri.parse(p.uri), p.success === true);
         } catch {
@@ -416,6 +424,7 @@ export async function activate(context: vscode.ExtensionContext) {
       umlSettingsRefreshTimer = setTimeout(() => {
         umlSettingsRefreshTimer = undefined;
         refreshOpenDiagramsForUmlSettings();
+        mermaidRefresh.refresh();
       }, UML_SETTINGS_REFRESH_DEBOUNCE_MS);
     }),
     new vscode.Disposable(() => {
@@ -573,7 +582,9 @@ export async function activate(context: vscode.ExtensionContext) {
   void updateModelSnippetPlaceholderContext(vscode.window.activeTextEditor, true);
   void maybeAutoOpenDiagram(vscode.window.activeTextEditor);
 
-  async function showUmlHtml(html: string, title: string) {
+  async function showUmlHtml(html: string, title: string, source: vscode.Uri, openingId: number) {
+    if (!mermaidRefresh.completeOpen(openingId, true)) return;
+    lastDiagramSource = source;
     const column = vscode.ViewColumn.Beside;
     if (!umlPanel) {
       umlPanel = vscode.window.createWebviewPanel(
@@ -582,8 +593,19 @@ export async function activate(context: vscode.ExtensionContext) {
         column,
         { enableScripts: true, retainContextWhenHidden: true }
       );
-      umlPanel.onDidDispose(() => { umlPanel = undefined; }, undefined, context.subscriptions);
+      umlPanel.onDidDispose(() => { mermaidRefresh.close(); umlPanel = undefined; }, undefined, context.subscriptions);
+      umlPanel.onDidChangeViewState(event => {
+        if (event.webviewPanel.visible) mermaidRefresh.refresh();
+      }, undefined, context.subscriptions);
       umlPanel.webview.onDidReceiveMessage(async message => {
+        if (message?.type === "mermaid:ready") {
+          mermaidRefresh.webviewReady(String(message.viewId));
+          return;
+        }
+        if (message?.type === "mermaid:renderError") {
+          debugOutput.appendLine(`Mermaid render failed: ${String(message.detail)}`);
+          return;
+        }
         if (!message || message.type !== "downloadSvg" || typeof message.svg !== "string") {
           return;
         }
@@ -629,7 +651,7 @@ export async function activate(context: vscode.ExtensionContext) {
     }
 
     umlPanel.title = title;
-    umlPanel.webview.html = html;
+    umlPanel.webview.html = html.replace("<body>", `<body data-mermaid-view="${openingId}">`);
   }
 
   context.subscriptions.push(
@@ -698,6 +720,7 @@ export async function activate(context: vscode.ExtensionContext) {
       }
 
       const fileUri = editor.document.uri.toString();
+      const openingId = mermaidRefresh.beginOpen(fileUri, "mermaid");
 
       try {
         const html = await client!.sendRequest("workspace/executeCommand", {
@@ -705,10 +728,9 @@ export async function activate(context: vscode.ExtensionContext) {
           arguments: [fileUri]
         }) as string;
 
-        lastDiagramSource = editor.document.uri;
-
-        await showUmlHtml(html, "INTERLIS UML Diagram (Mermaid)");
+        await showUmlHtml(html, "INTERLIS UML Diagram (Mermaid)", editor.document.uri, openingId);
       } catch (e: any) {
+        mermaidRefresh.completeOpen(openingId, false);
         vscode.window.showErrorMessage(`UML generation failed: ${e?.message ?? e}`);
       }
     })
@@ -724,6 +746,7 @@ export async function activate(context: vscode.ExtensionContext) {
       }
 
       const fileUri = editor.document.uri.toString();
+      const openingId = mermaidRefresh.beginOpen(fileUri, "plantuml");
 
       try {
         const html = await client!.sendRequest("workspace/executeCommand", {
@@ -731,10 +754,9 @@ export async function activate(context: vscode.ExtensionContext) {
           arguments: [fileUri]
         }) as string;
 
-        lastDiagramSource = editor.document.uri;
-
-        await showUmlHtml(html, "INTERLIS UML Diagram (PlantUML)");
+        await showUmlHtml(html, "INTERLIS UML Diagram (PlantUML)", editor.document.uri, openingId);
       } catch (e: any) {
+        mermaidRefresh.completeOpen(openingId, false);
         vscode.window.showErrorMessage(`PlantUML generation failed: ${e?.message ?? e}`);
       }
     })

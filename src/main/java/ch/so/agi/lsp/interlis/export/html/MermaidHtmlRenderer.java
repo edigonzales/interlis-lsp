@@ -14,15 +14,21 @@ import java.util.stream.Collectors;
 public final class MermaidHtmlRenderer {
     private static final String TEMPLATE_PATH = "/mermaid_template.html";
     private static final String PLACEHOLDER = "${mermaidString}";
+    private static final String MEMBERS_BOX_PLACEHOLDER = "${hideEmptyMembersBox}";
     private static final String TEMPLATE = loadTemplate();
 
     private MermaidHtmlRenderer() {
     }
 
     public static String render(String mermaidSource) {
+        return render(mermaidSource, false);
+    }
+
+    public static String render(String mermaidSource, boolean hideEmptyMembersBox) {
         Objects.requireNonNull(mermaidSource, "mermaidSource must not be null");
         String escaped = escapeHtml(mermaidSource);
-        return TEMPLATE.replace(PLACEHOLDER, escaped);
+        return TEMPLATE.replace(MEMBERS_BOX_PLACEHOLDER, Boolean.toString(hideEmptyMembersBox))
+                .replace(PLACEHOLDER, escaped);
     }
 
     private static String loadTemplate() {

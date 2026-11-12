@@ -106,6 +106,15 @@ public class InterlisWorkspaceService implements WorkspaceService {
         return CompletableFuture.completedFuture(endpoint);
     }
 
+    @JsonRequest(InterlisLanguageServer.REQ_MERMAID_DIAGRAM)
+    public CompletableFuture<MermaidDiagram> mermaidDiagram(Object rawParams) {
+        DocumentExportParams params = coerceExportParams(rawParams, false);
+        if (params == null) return invalidParamsGeneric("Expected parameters with uri or path");
+        String normalized = normalizePath(firstNonBlank(params.getPath(), params.getUri()));
+        if (normalized == null) return invalidParamsGeneric("Expected uri or path to be provided");
+        return handlers.mermaidDiagram(normalized);
+    }
+
     @JsonRequest(InterlisLanguageServer.REQ_DIAGRAM_MODEL)
     public CompletableFuture<InterlisDiagramModel.DiagramModel> exportDiagramModel(Object rawParams) {
         DocumentExportParams params = coerceExportParams(rawParams);
@@ -158,6 +167,10 @@ public class InterlisWorkspaceService implements WorkspaceService {
     }
 
     private DocumentExportParams coerceExportParams(Object rawParams) {
+        return coerceExportParams(rawParams, true);
+    }
+
+    private DocumentExportParams coerceExportParams(Object rawParams, boolean allowFallback) {
         if (rawParams == null) {
             return null;
         }
@@ -188,6 +201,7 @@ public class InterlisWorkspaceService implements WorkspaceService {
             }
         }
 
+        if (!allowFallback) return null;
         String fallback = coerceArgToString(normalized);
         if (fallback != null && !fallback.isBlank()) {
             params.setPath(fallback);

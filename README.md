@@ -86,6 +86,7 @@ Key listeners and providers derived from these capabilities:
 | `textDocument/didClose` | `InterlisTextDocumentService#didClose` | Clears diagnostics and releases document state. |
 | `textDocument/completion` | `InterlisTextDocumentService#completion` | Provides context-aware completions (triggered by `.` or `:`). |
 | `textDocument/formatting` | `InterlisTextDocumentService#formatting` | Compiles an isolated snapshot of current editor text and runs the ili2c pretty printer. Invalid models return no edits; save still proceeds. |
+| `interlis/mermaidDiagram` | `InterlisWorkspaceService#mermaidDiagram` | Renders cached saved compiler snapshots with current UML options; reports current, last-valid, empty, or unavailable without compiling again. |
 | `textDocument/onTypeFormatting` | `InterlisTextDocumentService#onTypeFormatting` | Auto-inserts INTERLIS templates after typing `=`. |
 | `textDocument/definition` | `InterlisTextDocumentService#definition` | Resolves definitions across workspace & referenced models. |
 | `textDocument/rename` | `InterlisTextDocumentService#rename` + `InterlisRenameProvider` | Applies validated renames across declarations and references. |

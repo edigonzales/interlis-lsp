@@ -146,6 +146,25 @@ class CommandHandlersTest {
         assertTrue(html.contains("Base.BaseName[0..1] : String"));
         assertTrue(html.contains("GrandBase.LegacyId[0..1] : String"));
         assertTrue(html.contains("Constraint1()"));
+        assertTrue(html.contains("hideEmptyMembersBox: false"));
+    }
+
+    @Test
+    void mermaidCompactsOnlyNoneAndRestoresMembersWhenModeChanges() throws Exception {
+        Path iliFile = writeStaticAttributeModeModel(tempDir.resolve("CompactMermaid.ili"));
+        InterlisLanguageServer server = new InterlisLanguageServer();
+        ClientSettings settings = new ClientSettings();
+        settings.setModelRepositories(tempDir.toString());
+        server.setClientSettings(settings);
+        CommandHandlers handlers = new CommandHandlers(server);
+        for (UmlAttributeMode mode : new UmlAttributeMode[]{UmlAttributeMode.NONE, UmlAttributeMode.OWN, UmlAttributeMode.OWN_AND_INHERITED}) {
+            settings.setUmlAttributeMode(mode.name());
+            String html = assertInstanceOf(String.class, handlers.generateUml(iliFile.toString()).get(30, TimeUnit.SECONDS));
+            assertTrue(html.contains("hideEmptyMembersBox: " + (mode == UmlAttributeMode.NONE)), mode.name());
+            assertEquals(mode != UmlAttributeMode.NONE, html.contains("ChildName[0..1] : String"));
+            assertEquals(mode != UmlAttributeMode.NONE, html.contains("Constraint1()"));
+            assertEquals(mode == UmlAttributeMode.OWN_AND_INHERITED, html.contains("Base.BaseName[0..1] : String"));
+        }
     }
 
     @Test
