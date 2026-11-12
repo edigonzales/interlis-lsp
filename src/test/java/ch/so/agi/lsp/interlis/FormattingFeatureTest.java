@@ -224,4 +224,64 @@ END ModelA.
             assertFalse(Files.exists(temporary.get().getParent()), action);
         }
     }
+
+    @Test
+    void formattingReportsNetworkFailureOnlyForCurrentSnapshot(@TempDir Path directory) throws Exception {
+        Path file = directory.resolve("ModelA.ili");
+        Files.writeString(file, VALID);
+        var compiled = Ili2cUtil.compile(new ClientSettings(), file.toString());
+        var problem = new NetworkProblems.Problem(NetworkProblems.Kind.CONNECTION, "https://repo.example", null);
+        for (String action : List.of("current", "change", "close")) {
+            StringBuffer log = new StringBuffer();
+            StringBuffer debug = new StringBuffer();
+            InterlisLanguageServer server = new InterlisLanguageServer() {
+                @Override public void logToClient(String text) { log.append(text); }
+                @Override public void debugLogToClient(String text) { debug.append(text); }
+            };
+            CountDownLatch started = new CountDownLatch(1);
+            CountDownLatch release = new CountDownLatch(1);
+            CompilationCache cache = new CompilationCache();
+            InterlisTextDocumentService service = new InterlisTextDocumentService(server, cache, (settings, path) -> {
+                if (path.equals(file.toString())) return compiled;
+                started.countDown();
+                try {
+                    if (!release.await(10, TimeUnit.SECONDS)) throw new AssertionError("timed out");
+                } catch (InterruptedException ex) { throw new CancellationException(); }
+                return new Ili2cUtil.CompilationOutcome(null, "technical ConnectException", List.of(), List.of(problem));
+            });
+            service.didOpen(new DidOpenTextDocumentParams(new TextDocumentItem(file.toUri().toString(), "interlis", 1, VALID)));
+            log.setLength(0);
+            debug.setLength(0);
+            var request = service.formatting(formattingParams(file));
+            try {
+                assertTrue(started.await(10, TimeUnit.SECONDS));
+                if (action.equals("change")) change(service, file, 2, VALID + "!! changed");
+                if (action.equals("close")) service.didClose(new DidCloseTextDocumentParams(new TextDocumentIdentifier(file.toUri().toString())));
+            } finally { release.countDown(); }
+            assertTrue(request.get(10, TimeUnit.SECONDS).isEmpty());
+            if (action.equals("current")) {
+                assertTrue(log.toString().contains("Saving can continue"));
+                assertTrue(log.toString().contains("https://repo.example"));
+                assertEquals(1, log.toString().lines().filter(line -> line.startsWith("Network warning:")).count());
+                assertTrue(debug.toString().contains("technical ConnectException"));
+            } else {
+                assertEquals("", log.toString(), action);
+                assertEquals("", debug.toString(), action);
+            }
+            assertEquals(VALID, Files.readString(file));
+            assertSame(compiled, cache.getSavedAttempt(file.toString()));
+        }
+    }
+
+    @Test
+    void successfulCompilationWithNetworkWarningStillFormats(@TempDir Path directory) throws Exception {
+        Path file = directory.resolve("ModelA.ili");
+        Files.writeString(file, VALID);
+        var compiled = Ili2cUtil.compile(new ClientSettings(), file.toString());
+        var problem = new NetworkProblems.Problem(NetworkProblems.Kind.TIMEOUT, null, null);
+        InterlisTextDocumentService service = new InterlisTextDocumentService(new InterlisLanguageServer(),
+                new CompilationCache(), (settings, path) -> new Ili2cUtil.CompilationOutcome(
+                        compiled.getTransferDescription(), "", List.of(), List.of(problem)));
+        assertEquals(1, service.formatting(formattingParams(file)).get(10, TimeUnit.SECONDS).size());
+    }
 }

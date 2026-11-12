@@ -81,11 +81,18 @@ public class Ili2cUtil {
         private final TransferDescription td;
         private final String logText;
         private final List<Message> messages;
+        private final List<NetworkProblems.Problem> networkProblems;
 
         public CompilationOutcome(TransferDescription td, String logText, List<Message> messages) {
+            this(td, logText, messages, List.of());
+        }
+
+        public CompilationOutcome(TransferDescription td, String logText, List<Message> messages,
+                                  List<NetworkProblems.Problem> networkProblems) {
             this.td = td;
             this.logText = logText;
             this.messages = messages;
+            this.networkProblems = List.copyOf(networkProblems);
         }
         
         public TransferDescription getTransferDescription() {
@@ -94,6 +101,10 @@ public class Ili2cUtil {
 
         public String getLogText() {
             return logText;
+        }
+
+        public List<NetworkProblems.Problem> getNetworkProblems() {
+            return networkProblems;
         }
 
         public List<Message> getMessages() {
@@ -159,7 +170,7 @@ public class Ili2cUtil {
                             ? targetPath : message.getFileUriOrPath(),
                     message.getLine(), message.getColumn(), message.getText().replace(source.toUri().toString(), original.toUri().toString()).replace(sourcePath, targetPath))).toList();
             return new CompilationOutcome(outcome.getTransferDescription(),
-                    outcome.getLogText().replace(source.toUri().toString(), original.toUri().toString()).replace(sourcePath, targetPath), messages);
+                    outcome.getLogText().replace(source.toUri().toString(), original.toUri().toString()).replace(sourcePath, targetPath), messages, outcome.getNetworkProblems());
         } finally {
             try {
                 Files.deleteIfExists(source);
@@ -185,6 +196,8 @@ public class Ili2cUtil {
         FileLogger flog = null;
         TransferDescription td = null;
         String logText = "";
+        Exception failure = null;
+        NetworkProblems.Collector network = new NetworkProblems.Collector(null);
         try {
             if (monitor != null) {
                 monitor.onStart(Thread.currentThread());
@@ -228,7 +241,8 @@ public class Ili2cUtil {
                 EhiLogger.logState("...compiler run done " + dateOut);
             }
         } catch (Exception e) {
-            return new CompilationOutcome(null, "[ili2c] failed: " + e.getMessage(), messages);
+            failure = e;
+            network.record(e);
         } finally {
             try {
                 StdListener.getInstance().skipInfo(false);
@@ -254,15 +268,22 @@ public class Ili2cUtil {
                     }
                 }
             } finally {
-                if (monitor != null && notifiedStart) {
-                    monitor.onFinish(Thread.currentThread());
+                try {
+                    if (monitor != null && notifiedStart) monitor.onFinish(Thread.currentThread());
+                } finally {
+                    network.close();
+                    COMPILE_LOCK.unlock();
                 }
-                COMPILE_LOCK.unlock();
             }
         }
 
+        if (failure != null) {
+            StringWriter details = new StringWriter();
+            failure.printStackTrace(new java.io.PrintWriter(details));
+            logText += System.lineSeparator() + "[ili2c] failed: " + details;
+        }
         messages = Ili2cLogParser.parseErrors(logText);
-
-        return new CompilationOutcome(td, logText, messages);
+        return new CompilationOutcome(td, NetworkProblems.summary(network.problems()) + logText,
+                messages, network.problems());
     }
 }

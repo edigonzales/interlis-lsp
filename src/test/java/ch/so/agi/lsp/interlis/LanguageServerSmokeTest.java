@@ -48,4 +48,23 @@ public class LanguageServerSmokeTest {
         assertTrue(result.getCapabilities().getRenameProvider().isRight());
         assertTrue(result.getCapabilities().getRenameProvider().getRight().getPrepareProvider());
     }
+
+    @Test
+    void startupNetworkWarningsWaitUntilClientIsInitialized() {
+        StringBuilder log = new StringBuilder();
+        InterlisLanguageServer server = new InterlisLanguageServer() {
+            @Override public void logToClient(String text) { log.append(text); }
+        };
+        var problem = new ch.so.agi.lsp.interlis.compiler.NetworkProblems.Problem(
+                ch.so.agi.lsp.interlis.compiler.NetworkProblems.Kind.TIMEOUT, "https://repo.example", null);
+        server.reportRepositoryNetworkProblems(java.util.List.of(problem));
+        assertEquals("", log.toString());
+        server.initialized(new org.eclipse.lsp4j.InitializedParams());
+        assertTrue(log.toString().contains("timed out"));
+        String first = log.toString();
+        server.initialized(new org.eclipse.lsp4j.InitializedParams());
+        assertEquals(first, log.toString());
+        server.reportRepositoryNetworkProblems(java.util.List.of(problem));
+        assertEquals(first + first, log.toString());
+    }
 }

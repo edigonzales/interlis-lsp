@@ -1,6 +1,9 @@
 package ch.so.agi.lsp.interlis.model;
 
 import ch.so.agi.lsp.interlis.server.ClientSettings;
+import ch.so.agi.lsp.interlis.compiler.NetworkProblems;
+import java.util.function.Consumer;
+import java.util.LinkedHashSet;
 import ch.ehi.basics.logging.EhiLogger;
 import ch.ehi.basics.logging.LogListener;
 import ch.ehi.basics.logging.StdListener;
@@ -37,6 +40,14 @@ public class ModelDiscoveryService {
     private volatile boolean initialized = false;
     private volatile String lastRepositoryKey = "";
 
+    private final Consumer<List<NetworkProblems.Problem>> networkReporter;
+
+    public ModelDiscoveryService() { this(problems -> {}); }
+
+    public ModelDiscoveryService(Consumer<List<NetworkProblems.Problem>> networkReporter) {
+        this.networkReporter = networkReporter;
+    }
+
     public void ensureInitialized(ClientSettings settings) {
         String repositoryKey = buildRepositoryKey(settings);
         if (initialized && repositoryKey.equals(lastRepositoryKey)) {
@@ -54,9 +65,11 @@ public class ModelDiscoveryService {
 
             boolean suppressLogs = settings != null && settings.isSuppressRepositoryLogs();
 
+            var problems = new LinkedHashSet<NetworkProblems.Problem>();
             for (String repository : repositories) {
-                discoverModelsFromRepository(repository, suppressLogs);
+                problems.addAll(discoverModelsFromRepository(repository, suppressLogs));
             }
+            if (!problems.isEmpty()) networkReporter.accept(List.copyOf(problems));
 
             initialized = true;
             lastRepositoryKey = repositoryKey;
@@ -103,39 +116,32 @@ public class ModelDiscoveryService {
         return result;
     }
 
-    private void discoverModelsFromRepository(String repositoryUrl, boolean suppressLogs) {
-        if (repositoryUrl == null || repositoryUrl.isBlank()) {
-            return;
-        }
-
-        Runnable task = () -> {
-            RepositoryAccess repoAccess = new RepositoryAccess();
-            ModelLister modelLister = new ModelLister();
-            modelLister.setIgnoreDuplicates(true);
-
-            try {
-                RepositoryVisitor visitor = new RepositoryVisitor(repoAccess, modelLister);
-                visitor.setRepositories(new String[]{repositoryUrl});
-                visitor.visitRepositories();
-
-                List<ModelMetadata> merged = modelLister.getResult2();
-                List<ModelMetadata> latest = RepositoryAccess.getLatestVersions2(merged);
-
-                for (ModelMetadata metadata : latest) {
-                    if (metadata != null && metadata.getName() != null) {
-                        storeMetadata(metadata);
+    private List<NetworkProblems.Problem> discoverModelsFromRepository(String repositoryUrl, boolean suppressLogs) {
+        try (var network = new NetworkProblems.Collector(repositoryUrl)) {
+            Runnable task = () -> {
+                try {
+                    for (ModelMetadata metadata : loadRepository(repositoryUrl)) {
+                        if (metadata != null && metadata.getName() != null) storeMetadata(metadata);
                     }
+                } catch (RepositoryAccessException ex) {
+                    network.record(ex);
+                    LOG.warn("Failed to fetch repository {}", repositoryUrl, ex);
                 }
-            } catch (RepositoryAccessException ex) {
-                LOG.warn("Failed to fetch repository {}: {}", repositoryUrl, ex.getMessage());
-            }
-        };
-
-        if (suppressLogs) {
-            runWithSuppressedLogs(task);
-        } else {
-            task.run();
+            };
+            if (suppressLogs) runWithSuppressedLogs(task);
+            else task.run();
+            return network.problems();
         }
+    }
+
+    List<ModelMetadata> loadRepository(String repositoryUrl) throws RepositoryAccessException {
+        RepositoryAccess repoAccess = new RepositoryAccess();
+        ModelLister modelLister = new ModelLister();
+        modelLister.setIgnoreDuplicates(true);
+        RepositoryVisitor visitor = new RepositoryVisitor(repoAccess, modelLister);
+        visitor.setRepositories(new String[]{repositoryUrl});
+        visitor.visitRepositories();
+        return RepositoryAccess.getLatestVersions2(modelLister.getResult2());
     }
 
     private static final LogListener NULL_LOG_LISTENER = event -> { };

@@ -8,7 +8,10 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.*;
+import ch.ehi.basics.logging.EhiLogger;
+import ch.so.agi.lsp.interlis.compiler.NetworkProblems;
+import java.util.ArrayList;
 
 class ModelDiscoveryServiceTest {
 
@@ -64,6 +67,30 @@ class ModelDiscoveryServiceTest {
 
         assertEquals(List.of("OtherModel", "SharedModel"), results24);
         assertEquals(List.of("SharedModel"), results23);
+    }
+
+    @Test
+    void reportsSuppressedRepositoryFailuresOncePerInitialization() {
+        var reports = new ArrayList<List<NetworkProblems.Problem>>();
+        ModelDiscoveryService service = new ModelDiscoveryService(reports::add) {
+            @Override List<ModelMetadata> loadRepository(String repository) {
+                EhiLogger.logAdaption("repository <" + repository + "> ignored; java.net.UnknownHostException: repo.example");
+                EhiLogger.logAdaption("repository <" + repository + "> ignored; java.net.UnknownHostException: repo.example");
+                return List.of(metadata("LocalModel", ModelMetadata.ili2_4));
+            }
+        };
+        ClientSettings settings = new ClientSettings();
+        settings.setModelRepositories("https://repo.example/");
+        settings.setSuppressRepositoryLogs(true);
+        assertEquals(List.of("LocalModel"), service.searchModels(settings, "", Set.of()));
+        assertEquals(1, reports.size());
+        assertEquals(1, reports.get(0).size());
+        assertEquals(NetworkProblems.Kind.DNS, reports.get(0).get(0).kind());
+        service.ensureInitialized(settings);
+        assertEquals(1, reports.size());
+        settings.setModelRepositories("https://other.example/");
+        service.ensureInitialized(settings);
+        assertEquals(2, reports.size());
     }
 
     private static ModelDiscoveryService seededService(ModelMetadata... metadata) {

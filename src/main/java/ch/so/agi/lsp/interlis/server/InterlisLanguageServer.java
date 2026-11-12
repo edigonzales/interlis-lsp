@@ -1,6 +1,7 @@
 package ch.so.agi.lsp.interlis.server;
 
 import ch.so.agi.lsp.interlis.glsp.GlspEndpoint;
+import ch.so.agi.lsp.interlis.compiler.NetworkProblems;
 import ch.so.agi.lsp.interlis.text.InterlisTextDocumentService;
 import ch.so.agi.lsp.interlis.workspace.InterlisWorkspaceService;
 import org.eclipse.lsp4j.*;
@@ -15,6 +16,8 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public class InterlisLanguageServer implements LanguageServer, LanguageClientAware {
     private InterlisLanguageClient client;
+    private boolean initialized;
+    private final List<NetworkProblems.Problem> startupNetworkProblems = new ArrayList<>();
     
     private final InterlisTextDocumentService textDocumentService;
     private final InterlisWorkspaceService workspaceService;
@@ -81,8 +84,18 @@ public class InterlisLanguageServer implements LanguageServer, LanguageClientAwa
     }
 
     @Override
-    public void initialized(InitializedParams params) {
-        // no-op
+    public synchronized void initialized(InitializedParams params) {
+        initialized = true;
+        if (!startupNetworkProblems.isEmpty()) {
+            logToClient(NetworkProblems.summary(startupNetworkProblems));
+            startupNetworkProblems.clear();
+        }
+    }
+
+    public synchronized void reportRepositoryNetworkProblems(List<NetworkProblems.Problem> problems) {
+        // Custom notifications sent during initialize can be discarded by the client.
+        if (!initialized) startupNetworkProblems.addAll(problems);
+        else logToClient(NetworkProblems.summary(problems));
     }
 
     @Override

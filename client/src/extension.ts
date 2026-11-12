@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { LanguageClient, LanguageClientOptions, Executable, ServerOptions, State } from "vscode-languageclient/node";
 import { resolveJavaPath, resolveServerJarPath } from "./configuration";
+import { fetchTemplateContent, TemplateDownloadError } from "./templateDownload";
 import {
   cancelScheduledDiagramRefresh,
   forgetAutoOpenedDiagram,
@@ -32,7 +33,6 @@ const DOMAIN_NUMERIC_UPPER_BOUND_TAIL_PATTERN =
 const DOTTED_NAME_REGEX = "[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*";
 const TEMPLATE_URL_SETTING = "interlisLsp.template.url";
 const DEFAULT_TEMPLATE_URL = "https://geo.so.ch/models/AGI/SO_AGI_Modellvorlage_20260324.ili";
-const TEMPLATE_FETCH_TIMEOUT_MS = 3000;
 const UML_RENDERING_CONFIGURATION_KEYS = [
   "interlisLsp.uml.attributeMode",
   "interlisLsp.uml.deemphasizeAbstractTypes",
@@ -115,17 +115,6 @@ let lastDiagramSource: vscode.Uri | undefined;
 const BLANK_INTERLIS_PREFIX = "The INTERLIS file is empty.";
 
 type PendingCaret = { version: number; position: vscode.Position };
-
-class TemplateFetchHttpError extends Error {
-  constructor(
-    readonly url: string,
-    readonly status: number,
-    readonly statusText: string
-  ) {
-    super(`Failed to load INTERLIS template from ${url}: HTTP ${status}${statusText ? ` ${statusText}` : ""}.`);
-    this.name = "TemplateFetchHttpError";
-  }
-}
 
 function isBlankInterlisDocument(document: vscode.TextDocument | undefined): boolean {
   return !!document && document.getText().trim().length === 0;
@@ -616,7 +605,20 @@ export async function activate(context: vscode.ExtensionContext) {
         });
         await vscode.window.showTextDocument(document);
       } catch (err: any) {
-        vscode.window.showErrorMessage(toTemplateErrorMessage(err));
+        if (err instanceof TemplateDownloadError) {
+          output.appendLine(err.message);
+          revealOutputChannel(true);
+          const cause = err.technicalCause;
+          debugOutput.appendLine(`Template download failed: ${err.message}`);
+          // Include the nested cause chain: fetch often reports only "fetch failed" at the top level.
+          const seen = new Set<unknown>();
+          for (let detail: any = cause; detail && !seen.has(detail); detail = detail.cause) {
+            seen.add(detail);
+            debugOutput.appendLine(String(detail.stack ?? detail));
+          }
+        } else {
+          vscode.window.showErrorMessage(toTemplateErrorMessage(err));
+        }
       }
     })
   );
@@ -860,35 +862,6 @@ function resolveTemplateUrl(): string {
   }
 
   return parsed.toString();
-}
-
-async function fetchTemplateContent(templateUrl: string): Promise<string> {
-  const abortController = new AbortController();
-  const timeout = setTimeout(() => abortController.abort(), TEMPLATE_FETCH_TIMEOUT_MS);
-
-  try {
-    const response = await fetch(templateUrl, {
-      signal: abortController.signal
-    });
-
-    if (!response.ok) {
-      throw new TemplateFetchHttpError(templateUrl, response.status, response.statusText);
-    }
-
-    const content = await response.text();
-    if (content.trim().length === 0) {
-      throw new Error(`Failed to load INTERLIS template from ${templateUrl}: received an empty response body.`);
-    }
-
-    return content;
-  } catch (err: any) {
-    if (err?.name === "AbortError") {
-      throw new Error(`Failed to load INTERLIS template from ${templateUrl}: request timed out after ${TEMPLATE_FETCH_TIMEOUT_MS} ms.`);
-    }
-    throw err;
-  } finally {
-    clearTimeout(timeout);
-  }
 }
 
 function toTemplateErrorMessage(err: unknown): string {

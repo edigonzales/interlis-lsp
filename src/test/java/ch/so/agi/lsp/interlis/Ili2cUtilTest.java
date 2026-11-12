@@ -1,6 +1,7 @@
 package ch.so.agi.lsp.interlis;
 
 import ch.so.agi.lsp.interlis.compiler.Ili2cUtil;
+import ch.so.agi.lsp.interlis.compiler.NetworkProblems;
 import ch.so.agi.lsp.interlis.server.ClientSettings;
 import static org.junit.jupiter.api.Assertions.*;
 import java.util.concurrent.atomic.AtomicReference;
@@ -146,5 +147,40 @@ class Ili2cUtilTest {
             }));
         assertFalse(Files.exists(temporary.get().getParent()));
         assertFalse(Files.exists(original));
+    }
+
+    @Test
+    void realCompilerExplainsUnavailableRepositoryAndKeepsRawLog(@TempDir Path directory) throws Exception {
+        int port;
+        try (var socket = new java.net.ServerSocket(0, 0, java.net.InetAddress.getLoopbackAddress())) {
+            port = socket.getLocalPort();
+        }
+        String repository = "http://127.0.0.1:" + port + "/";
+        ClientSettings settings = new ClientSettings();
+        settings.setModelRepositories(repository);
+        var outcome = Ili2cUtil.compileSnapshot(settings, directory.resolve("Snapshot.ili").toString(),
+                model("Snapshot", "IMPORTS MissingNetworkTestModel;"));
+        assertNull(outcome.getTransferDescription());
+        assertFalse(outcome.getNetworkProblems().isEmpty(), outcome.getLogText());
+        assertEquals(NetworkProblems.Kind.CONNECTION, outcome.getNetworkProblems().get(0).kind());
+        assertTrue(outcome.getLogText().startsWith("Network warning:"), outcome.getLogText());
+        assertTrue(outcome.getLogText().contains("ConnectException"), outcome.getLogText());
+        assertThrows(UnsupportedOperationException.class, () -> outcome.getNetworkProblems().clear());
+    }
+
+    @Test
+    void compileExceptionPreservesLogsAndNetworkCause(@TempDir Path directory) {
+        Ili2cUtil.setCompilationMonitor(new Ili2cUtil.CompilationMonitor() {
+            @Override public void onStart(Thread thread) {
+                ch.ehi.basics.logging.EhiLogger.logState("before failure");
+                throw new RuntimeException("wrapped", new java.net.UnknownHostException("repo.example"));
+            }
+            @Override public void onFinish(Thread thread) {}
+        });
+        var outcome = Ili2cUtil.compile(new ClientSettings(), directory.resolve("Source.ili").toString());
+        assertEquals(NetworkProblems.Kind.DNS, outcome.getNetworkProblems().get(0).kind());
+        assertTrue(outcome.getLogText().contains("UnknownHostException"));
+        assertTrue(outcome.getLogText().contains("wrapped"));
+        assertTrue(outcome.getMessages().isEmpty());
     }
 }

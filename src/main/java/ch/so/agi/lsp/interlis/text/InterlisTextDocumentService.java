@@ -3,6 +3,7 @@ package ch.so.agi.lsp.interlis.text;
 import ch.so.agi.lsp.interlis.compiler.CompilationCache;
 import ch.so.agi.lsp.interlis.compiler.DiagnosticsMapper;
 import ch.so.agi.lsp.interlis.compiler.Ili2cUtil;
+import ch.so.agi.lsp.interlis.compiler.NetworkProblems;
 import ch.so.agi.lsp.interlis.live.DocumentSnapshot;
 import ch.so.agi.lsp.interlis.live.LiveAnalysisService;
 import ch.so.agi.lsp.interlis.live.LiveParseResult;
@@ -56,7 +57,7 @@ public class InterlisTextDocumentService implements TextDocumentService {
         this.compilationCache = cache != null ? cache : new CompilationCache();
         this.compiler = compiler != null ? compiler : Ili2cUtil::compile;
         this.definitionFinder = new InterlisDefinitionFinder(server, documents, this.compilationCache, this.compiler, this.liveAnalysis);
-        this.modelDiscoveryService = new ModelDiscoveryService();
+        this.modelDiscoveryService = new ModelDiscoveryService(server::reportRepositoryNetworkProblems);
         this.completionProvider = new InterlisCompletionProvider(server, documents, this.compilationCache, this.compiler, this.modelDiscoveryService, this.liveAnalysis);
         this.renameProvider = new InterlisRenameProvider(server, documents, this.compilationCache, this.compiler, this.liveAnalysis);
         this.referencesProvider = new InterlisReferencesProvider(server, documents, this.compilationCache, this.compiler, this.liveAnalysis);
@@ -133,6 +134,11 @@ public class InterlisTextDocumentService implements TextDocumentService {
                 cancelChecker.checkCanceled();
                 if (!isFormattingSnapshotCurrent(uri, snapshot, text)) return Collections.emptyList();
                 if (outcome == null || outcome.getTransferDescription() == null) {
+                    if (outcome != null && !outcome.getNetworkProblems().isEmpty()) {
+                        server.logToClient("Formatting skipped because compilation failed. Saving can continue.\n"
+                                + NetworkProblems.summary(outcome.getNetworkProblems()));
+                        server.debugLogToClient(outcome.getLogText());
+                    }
                     publishFormattingDiagnostics(uri, outcome);
                     return Collections.emptyList();
                 }

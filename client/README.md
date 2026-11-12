@@ -47,6 +47,12 @@ To disable automatic formatting, add this to your VS Code user or workspace sett
 }
 ```
 
+### Network errors
+
+Repository and template download failures are explained in the **INTERLIS LSP** output channel without additional network pop-ups. Messages distinguish recognized timeouts, DNS, connection, certificate, and HTTP errors; they do not assume that your computer is offline. Check the indicated server/address, network, VPN, or proxy. Technical compiler details remain in the output; template download causes are recorded in **INTERLIS LSP Debug**.
+
+Timeouts and retry behaviour are unchanged: templates have a three-second timeout; ili2c repository requests retain their existing connection/read timeouts (15/40 seconds per access, not an overall deadline). If compilation fails, formatting is skipped and saving can continue. A missing import by itself is still reported as a model-resolution error.
+
 ### Example: MODEL template via completion 🧱
 After `INTERLIS 2.4;`, trigger completion on a new top-level line and choose the `MODEL` template. It inserts a documentation banner, example meta-attributes, and a full `MODEL ... END` block with editable stops for model name, language, URL, and version. The four header fields are intentionally popup-free, so `Tab` and `Enter` just move to the next placeholder:
 

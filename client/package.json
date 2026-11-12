@@ -314,6 +314,7 @@
   },
   "main": "./dist/extension.js",
   "scripts": {
+    "test": "node --test test/*.test.cjs",
     "build": "npm run build:extension && npm run build:webview",
     "build:extension": "esbuild src/extension.ts --bundle --platform=node --external:vscode --outfile=dist/extension.js",
     "build:webview": "esbuild src/diagram/glspWebview.ts --bundle --platform=browser --format=iife --loader:.ttf=file --loader:.woff=file --loader:.woff2=file --loader:.eot=file --outfile=dist/glspWebview.js",

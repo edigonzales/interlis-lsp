@@ -26,6 +26,8 @@ public final class Ili2cLogParser {
         for (String raw : lines) {
             String line = raw.strip();
             if (!line.startsWith("Error:")) continue;
+            // Infrastructure failures belong in output, not at an invented source location.
+            if (NetworkProblems.fromText(line, null) != null) continue;
             if (line.contains("...compiler run failed")) continue;
 
             Matcher m = ERROR_LINE.matcher(line);
