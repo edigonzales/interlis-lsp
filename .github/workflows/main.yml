@@ -117,7 +117,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-24.04, ubuntu-24.04-arm, macos-15-intel, macos-14, windows-2022 ]
+        os: [ ubuntu-24.04, ubuntu-24.04-arm, macos-15-intel, macos-15, windows-2022 ]
 
     runs-on: ${{ matrix.os }}
 
@@ -264,7 +264,7 @@ jobs:
             ["ubuntu-24.04"]="linux-x64"
             ["ubuntu-24.04-arm"]="linux-arm64"
             ["macos-15-intel"]="darwin-x64"
-            ["macos-14"]="darwin-arm64"
+            ["macos-15"]="darwin-arm64"
             ["windows-2022"]="win32-x64"
           )
 
